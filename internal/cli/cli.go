@@ -68,7 +68,7 @@ masterchef commands:
   fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
   doctor [-f masterchef.yaml] [-format json|human]
   test-impact [-changes file1,file2,...] [-format json|human]
-  release [sbom|sign|verify] ...
+  release [sbom|sign|verify|cve-check] ...
   plan [-f masterchef.yaml] [-o plan.json]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -582,7 +582,7 @@ func runPolicy(args []string) error {
 
 func runRelease(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("release subcommand required: sbom|sign|verify")
+		return fmt.Errorf("release subcommand required: sbom|sign|verify|cve-check")
 	}
 	switch args[0] {
 	case "sbom":
@@ -664,7 +664,61 @@ func runRelease(args []string) error {
 		}
 		fmt.Printf("signed sbom verified: %s\n", *signedPath)
 		return nil
+	case "cve-check":
+		fs := flag.NewFlagSet("release cve-check", flag.ContinueOnError)
+		root := fs.String("root", ".", "module root path for dependency discovery")
+		advisoriesPath := fs.String("advisories", "", "advisories json path")
+		blocked := fs.String("blocked-severities", "critical,high", "comma-separated blocked severities")
+		allowIDs := fs.String("allow-ids", "", "comma-separated advisory IDs to allow")
+		format := fs.String("format", "human", "output format: human|json")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*advisoriesPath) == "" {
+			return fmt.Errorf("advisories path is required")
+		}
+		deps, err := release.ListGoDependencies(*root)
+		if err != nil {
+			return err
+		}
+		advisories, err := release.LoadAdvisories(*advisoriesPath)
+		if err != nil {
+			return err
+		}
+		policy := release.CVEPolicy{
+			BlockedSeverities: splitCSV(*blocked),
+			AllowIDs:          splitCSV(*allowIDs),
+		}
+		report := release.EvaluateCVEPolicy(deps, advisories, policy)
+		if strings.EqualFold(strings.TrimSpace(*format), "json") {
+			b, _ := json.MarshalIndent(report, "", "  ")
+			fmt.Println(string(b))
+		} else {
+			if report.Pass {
+				fmt.Println("cve-check: pass")
+			} else {
+				fmt.Printf("cve-check: %d blocking vulnerabilities found\n", len(report.Violations))
+				for _, v := range report.Violations {
+					fmt.Printf("- %s %s in %s@%s (%s)\n", v.Advisory.ID, v.Advisory.Severity, v.Dependency.Path, v.Dependency.Version, v.Reason)
+				}
+			}
+		}
+		if !report.Pass {
+			return ExitError{Code: 6, Msg: "cve policy violations found"}
+		}
+		return nil
 	default:
 		return fmt.Errorf("unknown release subcommand %q", args[0])
 	}
+}
+
+func splitCSV(raw string) []string {
+	items := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			items = append(items, part)
+		}
+	}
+	return items
 }
