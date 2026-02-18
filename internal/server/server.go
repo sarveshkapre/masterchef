@@ -119,6 +119,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
+	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
@@ -634,6 +635,112 @@ func (s *Server) handleReleaseReadiness(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusOK, report)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleAPIContract(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Baseline control.APISpec `json:"baseline"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, currentAPISpec())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		cur := currentAPISpec()
+		report := control.DiffAPISpec(req.Baseline, cur)
+		if !report.BackwardCompatible {
+			writeJSON(w, http.StatusConflict, report)
+			return
+		}
+		writeJSON(w, http.StatusOK, report)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func currentAPISpec() control.APISpec {
+	return control.APISpec{
+		Version: "v1",
+		Endpoints: []string{
+			"GET /healthz",
+			"GET /v1/activity",
+			"GET /v1/metrics",
+			"GET /v1/features/summary",
+			"POST /v1/release/readiness",
+			"GET /v1/release/readiness",
+			"GET /v1/release/api-contract",
+			"POST /v1/release/api-contract",
+			"POST /v1/query",
+			"POST /v1/events/ingest",
+			"POST /v1/commands/ingest",
+			"GET /v1/commands/dead-letters",
+			"GET /v1/object-store/objects",
+			"POST /v1/control/backup",
+			"GET /v1/control/backups",
+			"POST /v1/control/restore",
+			"POST /v1/control/emergency-stop",
+			"GET /v1/control/emergency-stop",
+			"POST /v1/control/freeze",
+			"GET /v1/control/freeze",
+			"POST /v1/control/maintenance",
+			"GET /v1/control/maintenance",
+			"POST /v1/control/capacity",
+			"GET /v1/control/capacity",
+			"GET /v1/control/canary-health",
+			"POST /v1/control/channels",
+			"GET /v1/control/channels",
+			"POST /v1/control/preflight",
+			"POST /v1/control/queue",
+			"GET /v1/control/queue",
+			"POST /v1/control/recover-stuck",
+			"GET /v1/runs",
+			"POST /v1/runs/{id}/export",
+			"GET /v1/jobs",
+			"POST /v1/jobs",
+			"GET /v1/jobs/{id}",
+			"DELETE /v1/jobs/{id}",
+			"GET /v1/templates",
+			"POST /v1/templates",
+			"POST /v1/templates/{id}/launch",
+			"DELETE /v1/templates/{id}/delete",
+			"GET /v1/workflows",
+			"POST /v1/workflows",
+			"POST /v1/workflows/{id}/launch",
+			"GET /v1/workflow-runs",
+			"GET /v1/workflow-runs/{id}",
+			"GET /v1/canaries",
+			"POST /v1/canaries",
+			"GET /v1/canaries/{id}",
+			"POST /v1/canaries/{id}/enable",
+			"POST /v1/canaries/{id}/disable",
+			"GET /v1/associations",
+			"POST /v1/associations",
+			"GET /v1/associations/{id}/revisions",
+			"POST /v1/associations/{id}/enable",
+			"POST /v1/associations/{id}/disable",
+			"POST /v1/associations/{id}/replay",
+			"POST /v1/associations/{id}/export",
+			"GET /v1/schedules",
+			"POST /v1/schedules",
+			"POST /v1/schedules/{id}/enable",
+			"POST /v1/schedules/{id}/disable",
+			"GET /v1/rules",
+			"POST /v1/rules",
+			"GET /v1/rules/{id}",
+			"POST /v1/rules/{id}/enable",
+			"POST /v1/rules/{id}/disable",
+			"GET /v1/webhooks",
+			"POST /v1/webhooks",
+			"GET /v1/webhooks/{id}",
+			"POST /v1/webhooks/{id}/enable",
+			"POST /v1/webhooks/{id}/disable",
+			"GET /v1/webhooks/deliveries",
+		},
 	}
 }
 
