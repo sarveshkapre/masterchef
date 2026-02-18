@@ -64,6 +64,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
+	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
@@ -104,6 +105,36 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 		out[k] = v
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
+	type ingestReq struct {
+		Type    string         `json:"type"`
+		Message string         `json:"message"`
+		Fields  map[string]any `json:"fields"`
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req ingestReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	if req.Type == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type is required"})
+		return
+	}
+	if req.Message == "" {
+		req.Message = "external event"
+	}
+	s.events.Append(control.Event{
+		Type:    req.Type,
+		Message: req.Message,
+		Fields:  req.Fields,
+	})
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "ingested"})
 }
 
 func (s *Server) handleRuns(baseDir string) http.HandlerFunc {

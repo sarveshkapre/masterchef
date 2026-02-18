@@ -126,4 +126,12 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("recover-stuck status code: got=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	body = []byte(`{"type":"external.alert","message":"from monitor","fields":{"sev":"high"}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
 }
