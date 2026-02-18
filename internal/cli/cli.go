@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,12 +21,14 @@ import (
 	"github.com/masterchef/masterchef/internal/control"
 	"github.com/masterchef/masterchef/internal/executor"
 	"github.com/masterchef/masterchef/internal/features"
+	"github.com/masterchef/masterchef/internal/grpcapi"
 	"github.com/masterchef/masterchef/internal/planner"
 	"github.com/masterchef/masterchef/internal/policy"
 	"github.com/masterchef/masterchef/internal/release"
 	"github.com/masterchef/masterchef/internal/server"
 	"github.com/masterchef/masterchef/internal/state"
 	"github.com/masterchef/masterchef/internal/testimpact"
+	"google.golang.org/grpc"
 )
 
 func Run(args []string) error {
@@ -80,7 +83,7 @@ masterchef commands:
   apply [-f masterchef.yaml]
   observe [-base .] [-limit 100] [-format json|human]
   drift [-base .] [-hours 24] [-format json|human]
-  serve [-addr :8080]
+  serve [-addr :8080] [-grpc-addr :9090]
   policy [keygen|sign|verify] ...
   features [matrix|summary|verify] [-f features.md]
 `))
@@ -856,6 +859,7 @@ func runFeatures(args []string) error {
 func runServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fs.String("addr", ":8080", "bind address")
+	grpcAddr := fs.String("grpc-addr", "", "optional gRPC bind address")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -867,6 +871,21 @@ func runServe(args []string) error {
 	}()
 	fmt.Printf("server listening on %s\n", *addr)
 
+	var grpcServer *grpc.Server
+	var grpcLis net.Listener
+	if strings.TrimSpace(*grpcAddr) != "" {
+		g, lis, err := grpcapi.Listen(*grpcAddr, ".")
+		if err != nil {
+			return err
+		}
+		grpcServer = g
+		grpcLis = lis
+		go func() {
+			errCh <- g.Serve(lis)
+		}()
+		fmt.Printf("grpc listening on %s\n", *grpcAddr)
+	}
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	select {
@@ -874,6 +893,21 @@ func runServe(args []string) error {
 		fmt.Printf("received signal %s, shutting down\n", sig.String())
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		if grpcServer != nil {
+			done := make(chan struct{})
+			go func() {
+				grpcServer.GracefulStop()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				grpcServer.Stop()
+			}
+		}
+		if grpcLis != nil {
+			_ = grpcLis.Close()
+		}
 		return s.Shutdown(ctx)
 	case err := <-errCh:
 		return err
