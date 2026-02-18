@@ -8,8 +8,11 @@
 - Variable precedence model with explicit conflict resolution
 - `explain` command to show final merged variable values
 - Built-in templating engine with safe function library
+- Template rendering strict mode with undefined-variable failure controls
 - Conditionals, loops, and matrix expansion in configuration
 - Handler/notification model for event-triggered resource actions
+- Explicit `require`/`before`/`notify`/`subscribe` style resource relationships
+- Resource refresh-on-change semantics with `only_if`/`unless` guards
 - Resource graph compiler with explicit dependencies, cycle detection, and diagnostics
 - Resource graph query API for impact and dependency analysis
 - Hierarchical data lookup engine (Hiera/Data Bag style)
@@ -18,6 +21,7 @@
 - Deterministic `plan` output for identical inputs
 - Plan reproducibility checks across different runners
 - Mandatory `plan` before every `apply`
+- Read-only `check/noop` mode with exit codes for CI gating
 - Change freeze enforcement and emergency override workflow
 - Idempotent resource provider contract
 - Provider side-effect declaration and purity metadata
@@ -32,6 +36,8 @@
 - Automatic retry policies with jitter and backoff controls
 - Rollback support for reversible resources
 - Execution graph visualization in CLI and UI
+- Long-running run leases with heartbeat and stale-lease recovery
+- Per-step execution snapshots for mid-run forensic analysis
 - Run strategy modes (`linear`, `free`, `serial`)
 - Failure thresholds (`max_fail_percentage`, `any_errors_fatal`-style controls)
 - `block`/`rescue`/`always` execution semantics for robust error handling
@@ -41,6 +47,7 @@
 - Static inventory management
 - Dynamic inventory providers
 - Cloud inventory sync for AWS, Azure, GCP, and vSphere
+- Service-discovery-backed inventory sources (Consul, Kubernetes, cloud tags)
 - Inventory drift detection and reconciliation
 - Labels, tags, roles, and topology-based host grouping
 - Runtime host discovery and auto-enrollment
@@ -49,12 +56,14 @@
 - Fact caching with TTL and invalidation controls
 - Agentless execution over SSH
 - Agentless execution over WinRM
+- Local execution mode (`connection=local` equivalent) for image builds and CI runners
 - Connection plugin architecture for custom transports
 - Bastion/jump-host and proxy-aware connection routing
 - Session recording for privileged remote executions
 - Network device transport support (NETCONF, RESTCONF, API-driven)
 - Agent-based periodic converge loop
 - Catalog compile-and-distribute flow for agent runs
+- Compiled catalog caching and signed catalog replay on disconnected nodes
 - Agent check-in jitter/splay controls to prevent thundering herd
 - Message-bus option for scalable agent dispatch
 - Agent certificate issuance, rotation, and revocation workflows
@@ -66,6 +75,9 @@
 - Package manager abstraction for apt, yum/dnf, zypper, brew, winget, and chocolatey
 - Core resources for file, directory, template, package, service, user, group, command, cron, and sysctl
 - Advanced resources for firewall, kernel module, mount, certificate, registry, and scheduled tasks
+- SELinux/AppArmor policy and context management resources
+- Systemd unit management and drop-in override resources
+- Artifact deployment resources with checksum pinning and staged rollout
 - Reboot orchestration resource with safe dependency handling
 - Patch management resource for scheduled OS updates
 - Package version pinning, hold/unhold, and drift enforcement
@@ -83,9 +95,11 @@
 - Runtime assertions and post-change verification gates
 - Health probe integrations to gate promotion and rollback
 - Pre-run policy simulation with host-level explain output
+- Post-run invariant checks with configurable failure severity
 - Desired-state snapshot storage
 - Observed-state collection and normalization
 - Continuous drift detection
+- Drift suppression windows and approved-difference allowlists
 - Drift alerting with severity levels
 - Policy-driven auto-remediation of approved drift
 - Safe mode to block high-risk automatic changes
@@ -99,6 +113,7 @@
 - Unified CLI with `init`, `validate`, `plan`, `apply`, `observe`, `drift`, `policy`, and `doctor`
 - Interactive approval prompts and non-interactive CI-safe modes
 - Rich diff output formats (human, JSON, machine-readable patch)
+- Deterministic machine-readable run report output for pipeline consumption
 - Ad hoc command mode with guardrails and audit logging
 - CLI TUI mode for interactive run inspection
 - Web UI for plans, runs, drift, compliance, and approvals
@@ -110,12 +125,14 @@
 - Pull-request plan comments and approval gates
 - Multi-environment promotions with policy checks
 - Drift-aware GitOps reconciliation loop
+- Branch-based ephemeral environment previews for infrastructure changes
 - Promotion pipelines with immutable artifact pinning
 - Secrets manager integrations
 - Built-in encrypted secrets store with envelope encryption
 - Secret rotation workflows and expiry enforcement
 - Secret usage tracing and redaction-by-default logs
 - Encrypted variable files with key rotation (Vault-style)
+- Runtime secret materialization in memory only with zeroization after use
 - Short-lived execution credentials
 - mTLS between all components
 - OIDC workload identity support
@@ -124,6 +141,7 @@
 - Sigstore/Cosign signature verification support
 - Policy engine for pre-apply and runtime guardrails
 - Policy simulation mode before enforcement
+- Policy bundles with staged rollout and canary enforcement
 - Command/resource allowlists and deny policies
 - ABAC and context-aware policy conditions
 - RBAC with scoped permissions
@@ -132,6 +150,7 @@
 - Break-glass workflow with audited approvals
 - Multi-stage approvals with quorum rules
 - Just-in-time access grants for sensitive operations
+- Time-bound delegation tokens for automated run pipelines
 - Compliance profile engine (CIS, STIG, custom)
 - Continuous compliance scans
 - Compliance evidence exports (JSON, SARIF, CSV)
@@ -140,6 +159,7 @@
 - Provider SDK with conformance testing
 - Provider test fixtures and contract test harness
 - Versioned provider protocol with backward compatibility guarantees
+- Provider capability negotiation and feature-flag compatibility mapping
 - Sandboxed third-party providers with least privilege isolation
 - WASI runtime support for untrusted provider plugins
 - Module registry with versioning and signatures
@@ -147,6 +167,7 @@
 - Module dependency resolution and lockfiles
 - Module scaffolding generator and best-practice templates
 - Module quality scoring and trust badges
+- Module provenance attestation and dependency vulnerability reports
 - Event hooks and webhooks
 - Notification integrations for ChatOps and incident systems
 - Ticketing system integrations for change records and approvals
@@ -159,12 +180,14 @@
 - HA control plane reference architecture
 - Multi-region control plane federation
 - Regional failover and active-active operation mode
+- Edge relay mode for intermittently connected sites
 - PostgreSQL-backed state and event storage
 - Pluggable queue backends for scale and resiliency
 - Pluggable object storage for artifacts and logs
 - Backup and disaster recovery workflows
 - Point-in-time restore for state and audit data
 - Control plane schema migrations with forward/backward compatibility checks
+- Disaster recovery drills with automated restore verification
 - Scale profile for fleets from 10 to 10,000+ nodes
 - Fleet sharding and tenancy-aware scheduler partitioning
 - Performance profiling and bottleneck diagnostics
@@ -173,6 +196,7 @@
 - Workspace and multi-tenant isolation
 - Hard tenant boundaries with per-tenant crypto keys
 - Delegated administration per tenant and environment
+- Per-tenant rate limits and noisy-neighbor protections
 - Policy and config linting
 - Built-in test harness for modules and policies
 - End-to-end scenario test runner for fleet simulations
@@ -188,9 +212,11 @@
 - Migration assessment report with parity and risk scoring
 - Import/export tooling for existing inventories and variables
 - Bulk import from CMDB and asset inventory systems
+- Import assistants for existing secrets, facts, and role/group hierarchies
 - Offline and air-gapped operation mode
 - Signed offline bundle creation and verification
 - Offline registry mirroring and synchronization tooling
+- FIPS-compatible cryptography mode for regulated environments
 - Contributor-friendly local development environment
 - Local single-binary dev mode for control plane + worker + registry
 - Public plugin and module certification pipeline
@@ -200,6 +226,7 @@
 - Stability channels for control plane and agents (`stable`, `candidate`, `edge`)
 - Zero-downtime upgrade orchestration for agents and controllers
 - N-1 protocol compatibility policy
+- Forward-compatible API versioning and deprecation lifecycle guarantees
 - Long-term support (LTS) release channel and support matrix
 - Release artifact signing and SBOM generation
 - Vulnerability scanning and CVE policy enforcement on releases
