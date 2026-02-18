@@ -49,6 +49,7 @@ type Server struct {
 	schemaMigs         *control.SchemaMigrationManager
 	dataBags           *control.DataBagStore
 	roleEnv            *control.RoleEnvironmentStore
+	encryptedVars      *control.EncryptedVariableStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -95,6 +96,7 @@ func New(addr, baseDir string) *Server {
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	dataBags := control.NewDataBagStore()
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
+	encryptedVars := control.NewEncryptedVariableStore(baseDir)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -133,6 +135,7 @@ func New(addr, baseDir string) *Server {
 		schemaMigs:         schemaMigs,
 		dataBags:           dataBags,
 		roleEnv:            roleEnv,
+		encryptedVars:      encryptedVars,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -182,6 +185,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/roles/", s.handleRoleAction)
 	mux.HandleFunc("/v1/environments", s.handleEnvironments)
 	mux.HandleFunc("/v1/environments/", s.handleEnvironmentAction)
+	mux.HandleFunc("/v1/vars/encrypted/keys", s.handleEncryptedVariableKeys)
+	mux.HandleFunc("/v1/vars/encrypted/files", s.handleEncryptedVariableFiles)
+	mux.HandleFunc("/v1/vars/encrypted/files/", s.handleEncryptedVariableFileAction)
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
 	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
@@ -1780,6 +1786,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/environments",
 			"GET /v1/environments/{name}",
 			"DELETE /v1/environments/{name}",
+			"GET /v1/vars/encrypted/keys",
+			"POST /v1/vars/encrypted/keys",
+			"GET /v1/vars/encrypted/files",
+			"POST /v1/vars/encrypted/files",
+			"GET /v1/vars/encrypted/files/{name}",
+			"DELETE /v1/vars/encrypted/files/{name}",
 			"POST /v1/events/ingest",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",
