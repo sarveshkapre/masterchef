@@ -97,6 +97,7 @@ Fleet node views with cursor-based incremental loading and compact mode are avai
 Universal command-palette search across hosts, services, runs, policies, and modules is available via `GET /v1/search`.
 Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
+Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
 Solution pack catalog is available via `/v1/solution-packs` and workspace-template catalog/bootstrap flows are available via `/v1/workspace-templates`.

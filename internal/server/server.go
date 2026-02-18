@@ -163,6 +163,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
 	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
 	mux.HandleFunc("/v1/release/upgrade-assistant", s.handleUpgradeAssistant)
+	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
@@ -1681,6 +1682,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/features/summary",
 			"GET /v1/docs/actions",
 			"GET /v1/docs/actions/{id}",
+			"POST /v1/plans/explain",
 			"GET /v1/alerts/inbox",
 			"POST /v1/alerts/inbox",
 			"GET /v1/notifications/targets",

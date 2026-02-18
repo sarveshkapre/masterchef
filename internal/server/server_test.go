@@ -1843,6 +1843,85 @@ resources:
 	}
 }
 
+func TestPlanExplainEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: prep
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "prep.txt")+`
+    content: "prep\n"
+  - id: deploy
+    type: command
+    host: localhost
+    command: "echo deploy"
+    depends_on:
+      - prep
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/plans/explain", bytes.NewReader([]byte(`{"config_path":"c.yaml"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("plan explain failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	type explainResp struct {
+		Steps []struct {
+			ResourceID   string   `json:"resource_id"`
+			Reason       string   `json:"reason"`
+			RiskHint     string   `json:"risk_hint"`
+			Dependencies []string `json:"dependencies"`
+		} `json:"steps"`
+	}
+	var resp explainResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode plan explain response failed: %v body=%s", err, rr.Body.String())
+	}
+	if len(resp.Steps) != 2 {
+		t.Fatalf("expected 2 explain steps, got %d", len(resp.Steps))
+	}
+	foundDeploy := false
+	for _, step := range resp.Steps {
+		if step.ResourceID == "deploy" {
+			foundDeploy = true
+			if len(step.Dependencies) != 1 || step.Dependencies[0] != "prep" {
+				t.Fatalf("expected deploy dependency explanation, got %+v", step.Dependencies)
+			}
+			if !strings.Contains(step.Reason, "dependencies") {
+				t.Fatalf("expected dependency reason in explain output, got %s", step.Reason)
+			}
+		}
+	}
+	if !foundDeploy {
+		t.Fatalf("expected deploy step in explain output")
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
