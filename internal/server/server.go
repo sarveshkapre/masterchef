@@ -1554,7 +1554,7 @@ func (s *Server) handleCanaryHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 	type reqBody struct {
-		Action               string `json:"action"` // set_channel|check_compatibility
+		Action               string `json:"action"` // set_channel|check_compatibility|support_matrix
 		Component            string `json:"component"`
 		Channel              string `json:"channel"`
 		ControlPlaneProtocol int    `json:"control_plane_protocol"`
@@ -1562,9 +1562,11 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
+		controlPlaneProtocol := control.ParseControlPlaneProtocol(r.URL.Query().Get("control_plane_protocol"))
 		writeJSON(w, http.StatusOK, map[string]any{
-			"channels": s.channels.List(),
-			"policy":   "n-1",
+			"channels":       s.channels.List(),
+			"policy":         "n-1",
+			"support_matrix": control.BuildSupportMatrix(controlPlaneProtocol),
 		})
 	case http.MethodPost:
 		var req reqBody
@@ -1587,6 +1589,8 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, result)
+		case "support_matrix":
+			writeJSON(w, http.StatusOK, control.BuildSupportMatrix(req.ControlPlaneProtocol))
 		default:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
 		}

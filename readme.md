@@ -13,6 +13,7 @@ Build a single platform that supports:
 - Deterministic planning before execution
 - Policy and compliance as first-class capabilities
 - Strong plugin boundaries so the community can extend safely
+- Upgrade channels with explicit protocol support matrix (`stable`, `candidate`, `edge`, `lts`)
 
 ## First-Principles Design
 

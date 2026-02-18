@@ -3,6 +3,7 @@ package control
 import (
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,20 @@ type CompatibilityResult struct {
 	ControlPlaneProtocol int  `json:"control_plane_protocol"`
 	AgentProtocol        int  `json:"agent_protocol"`
 	Compatible           bool `json:"compatible"`
+}
+
+type SupportMatrixRow struct {
+	Channel              string `json:"channel"`
+	ControlPlaneProtocol int    `json:"control_plane_protocol"`
+	MinAgentProtocol     int    `json:"min_agent_protocol"`
+	MaxAgentProtocol     int    `json:"max_agent_protocol"`
+	Policy               string `json:"policy"`
+}
+
+type SupportMatrix struct {
+	GeneratedAt          time.Time          `json:"generated_at"`
+	ControlPlaneProtocol int                `json:"control_plane_protocol"`
+	Rows                 []SupportMatrixRow `json:"rows"`
 }
 
 type ChannelManager struct {
@@ -36,7 +51,7 @@ func (m *ChannelManager) SetChannel(component, channel string) (ChannelAssignmen
 	}
 	channel = normalizeChannel(channel)
 	if channel == "" {
-		return ChannelAssignment{}, errors.New("channel must be stable, candidate, or edge")
+		return ChannelAssignment{}, errors.New("channel must be stable, candidate, edge, or lts")
 	}
 
 	m.mu.Lock()
@@ -71,8 +86,67 @@ func normalizeChannel(ch string) string {
 		return "candidate"
 	case "edge":
 		return "edge"
+	case "lts":
+		return "lts"
 	default:
 		return ""
+	}
+}
+
+func ParseControlPlaneProtocol(raw string) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 1
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v <= 0 {
+		return 1
+	}
+	return v
+}
+
+func BuildSupportMatrix(controlPlaneProtocol int) SupportMatrix {
+	if controlPlaneProtocol <= 0 {
+		controlPlaneProtocol = 1
+	}
+	minAgent := controlPlaneProtocol - 1
+	if minAgent < 1 {
+		minAgent = 1
+	}
+	rows := []SupportMatrixRow{
+		{
+			Channel:              "stable",
+			ControlPlaneProtocol: controlPlaneProtocol,
+			MinAgentProtocol:     minAgent,
+			MaxAgentProtocol:     controlPlaneProtocol,
+			Policy:               "n-1",
+		},
+		{
+			Channel:              "candidate",
+			ControlPlaneProtocol: controlPlaneProtocol,
+			MinAgentProtocol:     minAgent,
+			MaxAgentProtocol:     controlPlaneProtocol,
+			Policy:               "n-1",
+		},
+		{
+			Channel:              "edge",
+			ControlPlaneProtocol: controlPlaneProtocol,
+			MinAgentProtocol:     controlPlaneProtocol,
+			MaxAgentProtocol:     controlPlaneProtocol,
+			Policy:               "same-major protocol",
+		},
+		{
+			Channel:              "lts",
+			ControlPlaneProtocol: controlPlaneProtocol,
+			MinAgentProtocol:     minAgent,
+			MaxAgentProtocol:     controlPlaneProtocol,
+			Policy:               "extended support window",
+		},
+	}
+	return SupportMatrix{
+		GeneratedAt:          time.Now().UTC(),
+		ControlPlaneProtocol: controlPlaneProtocol,
+		Rows:                 rows,
 	}
 }
 
