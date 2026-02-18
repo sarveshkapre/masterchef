@@ -1461,6 +1461,104 @@ resources:
 	}
 }
 
+func TestIncidentViewEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-incident.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	st := state.New(tmp)
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "run-incident-1",
+		StartedAt: time.Now().UTC().Add(-10 * time.Minute),
+		EndedAt:   time.Now().UTC().Add(-8 * time.Minute),
+		Status:    state.RunFailed,
+		Results: []state.ResourceRun{
+			{ResourceID: "deploy", Type: "file", Host: "payments-01", Changed: true, Message: "failed rollout"},
+		},
+	}); err != nil {
+		t.Fatalf("save run for incident view failed: %v", err)
+	}
+
+	eventPayload := `{"type":"external.alert","message":"payments saturation","fields":{"workload":"payments","service":"payments-api","run_id":"run-incident-1","dashboard_url":"https://grafana.example.com/d/payments","trace_id":"abc123"}}`
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(eventPayload)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest for incident view failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/incidents/view?workload=payments&hours=24", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("incident view failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		RiskScore int `json:"risk_score"`
+		Events    []struct {
+			Type string `json:"type"`
+		} `json:"events"`
+		Alerts []struct {
+			ID string `json:"id"`
+		} `json:"alerts"`
+		Runs []struct {
+			ID string `json:"id"`
+		} `json:"runs"`
+		ObservabilityLinks []struct {
+			URL string `json:"url"`
+		} `json:"observability_links"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode incident view failed: %v body=%s", err, rr.Body.String())
+	}
+	if resp.RiskScore == 0 {
+		t.Fatalf("expected non-zero incident risk score")
+	}
+	if len(resp.Events) == 0 || len(resp.Alerts) == 0 || len(resp.Runs) == 0 {
+		t.Fatalf("expected correlated events/alerts/runs in incident response: %+v", resp)
+	}
+	if len(resp.ObservabilityLinks) == 0 {
+		t.Fatalf("expected observability links in incident response")
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/incidents/view?run_id=run-incident-1&hours=24", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("incident view by run id failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
