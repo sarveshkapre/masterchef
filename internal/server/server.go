@@ -52,6 +52,7 @@ type Server struct {
 	encryptedVars      *control.EncryptedVariableStore
 	facts              *control.FactCache
 	varSources         *control.VariableSourceRegistry
+	plugins            *control.PluginExtensionStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -101,6 +102,7 @@ func New(addr, baseDir string) *Server {
 	encryptedVars := control.NewEncryptedVariableStore(baseDir)
 	facts := control.NewFactCache(5 * time.Minute)
 	varSources := control.NewVariableSourceRegistry(baseDir)
+	plugins := control.NewPluginExtensionStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -142,6 +144,7 @@ func New(addr, baseDir string) *Server {
 		encryptedVars:      encryptedVars,
 		facts:              facts,
 		varSources:         varSources,
+		plugins:            plugins,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -197,6 +200,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/vars/resolve", s.handleVariableResolve)
 	mux.HandleFunc("/v1/vars/explain", s.handleVariableExplain)
 	mux.HandleFunc("/v1/vars/sources/resolve", s.handleVariableSourceResolve)
+	mux.HandleFunc("/v1/plugins/extensions", s.handlePluginExtensions)
+	mux.HandleFunc("/v1/plugins/extensions/", s.handlePluginExtensionAction)
 	mux.HandleFunc("/v1/pillar/resolve", s.handlePillarResolve)
 	mux.HandleFunc("/v1/facts/cache", s.handleFactCache)
 	mux.HandleFunc("/v1/facts/cache/", s.handleFactCacheNode)
@@ -1808,6 +1813,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/vars/resolve",
 			"POST /v1/vars/explain",
 			"POST /v1/vars/sources/resolve",
+			"GET /v1/plugins/extensions",
+			"POST /v1/plugins/extensions",
+			"GET /v1/plugins/extensions/{id}",
+			"DELETE /v1/plugins/extensions/{id}",
+			"POST /v1/plugins/extensions/{id}/enable",
+			"POST /v1/plugins/extensions/{id}/disable",
 			"POST /v1/pillar/resolve",
 			"GET /v1/facts/cache",
 			"POST /v1/facts/cache",
