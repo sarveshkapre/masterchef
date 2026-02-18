@@ -3,7 +3,9 @@ package cli
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/masterchef/masterchef/internal/policy"
@@ -77,5 +79,69 @@ func TestRunReleaseCVECheck(t *testing.T) {
 
 	if err := runRelease([]string{"cve-check", "-root", ".", "-advisories", advPath, "-blocked-severities", "high", "-allow-ids", "CVE-2026-TEST-0001"}); err != nil {
 		t.Fatalf("expected allow-id to pass cve-check, got %v", err)
+	}
+}
+
+func TestRunReleaseAttest(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+	attPath := filepath.Join(tmp, "attestation.json")
+
+	if err := runRelease([]string{"attest", "-root", tmp, "-o", attPath, "-test-cmd", "echo ok"}); err != nil {
+		t.Fatalf("release attest failed: %v", err)
+	}
+	raw, err := os.ReadFile(attPath)
+	if err != nil {
+		t.Fatalf("read attestation failed: %v", err)
+	}
+	var att release.Attestation
+	if err := json.Unmarshal(raw, &att); err != nil {
+		t.Fatalf("unmarshal attestation failed: %v", err)
+	}
+	if strings.TrimSpace(att.SourceCommit) == "" {
+		t.Fatalf("expected source commit to be present")
+	}
+	if !att.TestPassed {
+		t.Fatalf("expected test command to pass")
+	}
+}
+
+func TestRunReleaseAttestFailsOnFailingTestCommand(t *testing.T) {
+	tmp := t.TempDir()
+	initGitRepo(t, tmp)
+	attPath := filepath.Join(tmp, "attestation.json")
+
+	err := runRelease([]string{"attest", "-root", tmp, "-o", attPath, "-test-cmd", "exit 3"})
+	if err == nil {
+		t.Fatalf("expected release attest to fail with non-zero test command")
+	}
+	ec, ok := err.(ExitError)
+	if !ok || ec.Code != 7 {
+		t.Fatalf("expected ExitError code 7, got %v", err)
+	}
+	if _, statErr := os.Stat(attPath); statErr != nil {
+		t.Fatalf("expected attestation file to be written on failure, stat err=%v", statErr)
+	}
+}
+
+func initGitRepo(t *testing.T, root string) {
+	t.Helper()
+	mustRun(t, root, "git", "init")
+	mustRun(t, root, "git", "config", "user.email", "masterchef-test@example.com")
+	mustRun(t, root, "git", "config", "user.name", "Masterchef Test")
+	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("v1\n"), 0o644); err != nil {
+		t.Fatalf("write tracked file failed: %v", err)
+	}
+	mustRun(t, root, "git", "add", "tracked.txt")
+	mustRun(t, root, "git", "commit", "-m", "initial")
+}
+
+func mustRun(t *testing.T, dir, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("command failed: %s %s: %v\n%s", name, strings.Join(args, " "), err, string(out))
 	}
 }

@@ -68,7 +68,7 @@ masterchef commands:
   fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
   doctor [-f masterchef.yaml] [-format json|human]
   test-impact [-changes file1,file2,...] [-format json|human]
-  release [sbom|sign|verify|cve-check] ...
+  release [sbom|sign|verify|cve-check|attest] ...
   plan [-f masterchef.yaml] [-o plan.json]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -582,7 +582,7 @@ func runPolicy(args []string) error {
 
 func runRelease(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("release subcommand required: sbom|sign|verify|cve-check")
+		return fmt.Errorf("release subcommand required: sbom|sign|verify|cve-check|attest")
 	}
 	switch args[0] {
 	case "sbom":
@@ -705,6 +705,26 @@ func runRelease(args []string) error {
 		}
 		if !report.Pass {
 			return ExitError{Code: 6, Msg: "cve policy violations found"}
+		}
+		return nil
+	case "attest":
+		fs := flag.NewFlagSet("release attest", flag.ContinueOnError)
+		root := fs.String("root", ".", "repository root path used for source metadata")
+		out := fs.String("o", "attestation.json", "output attestation json path")
+		testCmd := fs.String("test-cmd", "", "optional test command to execute and capture in attestation")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		att, err := release.GenerateAttestation(*root, *testCmd)
+		if err != nil {
+			return err
+		}
+		if err := release.SaveAttestation(*out, att); err != nil {
+			return err
+		}
+		fmt.Printf("release attestation written: %s\n", *out)
+		if att.TestCommand != "" && !att.TestPassed {
+			return ExitError{Code: 7, Msg: "release attestation test command failed"}
 		}
 		return nil
 	default:

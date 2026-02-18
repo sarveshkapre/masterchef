@@ -71,7 +71,15 @@ See `FEATURES.md`, `agents.md`, and `ROADMAP.md` for detailed scope.
 
 ## Project Status
 
-Planning and architecture phase.
+Active implementation phase.
+
+## Release Tooling (Current CLI)
+
+- `masterchef release sbom -root . -files . -o sbom.json`
+- `masterchef release sign -sbom sbom.json -key policy-private.key -o signed-sbom.json`
+- `masterchef release verify -signed signed-sbom.json -pub policy-public.key`
+- `masterchef release cve-check -root . -advisories advisories.json -blocked-severities critical,high`
+- `masterchef release attest -root . -o attestation.json -test-cmd "go test ./..."`
 
 ## Repository Documents
 
