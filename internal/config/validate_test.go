@@ -169,3 +169,20 @@ func TestValidate_NormalizesHostMetadata(t *testing.T) {
 		t.Fatalf("expected normalized topology key, got %#v", host.Topology)
 	}
 }
+
+func TestValidate_AllowsPluginTransports(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{
+				{Name: "custom-1", Transport: "plugin/mock"},
+			},
+		},
+		Resources: []Resource{
+			{ID: "f1", Type: "file", Host: "custom-1", Path: "/tmp/x"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected plugin transport to be allowed, got %v", err)
+	}
+}

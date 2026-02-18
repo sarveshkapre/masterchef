@@ -42,6 +42,9 @@ func Validate(cfg *Config) error {
 		switch cfg.Inventory.Hosts[i].Transport {
 		case "local", "ssh", "winrm":
 		default:
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(cfg.Inventory.Hosts[i].Transport)), "plugin/") {
+				break
+			}
 			return fmt.Errorf("host %q has unsupported transport %q", h.Name, h.Transport)
 		}
 		if len(cfg.Inventory.Hosts[i].Roles) > 0 {

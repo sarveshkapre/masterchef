@@ -17,15 +17,20 @@ import (
 )
 
 type Executor struct {
-	stepTimeout time.Duration
-	registry    *provider.Registry
+	stepTimeout       time.Duration
+	registry          *provider.Registry
+	transportHandlers map[string]transportApplyFunc
 }
 
+type transportApplyFunc func(step planner.Step, r config.Resource) (bool, bool, string, error)
+
 func New(_ string) *Executor {
-	return &Executor{
+	e := &Executor{
 		stepTimeout: 30 * time.Second,
 		registry:    provider.NewBuiltinRegistry(),
 	}
+	e.registerBuiltinTransports()
+	return e
 }
 
 func NewWithRegistry(stepTimeout time.Duration, reg *provider.Registry) *Executor {
@@ -35,10 +40,12 @@ func NewWithRegistry(stepTimeout time.Duration, reg *provider.Registry) *Executo
 	if reg == nil {
 		reg = provider.NewBuiltinRegistry()
 	}
-	return &Executor{
+	e := &Executor{
 		stepTimeout: stepTimeout,
 		registry:    reg,
 	}
+	e.registerBuiltinTransports()
+	return e
 }
 
 func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
@@ -139,7 +146,8 @@ func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
 
 func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool) {
 	r := step.Resource
-	if step.Host.Transport != "local" && step.Host.Transport != "ssh" && step.Host.Transport != "winrm" {
+	handler, ok := e.transportHandlers[strings.ToLower(strings.TrimSpace(step.Host.Transport))]
+	if !ok {
 		return state.ResourceRun{
 			ResourceID: r.ID,
 			Type:       r.Type,
@@ -154,38 +162,44 @@ func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool
 		Host:       r.Host,
 	}
 
-	if step.Host.Transport == "ssh" {
-		changed, skipped, msg, err := e.applyOverSSH(step, r)
-		res.Changed = changed
-		res.Skipped = skipped
-		res.Message = msg
-		if err != nil {
-			res.Message = err.Error()
-			return res, true
-		}
-		return res, false
-	}
-	if step.Host.Transport == "winrm" {
-		changed, skipped, msg, err := e.applyOverWinRM(step, r)
-		res.Changed = changed
-		res.Skipped = skipped
-		res.Message = msg
-		if err != nil {
-			res.Message = err.Error()
-			return res, true
-		}
-		return res, false
-	}
-
-	pRes, err := e.applyLocalResource(r)
-	res.Changed = pRes.Changed
-	res.Skipped = pRes.Skipped
-	res.Message = pRes.Message
+	changed, skipped, msg, err := handler(step, r)
+	res.Changed = changed
+	res.Skipped = skipped
+	res.Message = msg
 	if err != nil {
-		res.Message = err.Error()
+		if strings.TrimSpace(res.Message) == "" {
+			res.Message = err.Error()
+		}
 		return res, true
 	}
 	return res, false
+}
+
+func (e *Executor) registerBuiltinTransports() {
+	e.transportHandlers = map[string]transportApplyFunc{
+		"local": func(_ planner.Step, r config.Resource) (bool, bool, string, error) {
+			pRes, err := e.applyLocalResource(r)
+			return pRes.Changed, pRes.Skipped, pRes.Message, err
+		},
+		"ssh": func(step planner.Step, r config.Resource) (bool, bool, string, error) {
+			return e.applyOverSSH(step, r)
+		},
+		"winrm": func(step planner.Step, r config.Resource) (bool, bool, string, error) {
+			return e.applyOverWinRM(step, r)
+		},
+	}
+}
+
+func (e *Executor) RegisterTransport(name string, handler transportApplyFunc) error {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return fmt.Errorf("transport name is required")
+	}
+	if handler == nil {
+		return fmt.Errorf("transport handler is required")
+	}
+	e.transportHandlers[name] = handler
+	return nil
 }
 
 func (e *Executor) applyLocalResource(r config.Resource) (provider.Result, error) {

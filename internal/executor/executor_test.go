@@ -361,3 +361,36 @@ func TestApply_WinRMTransportLocalhostShim(t *testing.T) {
 		t.Fatalf("expected winrm file resource to materialize file: %v", err)
 	}
 }
+
+func TestApply_CustomTransportPluginHandler(t *testing.T) {
+	ex := New("")
+	if err := ex.RegisterTransport("plugin/mock", func(step planner.Step, r config.Resource) (bool, bool, string, error) {
+		if r.ID != "custom-step" || step.Host.Transport != "plugin/mock" {
+			t.Fatalf("unexpected custom transport step: %#v", step)
+		}
+		return true, false, "mock transport applied", nil
+	}); err != nil {
+		t.Fatalf("register custom transport failed: %v", err)
+	}
+
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "host-1", Transport: "plugin/mock"},
+				Resource: config.Resource{
+					ID:   "custom-step",
+					Type: "file",
+					Host: "host-1",
+				},
+			},
+		},
+	}
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded || len(run.Results) != 1 || !run.Results[0].Changed {
+		t.Fatalf("expected successful custom transport run, got %#v", run)
+	}
+}
