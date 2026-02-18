@@ -70,7 +70,7 @@ masterchef commands:
   doctor [-f masterchef.yaml] [-format json|human]
   test-impact [-changes file1,file2,...] [-format json|human]
   release [sbom|sign|verify|cve-check|attest|upgrade-assist] ...
-  plan [-f masterchef.yaml] [-o plan.json]
+  plan [-f masterchef.yaml] [-o plan.json] [-snapshot plan.snapshot.json] [-update-snapshot]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
   serve [-addr :8080]
@@ -255,6 +255,9 @@ func runPlan(args []string) error {
 	out := fs.String("o", "", "write plan json to path")
 	summary := fs.Bool("summary", false, "print blast-radius summary")
 	graph := fs.Bool("graph", false, "print DOT execution graph")
+	snapshotPath := fs.String("snapshot", "", "plan snapshot path for baseline comparison")
+	updateSnapshot := fs.Bool("update-snapshot", false, "write or overwrite snapshot with current plan")
+	snapshotFormat := fs.String("snapshot-format", "human", "snapshot output format: human|json")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -277,6 +280,42 @@ func runPlan(args []string) error {
 	}
 	if *graph {
 		fmt.Println(planner.ToDOT(p))
+	}
+	if strings.TrimSpace(*snapshotPath) != "" {
+		if *updateSnapshot {
+			if err := planner.SaveSnapshot(*snapshotPath, p); err != nil {
+				return err
+			}
+			fmt.Printf("plan snapshot updated: %s\n", *snapshotPath)
+		} else {
+			diff, err := planner.CompareSnapshot(*snapshotPath, p)
+			if err != nil {
+				return err
+			}
+			if strings.EqualFold(strings.TrimSpace(*snapshotFormat), "json") {
+				b, _ := json.MarshalIndent(diff, "", "  ")
+				fmt.Println(string(b))
+			} else {
+				if diff.Match {
+					fmt.Println("plan snapshot check: match")
+				} else {
+					fmt.Println("plan snapshot check: mismatch")
+					if len(diff.AddedSteps) > 0 {
+						fmt.Printf("- added steps: %s\n", strings.Join(diff.AddedSteps, ", "))
+					}
+					if len(diff.RemovedSteps) > 0 {
+						fmt.Printf("- removed steps: %s\n", strings.Join(diff.RemovedSteps, ", "))
+					}
+					if len(diff.ChangedSteps) > 0 {
+						fmt.Printf("- changed steps: %s\n", strings.Join(diff.ChangedSteps, ", "))
+					}
+				}
+				fmt.Printf("baseline_hash=%s current_hash=%s\n", diff.BaselineHash, diff.CurrentHash)
+			}
+			if !diff.Match {
+				return ExitError{Code: 9, Msg: "plan snapshot regression detected"}
+			}
+		}
 	}
 	if *out == "" {
 		fmt.Println(string(b))

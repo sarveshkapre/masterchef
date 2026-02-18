@@ -78,6 +78,7 @@ Active implementation phase.
 Current control-plane DR surface includes backup, point-in-time restore, and automated restore-verification drills.
 API contract governance includes deprecation lifecycle checks plus an upgrade-assistant endpoint for migration guidance.
 Schema evolution controls enforce migration plans and stepwise compatibility for control-plane state model upgrades.
+Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to detect deterministic plan regressions.
 
 ## Release Tooling (Current CLI)
 
