@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -53,4 +54,37 @@ func (s *Store) SaveRun(r RunRecord) error {
 		return fmt.Errorf("write run record: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) ListRuns(limit int) ([]RunRecord, error) {
+	dir := filepath.Join(s.baseDir, "runs")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []RunRecord{}, nil
+		}
+		return nil, fmt.Errorf("read runs dir: %w", err)
+	}
+	records := make([]RunRecord, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("read run file %s: %w", e.Name(), err)
+		}
+		var r RunRecord
+		if err := json.Unmarshal(b, &r); err != nil {
+			return nil, fmt.Errorf("parse run file %s: %w", e.Name(), err)
+		}
+		records = append(records, r)
+	}
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].StartedAt.After(records[j].StartedAt)
+	})
+	if limit > 0 && len(records) > limit {
+		records = records[:limit]
+	}
+	return records, nil
 }

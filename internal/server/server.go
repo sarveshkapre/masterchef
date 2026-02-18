@@ -14,6 +14,7 @@ import (
 
 	"github.com/masterchef/masterchef/internal/control"
 	"github.com/masterchef/masterchef/internal/features"
+	"github.com/masterchef/masterchef/internal/state"
 )
 
 type Server struct {
@@ -63,6 +64,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
+	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
@@ -99,6 +101,22 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 		out[k] = v
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleRuns(baseDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		st := state.New(baseDir)
+		runs, err := st.ListRuns(200)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, runs)
+	}
 }
 
 func (s *Server) handleFeatureSummary(baseDir string) http.HandlerFunc {

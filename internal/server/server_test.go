@@ -73,6 +73,13 @@ resources:
 		t.Fatalf("metrics status code: got=%d", rr.Code)
 	}
 
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/runs", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("runs status code: got=%d", rr.Code)
+	}
+
 	body = []byte(`{"name":"demo","config_path":"c.yaml"}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/templates", bytes.NewReader(body))
