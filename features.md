@@ -7,6 +7,8 @@
 - Node classification rules based on facts, labels, and policy
 - Variable precedence model with explicit conflict resolution
 - `explain` command to show final merged variable values
+- Variable source graph and precedence conflict detector with hard-fail policy option
+- Ambiguous variable override warnings with actionable remediation hints
 - Built-in templating engine with safe function library
 - Template rendering strict mode with undefined-variable failure controls
 - Conditionals, loops, and matrix expansion in configuration
@@ -25,6 +27,9 @@
 - Plan reproducibility checks across different runners
 - Mandatory `plan` before every `apply`
 - Read-only `check/noop` mode with exit codes for CI gating
+- Full-fidelity simulation contract for built-in providers (no silent skip behavior)
+- Plan confidence scoring that flags non-simulatable actions before execution
+- Policy gate to block applies below minimum simulation confidence
 - Change freeze enforcement and emergency override workflow
 - Idempotent resource provider contract
 - Provider side-effect declaration and purity metadata
@@ -61,11 +66,15 @@
 - Agentless execution over SSH
 - Agentless execution over WinRM
 - Local execution mode (`connection=local` equivalent) for image builds and CI runners
+- Pythonless managed-node execution path using portable remote runners where feasible
+- Capability discovery per node to select best execution backend automatically
 - Connection plugin architecture for custom transports
 - Bastion/jump-host and proxy-aware connection routing
 - Session recording for privileged remote executions
 - Network device transport support (NETCONF, RESTCONF, API-driven)
 - Agent-based periodic converge loop
+- Event-triggered converge runs in addition to interval-based scheduling
+- Real-time converge trigger API for policy, package, and security events
 - Proxy-minion mode for devices that cannot run full agents
 - Catalog compile-and-distribute flow for agent runs
 - Compiled catalog caching and signed catalog replay on disconnected nodes
@@ -73,6 +82,7 @@
 - Message-bus option for scalable agent dispatch
 - Agent certificate issuance, rotation, and revocation workflows
 - Policy-based certificate autosigning with CSR attribute validation and manual-approval fallback
+- Zero-touch certificate lifecycle with automatic renewal and expiry SLO alerts
 - Hybrid push + pull mode per environment
 - Secure bootstrap flow from agentless to agent mode
 - Policy pull from control plane or signed Git sources
@@ -80,6 +90,8 @@
 - Separation of control and execution planes for independent scaling
 - Overlay execution mesh with peer routing and hop nodes
 - Egress-only execution-node connectivity via hosted hop/ingress relays
+- Minimal-footprint deployment profile (single binary, embedded defaults, no external queue)
+- Progressive deployment profiles from single-node to HA without architecture rewrites
 - Cross-platform support for Linux, macOS, and Windows nodes
 - Windows-specific resources for DSC, PowerShell, services, and registry
 - Package manager abstraction for apt, yum/dnf, zypper, brew, winget, and chocolatey
@@ -114,6 +126,7 @@
 - Drift alerting with severity levels
 - Policy-driven auto-remediation of approved drift
 - Safe mode to block high-risk automatic changes
+- Drift SLO tracking with breach alerts and automated incident creation hooks
 - Drift root-cause hints and remediation recommendations
 - Desired-vs-observed diff history with trend analytics
 - Run history with full audit trail
@@ -232,6 +245,8 @@
 - Migration tooling from Puppet manifests
 - Compatibility shims for common legacy patterns
 - Migration assessment report with parity and risk scoring
+- Semantic equivalence testing for migrated policies before production rollout
+- Auto-generated migration diff reports highlighting behavior mismatches
 - Import/export tooling for existing inventories and variables
 - Bulk import from CMDB and asset inventory systems
 - Import assistants for existing secrets, facts, and role/group hierarchies
