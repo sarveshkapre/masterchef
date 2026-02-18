@@ -1382,6 +1382,85 @@ resources:
 	}
 }
 
+func TestPersonaHomeViews(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-home.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/runbooks", bytes.NewReader([]byte(`{"name":"owner-runbook","target_type":"config","config_path":"c.yaml","owner":"payments-team"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("seed runbook for persona home failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	for _, persona := range []string{"sre", "platform", "release", "service-owner"} {
+		path := "/v1/views/home?persona=" + persona
+		if persona == "service-owner" {
+			path += "&owner=payments-team"
+		}
+		rr = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, path, nil)
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("persona home failed for %s: code=%d body=%s", persona, rr.Code, rr.Body.String())
+		}
+		type resp struct {
+			Persona string `json:"persona"`
+			Cards   []struct {
+				ID string `json:"id"`
+			} `json:"cards"`
+		}
+		var payload resp
+		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode persona home response failed for %s: %v body=%s", persona, err, rr.Body.String())
+		}
+		if payload.Persona != persona {
+			t.Fatalf("expected persona %s, got %s", persona, payload.Persona)
+		}
+		if len(payload.Cards) == 0 {
+			t.Fatalf("expected cards in persona home for %s", persona)
+		}
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/views/home?persona=unknown", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request for invalid persona: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
