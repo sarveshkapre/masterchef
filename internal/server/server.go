@@ -48,6 +48,7 @@ type Server struct {
 	channels           *control.ChannelManager
 	schemaMigs         *control.SchemaMigrationManager
 	dataBags           *control.DataBagStore
+	roleEnv            *control.RoleEnvironmentStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -93,6 +94,7 @@ func New(addr, baseDir string) *Server {
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	dataBags := control.NewDataBagStore()
+	roleEnv := control.NewRoleEnvironmentStore(baseDir)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -130,6 +132,7 @@ func New(addr, baseDir string) *Server {
 		channels:           channels,
 		schemaMigs:         schemaMigs,
 		dataBags:           dataBags,
+		roleEnv:            roleEnv,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -175,6 +178,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/data-bags", s.handleDataBags)
 	mux.HandleFunc("/v1/data-bags/search", s.handleDataBagSearch)
 	mux.HandleFunc("/v1/data-bags/", s.handleDataBagItem)
+	mux.HandleFunc("/v1/roles", s.handleRoles)
+	mux.HandleFunc("/v1/roles/", s.handleRoleAction)
+	mux.HandleFunc("/v1/environments", s.handleEnvironments)
+	mux.HandleFunc("/v1/environments/", s.handleEnvironmentAction)
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
 	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
@@ -1764,6 +1771,15 @@ func currentAPISpec() control.APISpec {
 			"PUT /v1/data-bags/{bag}/{item}",
 			"DELETE /v1/data-bags/{bag}/{item}",
 			"POST /v1/data-bags/search",
+			"GET /v1/roles",
+			"POST /v1/roles",
+			"GET /v1/roles/{name}",
+			"DELETE /v1/roles/{name}",
+			"GET /v1/roles/{name}/resolve",
+			"GET /v1/environments",
+			"POST /v1/environments",
+			"GET /v1/environments/{name}",
+			"DELETE /v1/environments/{name}",
 			"POST /v1/events/ingest",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",
