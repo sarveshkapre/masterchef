@@ -88,3 +88,19 @@ func (s *Store) ListRuns(limit int) ([]RunRecord, error) {
 	}
 	return records, nil
 }
+
+func (s *Store) GetRun(id string) (RunRecord, error) {
+	if id == "" {
+		return RunRecord{}, fmt.Errorf("run id is required")
+	}
+	path := filepath.Join(s.baseDir, "runs", id+".json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return RunRecord{}, err
+	}
+	var r RunRecord
+	if err := json.Unmarshal(b, &r); err != nil {
+		return RunRecord{}, fmt.Errorf("parse run file %s: %w", id, err)
+	}
+	return r, nil
+}

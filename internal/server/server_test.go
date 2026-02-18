@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/masterchef/masterchef/internal/control"
+	"github.com/masterchef/masterchef/internal/state"
 )
 
 func TestSplitPath(t *testing.T) {
@@ -754,5 +755,100 @@ resources:
 	}
 	if astResp.MatchedCount < 1 {
 		t.Fatalf("expected ast query to match at least one job")
+	}
+}
+
+func TestObjectStoreRunAndAssociationExport(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x9.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	st := state.New(tmp)
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "run-export-1",
+		StartedAt: time.Now().UTC().Add(-time.Second),
+		EndedAt:   time.Now().UTC(),
+		Status:    state.RunSucceeded,
+	}); err != nil {
+		t.Fatalf("save run failed: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/runs/run-export-1/export", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("run export failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	createBody := []byte(`{
+		"config_path":"c.yaml",
+		"target_kind":"environment",
+		"target_name":"prod",
+		"interval_seconds":1,
+		"priority":"normal",
+		"enabled":true
+	}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/associations", bytes.NewReader(createBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("association create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var assoc struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &assoc); err != nil {
+		t.Fatalf("association decode failed: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/associations/"+assoc.ID+"/export", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("association export failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/object-store/objects?prefix=runs/run-export-1", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("object list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var objects []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &objects); err != nil {
+		t.Fatalf("object list decode failed: %v", err)
+	}
+	if len(objects) < 1 {
+		t.Fatalf("expected at least one exported object")
 	}
 }

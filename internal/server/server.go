@@ -16,20 +16,22 @@ import (
 	"github.com/masterchef/masterchef/internal/control"
 	"github.com/masterchef/masterchef/internal/features"
 	"github.com/masterchef/masterchef/internal/state"
+	"github.com/masterchef/masterchef/internal/storage"
 )
 
 type Server struct {
-	httpServer *http.Server
-	queue      *control.Queue
-	scheduler  *control.Scheduler
-	templates  *control.TemplateStore
-	workflows  *control.WorkflowStore
-	assocs     *control.AssociationStore
-	commands   *control.CommandIngestStore
-	events     *control.EventStore
-	runCancel  context.CancelFunc
-	metricsMu  sync.Mutex
-	metrics    map[string]int64
+	httpServer  *http.Server
+	queue       *control.Queue
+	scheduler   *control.Scheduler
+	templates   *control.TemplateStore
+	workflows   *control.WorkflowStore
+	assocs      *control.AssociationStore
+	commands    *control.CommandIngestStore
+	objectStore storage.ObjectStore
+	events      *control.EventStore
+	runCancel   context.CancelFunc
+	metricsMu   sync.Mutex
+	metrics     map[string]int64
 
 	backlogThreshold  int
 	backlogSamples    []backlogSample
@@ -52,19 +54,28 @@ func New(addr, baseDir string) *Server {
 	workflows := control.NewWorkflowStore(queue, templates)
 	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
+	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
+	if err != nil {
+		// Fallback to local filesystem object store under workspace state.
+		fallback, fallbackErr := storage.NewLocalFSStore(filepath.Join(baseDir, ".masterchef", "objectstore"))
+		if fallbackErr == nil {
+			objectStore = fallback
+		}
+	}
 	events := control.NewEventStore(20_000)
 
 	mux := http.NewServeMux()
 	s := &Server{
-		queue:     queue,
-		scheduler: scheduler,
-		templates: templates,
-		workflows: workflows,
-		assocs:    assocs,
-		commands:  commands,
-		events:    events,
-		metrics:   map[string]int64{},
-		runCancel: runCancel,
+		queue:       queue,
+		scheduler:   scheduler,
+		templates:   templates,
+		workflows:   workflows,
+		assocs:      assocs,
+		commands:    commands,
+		objectStore: objectStore,
+		events:      events,
+		metrics:     map[string]int64{},
+		runCancel:   runCancel,
 		backlogThreshold: readIntEnv(
 			"MC_QUEUE_BACKLOG_SLO_THRESHOLD",
 			100,
@@ -98,7 +109,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
+	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
+	mux.HandleFunc("/v1/runs/", s.handleRunAction(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
@@ -296,6 +309,76 @@ func (s *Server) handleRuns(baseDir string) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, runs)
 	}
+}
+
+func (s *Server) handleRunAction(baseDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// /v1/runs/{id}/export
+		parts := splitPath(r.URL.Path)
+		if len(parts) < 4 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid run action path"})
+			return
+		}
+		runID := parts[2]
+		action := parts[3]
+		switch action {
+		case "export":
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			if s.objectStore == nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "object store unavailable"})
+				return
+			}
+			run, err := state.New(baseDir).GetRun(runID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			payload, err := json.MarshalIndent(run, "", "  ")
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			key := storage.TimestampedJSONKey("runs/"+runID, "run")
+			obj, err := s.objectStore.Put(key, payload, "application/json")
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"run_id": runID,
+				"object": obj,
+			})
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown run action"})
+		}
+	}
+}
+
+func (s *Server) handleObjectStoreObjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if s.objectStore == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "object store unavailable"})
+		return
+	}
+	prefix := r.URL.Query().Get("prefix")
+	limit := 200
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	items, err := s.objectStore.List(prefix, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (s *Server) handleFeatureSummary(baseDir string) http.HandlerFunc {
@@ -785,6 +868,38 @@ func (s *Server) handleAssociationAction(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		writeJSON(w, http.StatusOK, assoc)
+	case "export":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if s.objectStore == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "object store unavailable"})
+			return
+		}
+		revisions, err := s.assocs.Revisions(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		payload, err := json.MarshalIndent(map[string]any{
+			"association_id": id,
+			"revisions":      revisions,
+		}, "", "  ")
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		key := storage.TimestampedJSONKey("associations/"+id, "revisions")
+		obj, err := s.objectStore.Put(key, payload, "application/json")
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"association_id": id,
+			"object":         obj,
+		})
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown association action"})
 	}

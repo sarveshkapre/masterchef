@@ -38,4 +38,12 @@ func TestStore_SaveAndListRuns(t *testing.T) {
 	if runs[0].ID != "r2" {
 		t.Fatalf("expected newest run first, got %s", runs[0].ID)
 	}
+
+	got, err := s.GetRun("r1")
+	if err != nil {
+		t.Fatalf("expected get run to succeed: %v", err)
+	}
+	if got.ID != "r1" {
+		t.Fatalf("expected run id r1, got %s", got.ID)
+	}
 }
