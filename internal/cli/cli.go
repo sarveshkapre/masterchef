@@ -343,6 +343,10 @@ func runCheck(args []string) error {
 	path := fs.String("f", "masterchef.yaml", "config path")
 	minConfidence := fs.Float64("min-confidence", 1.0, "minimum required simulation confidence [0.0-1.0]")
 	format := fs.String("format", "json", "output format: json|human|patch")
+	hostsFilter := fs.String("hosts", "", "comma-separated host filter for targeted checks")
+	resourcesFilter := fs.String("resources", "", "comma-separated resource-id filter for targeted checks")
+	includeTags := fs.String("tags", "", "comma-separated include-tags filter for targeted checks")
+	skipTags := fs.String("skip-tags", "", "comma-separated skip-tags filter for targeted checks")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -357,6 +361,15 @@ func runCheck(args []string) error {
 	p, err := planner.Build(cfg)
 	if err != nil {
 		return err
+	}
+	p = filterPlanBySelectors(p, planSelectors{
+		Hosts:       parseCSVSet(*hostsFilter),
+		Resources:   parseCSVSet(*resourcesFilter),
+		IncludeTags: parseCSVSet(*includeTags),
+		SkipTags:    parseCSVSet(*skipTags),
+	})
+	if len(p.Steps) == 0 {
+		return ExitError{Code: 7, Msg: "no plan steps matched target filters"}
 	}
 
 	report := checker.Run(p)
@@ -408,6 +421,10 @@ func runApply(args []string) error {
 	autoApprove := fs.Bool("yes", false, "auto approve apply without prompt")
 	nonInteractive := fs.Bool("non-interactive", false, "fail instead of prompting for approval")
 	reportPath := fs.String("report", "", "write machine-readable run report json to path")
+	hostsFilter := fs.String("hosts", "", "comma-separated host filter for targeted applies")
+	resourcesFilter := fs.String("resources", "", "comma-separated resource-id filter for targeted applies")
+	includeTags := fs.String("tags", "", "comma-separated include-tags filter for targeted applies")
+	skipTags := fs.String("skip-tags", "", "comma-separated skip-tags filter for targeted applies")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -418,6 +435,15 @@ func runApply(args []string) error {
 	p, err := planner.Build(cfg)
 	if err != nil {
 		return err
+	}
+	p = filterPlanBySelectors(p, planSelectors{
+		Hosts:       parseCSVSet(*hostsFilter),
+		Resources:   parseCSVSet(*resourcesFilter),
+		IncludeTags: parseCSVSet(*includeTags),
+		SkipTags:    parseCSVSet(*skipTags),
+	})
+	if len(p.Steps) == 0 {
+		return ExitError{Code: 7, Msg: "no plan steps matched target filters"}
 	}
 
 	if err := requireApplyApproval(p, *autoApprove, *nonInteractive); err != nil {
@@ -645,6 +671,86 @@ func topCountKeys(m map[string]int, limit int) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {
 		out = append(out, item.Key)
+	}
+	return out
+}
+
+type planSelectors struct {
+	Hosts       map[string]struct{}
+	Resources   map[string]struct{}
+	IncludeTags map[string]struct{}
+	SkipTags    map[string]struct{}
+}
+
+func filterPlanBySelectors(p *planner.Plan, selectors planSelectors) *planner.Plan {
+	if p == nil {
+		return &planner.Plan{}
+	}
+	steps := make([]planner.Step, 0, len(p.Steps))
+	for _, step := range p.Steps {
+		if !matchesSelectors(step, selectors) {
+			continue
+		}
+		steps = append(steps, step)
+	}
+	return &planner.Plan{
+		Execution: p.Execution,
+		Steps:     steps,
+	}
+}
+
+func matchesSelectors(step planner.Step, selectors planSelectors) bool {
+	host := strings.TrimSpace(step.Resource.Host)
+	if host == "" {
+		host = strings.TrimSpace(step.Host.Name)
+	}
+	if len(selectors.Hosts) > 0 {
+		if _, ok := selectors.Hosts[strings.ToLower(host)]; !ok {
+			return false
+		}
+	}
+	if len(selectors.Resources) > 0 {
+		if _, ok := selectors.Resources[strings.ToLower(strings.TrimSpace(step.Resource.ID))]; !ok {
+			return false
+		}
+	}
+	tagSet := map[string]struct{}{}
+	for _, tag := range step.Resource.Tags {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag != "" {
+			tagSet[tag] = struct{}{}
+		}
+	}
+	if len(selectors.IncludeTags) > 0 {
+		matched := false
+		for tag := range selectors.IncludeTags {
+			if _, ok := tagSet[tag]; ok {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	if len(selectors.SkipTags) > 0 {
+		for tag := range selectors.SkipTags {
+			if _, ok := tagSet[tag]; ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func parseCSVSet(raw string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" {
+			continue
+		}
+		out[part] = struct{}{}
 	}
 	return out
 }

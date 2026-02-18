@@ -60,3 +60,21 @@ func TestValidate_ExecutionPolicy(t *testing.T) {
 		t.Fatalf("expected max_fail_percentage validation error")
 	}
 }
+
+func TestValidate_NormalizesResourceTags(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{ID: "f1", Type: "file", Host: "localhost", Path: "/tmp/x", Tags: []string{"Prod", "prod", " api ", ""}},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("validate failed: %v", err)
+	}
+	if len(cfg.Resources[0].Tags) != 2 || cfg.Resources[0].Tags[0] != "api" || cfg.Resources[0].Tags[1] != "prod" {
+		t.Fatalf("expected normalized sorted deduped tags, got %#v", cfg.Resources[0].Tags)
+	}
+}

@@ -27,6 +27,7 @@ type Resource struct {
 	Type      string   `json:"type" yaml:"type"` // file, command
 	Host      string   `json:"host" yaml:"host"`
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	Tags      []string `json:"tags,omitempty" yaml:"tags,omitempty"`
 
 	// file
 	Path    string `json:"path,omitempty" yaml:"path,omitempty"`

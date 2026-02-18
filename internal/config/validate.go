@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -70,6 +71,23 @@ func Validate(cfg *Config) error {
 			}
 		default:
 			return fmt.Errorf("resource %q has unsupported type %q", r.ID, r.Type)
+		}
+		if len(r.Tags) > 0 {
+			seenTags := map[string]struct{}{}
+			clean := make([]string, 0, len(r.Tags))
+			for _, tag := range r.Tags {
+				tag = strings.ToLower(strings.TrimSpace(tag))
+				if tag == "" {
+					continue
+				}
+				if _, ok := seenTags[tag]; ok {
+					continue
+				}
+				seenTags[tag] = struct{}{}
+				clean = append(clean, tag)
+			}
+			sort.Strings(clean)
+			r.Tags = clean
 		}
 	}
 

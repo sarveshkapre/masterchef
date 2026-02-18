@@ -23,6 +23,8 @@ func Canonicalize(cfg *Config) Config {
 	for i := range out.Resources {
 		out.Resources[i].DependsOn = append([]string{}, out.Resources[i].DependsOn...)
 		sort.Strings(out.Resources[i].DependsOn)
+		out.Resources[i].Tags = append([]string{}, out.Resources[i].Tags...)
+		sort.Strings(out.Resources[i].Tags)
 	}
 	sort.Slice(out.Resources, func(i, j int) bool {
 		return out.Resources[i].ID < out.Resources[j].ID
