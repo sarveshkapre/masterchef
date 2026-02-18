@@ -51,6 +51,7 @@ type Server struct {
 	roleEnv            *control.RoleEnvironmentStore
 	encryptedVars      *control.EncryptedVariableStore
 	facts              *control.FactCache
+	varSources         *control.VariableSourceRegistry
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -99,6 +100,7 @@ func New(addr, baseDir string) *Server {
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
 	encryptedVars := control.NewEncryptedVariableStore(baseDir)
 	facts := control.NewFactCache(5 * time.Minute)
+	varSources := control.NewVariableSourceRegistry(baseDir)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -139,6 +141,7 @@ func New(addr, baseDir string) *Server {
 		roleEnv:            roleEnv,
 		encryptedVars:      encryptedVars,
 		facts:              facts,
+		varSources:         varSources,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -193,6 +196,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/vars/encrypted/files/", s.handleEncryptedVariableFileAction)
 	mux.HandleFunc("/v1/vars/resolve", s.handleVariableResolve)
 	mux.HandleFunc("/v1/vars/explain", s.handleVariableExplain)
+	mux.HandleFunc("/v1/vars/sources/resolve", s.handleVariableSourceResolve)
 	mux.HandleFunc("/v1/pillar/resolve", s.handlePillarResolve)
 	mux.HandleFunc("/v1/facts/cache", s.handleFactCache)
 	mux.HandleFunc("/v1/facts/cache/", s.handleFactCacheNode)
@@ -1803,6 +1807,7 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/vars/encrypted/files/{name}",
 			"POST /v1/vars/resolve",
 			"POST /v1/vars/explain",
+			"POST /v1/vars/sources/resolve",
 			"POST /v1/pillar/resolve",
 			"GET /v1/facts/cache",
 			"POST /v1/facts/cache",
