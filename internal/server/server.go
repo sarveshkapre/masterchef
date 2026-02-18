@@ -22,25 +22,26 @@ import (
 )
 
 type Server struct {
-	httpServer  *http.Server
-	baseDir     string
-	queue       *control.Queue
-	scheduler   *control.Scheduler
-	templates   *control.TemplateStore
-	workflows   *control.WorkflowStore
-	assocs      *control.AssociationStore
-	commands    *control.CommandIngestStore
-	canaries    *control.CanaryStore
-	rules       *control.RuleEngine
-	webhooks    *control.WebhookDispatcher
-	alerts      *control.AlertInbox
-	channels    *control.ChannelManager
-	schemaMigs  *control.SchemaMigrationManager
-	objectStore storage.ObjectStore
-	events      *control.EventStore
-	runCancel   context.CancelFunc
-	metricsMu   sync.Mutex
-	metrics     map[string]int64
+	httpServer    *http.Server
+	baseDir       string
+	queue         *control.Queue
+	scheduler     *control.Scheduler
+	templates     *control.TemplateStore
+	workflows     *control.WorkflowStore
+	assocs        *control.AssociationStore
+	commands      *control.CommandIngestStore
+	canaries      *control.CanaryStore
+	rules         *control.RuleEngine
+	webhooks      *control.WebhookDispatcher
+	alerts        *control.AlertInbox
+	notifications *control.NotificationRouter
+	channels      *control.ChannelManager
+	schemaMigs    *control.SchemaMigrationManager
+	objectStore   storage.ObjectStore
+	events        *control.EventStore
+	runCancel     context.CancelFunc
+	metricsMu     sync.Mutex
+	metrics       map[string]int64
 
 	backlogThreshold  int
 	backlogSamples    []backlogSample
@@ -67,6 +68,7 @@ func New(addr, baseDir string) *Server {
 	rules := control.NewRuleEngine()
 	webhooks := control.NewWebhookDispatcher(5000)
 	alerts := control.NewAlertInbox()
+	notifications := control.NewNotificationRouter(5000)
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
@@ -81,23 +83,24 @@ func New(addr, baseDir string) *Server {
 
 	mux := http.NewServeMux()
 	s := &Server{
-		baseDir:     baseDir,
-		queue:       queue,
-		scheduler:   scheduler,
-		templates:   templates,
-		workflows:   workflows,
-		assocs:      assocs,
-		commands:    commands,
-		canaries:    canaries,
-		rules:       rules,
-		webhooks:    webhooks,
-		alerts:      alerts,
-		channels:    channels,
-		schemaMigs:  schemaMigs,
-		objectStore: objectStore,
-		events:      events,
-		metrics:     map[string]int64{},
-		runCancel:   runCancel,
+		baseDir:       baseDir,
+		queue:         queue,
+		scheduler:     scheduler,
+		templates:     templates,
+		workflows:     workflows,
+		assocs:        assocs,
+		commands:      commands,
+		canaries:      canaries,
+		rules:         rules,
+		webhooks:      webhooks,
+		alerts:        alerts,
+		notifications: notifications,
+		channels:      channels,
+		schemaMigs:    schemaMigs,
+		objectStore:   objectStore,
+		events:        events,
+		metrics:       map[string]int64{},
+		runCancel:     runCancel,
 		backlogThreshold: readIntEnv(
 			"MC_QUEUE_BACKLOG_SLO_THRESHOLD",
 			100,
@@ -133,6 +136,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
 	mux.HandleFunc("/v1/alerts/inbox", s.handleAlertInbox)
+	mux.HandleFunc("/v1/notifications/targets", s.handleNotificationTargets)
+	mux.HandleFunc("/v1/notifications/targets/", s.handleNotificationTargetAction)
+	mux.HandleFunc("/v1/notifications/deliveries", s.handleNotificationDeliveries)
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
@@ -329,6 +335,90 @@ func (s *Server) handleAlertInbox(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleNotificationTargets(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Name    string `json:"name"`
+		Kind    string `json:"kind"`
+		URL     string `json:"url"`
+		Route   string `json:"route"`
+		Enabled bool   `json:"enabled"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.notifications.List())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		target, err := s.notifications.Register(control.NotificationTarget{
+			Name:    req.Name,
+			Kind:    req.Kind,
+			URL:     req.URL,
+			Route:   req.Route,
+			Enabled: true,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if !req.Enabled {
+			target, _ = s.notifications.SetEnabled(target.ID, false)
+		}
+		writeJSON(w, http.StatusCreated, target)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleNotificationTargetAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/notifications/targets/{id}/enable|disable
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 5 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid notification target action path"})
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	id := parts[3]
+	action := parts[4]
+	switch action {
+	case "enable":
+		target, err := s.notifications.SetEnabled(id, true)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, target)
+	case "disable":
+		target, err := s.notifications.SetEnabled(id, false)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, target)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown notification target action"})
+	}
+}
+
+func (s *Server) handleNotificationDeliveries(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	limit := 200
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	writeJSON(w, http.StatusOK, s.notifications.Deliveries(limit))
 }
 
 func (s *Server) handleCommandIngest(baseDir string) http.HandlerFunc {
@@ -1004,6 +1094,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/features/summary",
 			"GET /v1/alerts/inbox",
 			"POST /v1/alerts/inbox",
+			"GET /v1/notifications/targets",
+			"POST /v1/notifications/targets",
+			"POST /v1/notifications/targets/{id}/enable",
+			"POST /v1/notifications/targets/{id}/disable",
+			"GET /v1/notifications/deliveries",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
 			"GET /v1/release/api-contract",
@@ -2202,7 +2297,9 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 func (s *Server) recordEvent(e control.Event, evaluateRules bool) {
 	s.events.Append(e)
 	if s.alerts != nil {
-		s.alerts.IngestEvent(e)
+		if res, ok := s.alerts.IngestEvent(e); ok && s.notifications != nil {
+			_ = s.notifications.NotifyAlert(res.Item)
+		}
 	}
 	if s.webhooks != nil {
 		_ = s.webhooks.Dispatch(e)

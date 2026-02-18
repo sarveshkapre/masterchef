@@ -83,6 +83,7 @@ On-call handoff packages are available via `GET /v1/control/handoff` to summariz
 Deployment-window change digests are available via `GET /v1/runs/digest` with latent-risk scoring.
 Noise-reduction alert inbox is available via `GET/POST /v1/alerts/inbox` with dedup, suppression windows, and routing.
 Run failure triage bundles are exportable via `POST /v1/runs/{id}/triage-bundle` for incident debugging context.
+Notification integrations are managed via `/v1/notifications/targets` and `/v1/notifications/deliveries` for ChatOps/incident/ticket routing.
 
 ## Release Tooling (Current CLI)
 
