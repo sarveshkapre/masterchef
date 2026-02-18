@@ -46,6 +46,8 @@ type Resource struct {
 	Command           string `json:"command,omitempty" yaml:"command,omitempty"`
 	Creates           string `json:"creates,omitempty" yaml:"creates,omitempty"`
 	Unless            string `json:"unless,omitempty" yaml:"unless,omitempty"`
+	Become            bool   `json:"become,omitempty" yaml:"become,omitempty"`
+	BecomeUser        string `json:"become_user,omitempty" yaml:"become_user,omitempty"`
 	Retries           int    `json:"retries,omitempty" yaml:"retries,omitempty"`
 	RetryDelaySeconds int    `json:"retry_delay_seconds,omitempty" yaml:"retry_delay_seconds,omitempty"`
 	UntilContains     string `json:"until_contains,omitempty" yaml:"until_contains,omitempty"`

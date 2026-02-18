@@ -162,10 +162,16 @@ func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool
 		Host:       r.Host,
 	}
 
-	changed, skipped, msg, err := handler(step, r)
+	preparedResource, audit, prepErr := prepareResourceForExecution(step.Host, r)
+	if prepErr != nil {
+		res.Message = prepErr.Error()
+		return res, true
+	}
+
+	changed, skipped, msg, err := handler(step, preparedResource)
 	res.Changed = changed
 	res.Skipped = skipped
-	res.Message = msg
+	res.Message = appendAuditMessage(msg, audit)
 	if err != nil {
 		if strings.TrimSpace(res.Message) == "" {
 			res.Message = err.Error()
@@ -173,6 +179,51 @@ func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool
 		return res, true
 	}
 	return res, false
+}
+
+func prepareResourceForExecution(host config.Host, r config.Resource) (config.Resource, string, error) {
+	if r.Type != "command" || !r.Become {
+		return r, "", nil
+	}
+	transport := strings.ToLower(strings.TrimSpace(host.Transport))
+	r.BecomeUser = strings.TrimSpace(r.BecomeUser)
+	audit := "privilege escalation via sudo"
+	if r.BecomeUser != "" {
+		audit += " as " + r.BecomeUser
+	}
+
+	switch transport {
+	case "local", "ssh":
+		r.Command = wrapWithSudo(r.Command, r.BecomeUser)
+		if strings.TrimSpace(r.Unless) != "" {
+			r.Unless = wrapWithSudo(r.Unless, r.BecomeUser)
+		}
+		return r, audit, nil
+	case "winrm":
+		return r, "", fmt.Errorf("resource %q uses become, but winrm escalation is not supported", r.ID)
+	default:
+		// plugin and future transports can inspect become flags directly.
+		return r, audit, nil
+	}
+}
+
+func wrapWithSudo(command, user string) string {
+	if strings.TrimSpace(user) == "" {
+		return "sudo sh -lc " + shellQuote(command)
+	}
+	return "sudo -u " + shellQuote(user) + " sh -lc " + shellQuote(command)
+}
+
+func appendAuditMessage(message, audit string) string {
+	message = strings.TrimSpace(message)
+	audit = strings.TrimSpace(audit)
+	if audit == "" {
+		return message
+	}
+	if message == "" {
+		return audit
+	}
+	return message + "; " + audit
 }
 
 func (e *Executor) registerBuiltinTransports() {

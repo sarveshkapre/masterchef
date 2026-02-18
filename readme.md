@@ -108,6 +108,7 @@ External variable source plugins (`inline`, `env`, `file`, `http`) are available
 Unified CLI now includes `observe` and `drift` commands for local run telemetry and drift trend inspection.
 Ansible-compatible plugin extension points (`callback`, `lookup`, `filter`, `vars`, `strategy`) are available via `/v1/plugins/extensions`.
 Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds (`max_fail_percentage`, `any_errors_fatal`) are supported in config and executor runtime.
+Privilege escalation controls for command resources are supported via `become` and `become_user`, with explicit run-result audit markers.
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-resources`, `-tags`, and `-skip-tags`.
 Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, and `until_contains`.
 Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.

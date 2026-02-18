@@ -380,9 +380,12 @@ func TestApply_CustomTransportPluginHandler(t *testing.T) {
 				Order: 1,
 				Host:  config.Host{Name: "host-1", Transport: "plugin/mock"},
 				Resource: config.Resource{
-					ID:   "custom-step",
-					Type: "file",
-					Host: "host-1",
+					ID:         "custom-step",
+					Type:       "command",
+					Host:       "host-1",
+					Command:    "echo ok",
+					Become:     true,
+					BecomeUser: "ops",
 				},
 			},
 		},
@@ -393,6 +396,9 @@ func TestApply_CustomTransportPluginHandler(t *testing.T) {
 	}
 	if run.Status != state.RunSucceeded || len(run.Results) != 1 || !run.Results[0].Changed {
 		t.Fatalf("expected successful custom transport run, got %#v", run)
+	}
+	if !strings.Contains(run.Results[0].Message, "privilege escalation via sudo as ops") {
+		t.Fatalf("expected privilege escalation audit marker, got %q", run.Results[0].Message)
 	}
 }
 
@@ -429,5 +435,39 @@ func TestBuildSSHJumpTarget(t *testing.T) {
 	host := config.Host{JumpAddress: "bastion", JumpUser: "ops", JumpPort: 2022}
 	if got := buildSSHJumpTarget(host); got != "ops@bastion:2022" {
 		t.Fatalf("unexpected jump target %q", got)
+	}
+}
+
+func TestPrepareResourceForExecution_SudoWrap(t *testing.T) {
+	resource := config.Resource{
+		ID:         "c1",
+		Type:       "command",
+		Command:    "echo ok",
+		Unless:     "test -f /tmp/skip",
+		Become:     true,
+		BecomeUser: "root",
+	}
+	prepared, audit, err := prepareResourceForExecution(config.Host{Transport: "ssh"}, resource)
+	if err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+	if !strings.Contains(prepared.Command, "sudo -u 'root' sh -lc ") {
+		t.Fatalf("expected command to be wrapped with sudo, got %q", prepared.Command)
+	}
+	if !strings.Contains(prepared.Unless, "sudo -u 'root' sh -lc ") {
+		t.Fatalf("expected unless to be wrapped with sudo, got %q", prepared.Unless)
+	}
+	if audit != "privilege escalation via sudo as root" {
+		t.Fatalf("unexpected audit marker %q", audit)
+	}
+}
+
+func TestPrepareResourceForExecution_WinRMBecomeUnsupported(t *testing.T) {
+	_, _, err := prepareResourceForExecution(
+		config.Host{Transport: "winrm"},
+		config.Resource{ID: "c1", Type: "command", Command: "Write-Output ok", Become: true},
+	)
+	if err == nil {
+		t.Fatalf("expected winrm become to fail")
 	}
 }

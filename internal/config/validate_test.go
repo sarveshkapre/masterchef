@@ -111,6 +111,40 @@ func TestValidate_CommandRetryPolicy(t *testing.T) {
 	}
 }
 
+func TestValidate_PrivilegeEscalationCommandOnly(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:         "c1",
+				Type:       "command",
+				Host:       "localhost",
+				Command:    "echo ok",
+				BecomeUser: "root",
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected command privilege escalation to validate, got %v", err)
+	}
+	if !cfg.Resources[0].Become || cfg.Resources[0].BecomeUser != "root" {
+		t.Fatalf("expected become normalization, got %#v", cfg.Resources[0])
+	}
+	cfg.Resources[0] = Resource{
+		ID:     "f1",
+		Type:   "file",
+		Host:   "localhost",
+		Path:   "/tmp/x",
+		Become: true,
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected privilege escalation on file resource to fail")
+	}
+}
+
 func TestValidate_DelegateToHost(t *testing.T) {
 	cfg := &Config{
 		Version: "v0",

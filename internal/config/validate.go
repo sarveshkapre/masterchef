@@ -118,8 +118,15 @@ func Validate(cfg *Config) error {
 				return fmt.Errorf("resource %q delegate_to references unknown host %q", r.ID, r.DelegateTo)
 			}
 		}
+		r.BecomeUser = strings.TrimSpace(r.BecomeUser)
+		if r.BecomeUser != "" {
+			r.Become = true
+		}
 		switch r.Type {
 		case "file":
+			if r.Become {
+				return fmt.Errorf("resource %q privilege escalation is only supported for command resources", r.ID)
+			}
 			if strings.TrimSpace(r.Path) == "" {
 				return fmt.Errorf("resource %q file.path is required", r.ID)
 			}
