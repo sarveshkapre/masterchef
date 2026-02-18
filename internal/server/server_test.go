@@ -1177,6 +1177,115 @@ resources:
 	}
 }
 
+func TestAlertInboxEndpointDedupSuppressionAndActions(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-alerts.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	eventBody := []byte(`{"type":"external.alert.disk","message":"disk full","fields":{"sev":"high","host":"db-01","service":"storage"}}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(eventBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("first event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(eventBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("second event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/alerts/inbox", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alerts inbox get failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var inbox struct {
+		Items []struct {
+			ID          string `json:"id"`
+			Fingerprint string `json:"fingerprint"`
+			Count       int    `json:"count"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &inbox); err != nil {
+		t.Fatalf("alerts inbox decode failed: %v", err)
+	}
+	if len(inbox.Items) != 1 || inbox.Items[0].Count != 2 {
+		t.Fatalf("expected deduplicated alert count=2, got %+v", inbox.Items)
+	}
+
+	suppressBody := []byte(`{"action":"suppress","fingerprint":"` + inbox.Items[0].Fingerprint + `","duration_seconds":300,"reason":"maintenance"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/alerts/inbox", bytes.NewReader(suppressBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alerts suppression failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(eventBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("suppressed event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	ackBody := []byte(`{"action":"acknowledge","id":"` + inbox.Items[0].ID + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/alerts/inbox", bytes.NewReader(ackBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alert acknowledge failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	resolveBody := []byte(`{"action":"resolve","id":"` + inbox.Items[0].ID + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/alerts/inbox", bytes.NewReader(resolveBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alert resolve failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	queryBody := []byte(`{"entity":"alerts","mode":"human","query":"event_type=external.alert.disk","limit":10}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader(queryBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alerts query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestReleaseReadinessEndpoint(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

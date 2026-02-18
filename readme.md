@@ -81,6 +81,7 @@ Schema evolution controls enforce migration plans and stepwise compatibility for
 Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to detect deterministic plan regressions.
 On-call handoff packages are available via `GET /v1/control/handoff` to summarize risks, active rollouts, and blocked actions.
 Deployment-window change digests are available via `GET /v1/runs/digest` with latent-risk scoring.
+Noise-reduction alert inbox is available via `GET/POST /v1/alerts/inbox` with dedup, suppression windows, and routing.
 
 ## Release Tooling (Current CLI)
 

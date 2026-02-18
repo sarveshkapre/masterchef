@@ -33,6 +33,7 @@ type Server struct {
 	canaries    *control.CanaryStore
 	rules       *control.RuleEngine
 	webhooks    *control.WebhookDispatcher
+	alerts      *control.AlertInbox
 	channels    *control.ChannelManager
 	schemaMigs  *control.SchemaMigrationManager
 	objectStore storage.ObjectStore
@@ -65,6 +66,7 @@ func New(addr, baseDir string) *Server {
 	canaries := control.NewCanaryStore(queue)
 	rules := control.NewRuleEngine()
 	webhooks := control.NewWebhookDispatcher(5000)
+	alerts := control.NewAlertInbox()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
@@ -89,6 +91,7 @@ func New(addr, baseDir string) *Server {
 		canaries:    canaries,
 		rules:       rules,
 		webhooks:    webhooks,
+		alerts:      alerts,
 		channels:    channels,
 		schemaMigs:  schemaMigs,
 		objectStore: objectStore,
@@ -129,6 +132,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
+	mux.HandleFunc("/v1/alerts/inbox", s.handleAlertInbox)
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
@@ -241,6 +245,90 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 		Fields:  req.Fields,
 	}, true)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "ingested"})
+}
+
+func (s *Server) handleAlertInbox(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Action          string `json:"action"` // acknowledge|resolve|suppress|unsuppress
+		ID              string `json:"id"`
+		Fingerprint     string `json:"fingerprint"`
+		DurationSeconds int    `json:"duration_seconds"`
+		Reason          string `json:"reason"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		limit := 200
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		status := strings.TrimSpace(r.URL.Query().Get("status"))
+		writeJSON(w, http.StatusOK, map[string]any{
+			"items":        s.alerts.List(status, limit),
+			"summary":      s.alerts.Summary(),
+			"suppressions": s.alerts.Suppressions(),
+		})
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		switch strings.ToLower(strings.TrimSpace(req.Action)) {
+		case "acknowledge":
+			item, err := s.alerts.Acknowledge(req.ID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, item)
+		case "resolve":
+			item, err := s.alerts.Resolve(req.ID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, item)
+		case "suppress":
+			fp := strings.TrimSpace(req.Fingerprint)
+			if fp == "" && strings.TrimSpace(req.ID) != "" {
+				item, err := s.alerts.Get(req.ID)
+				if err != nil {
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+					return
+				}
+				fp = item.Fingerprint
+			}
+			if fp == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fingerprint (or id) is required"})
+				return
+			}
+			if req.DurationSeconds <= 0 {
+				req.DurationSeconds = 300
+			}
+			sup, err := s.alerts.Suppress(fp, time.Duration(req.DurationSeconds)*time.Second, req.Reason)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, sup)
+		case "unsuppress":
+			fp := strings.TrimSpace(req.Fingerprint)
+			if fp == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "fingerprint is required"})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"fingerprint": fp,
+				"cleared":     s.alerts.ClearSuppression(fp),
+			})
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
+		}
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (s *Server) handleCommandIngest(baseDir string) http.HandlerFunc {
@@ -835,6 +923,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/activity",
 			"GET /v1/metrics",
 			"GET /v1/features/summary",
+			"GET /v1/alerts/inbox",
+			"POST /v1/alerts/inbox",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
 			"GET /v1/release/api-contract",
@@ -2031,6 +2121,9 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 
 func (s *Server) recordEvent(e control.Event, evaluateRules bool) {
 	s.events.Append(e)
+	if s.alerts != nil {
+		s.alerts.IngestEvent(e)
+	}
 	if s.webhooks != nil {
 		_ = s.webhooks.Dispatch(e)
 	}

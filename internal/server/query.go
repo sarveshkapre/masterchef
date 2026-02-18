@@ -113,6 +113,13 @@ func (s *Server) queryEntityRecords(entity, baseDir string) ([]any, error) {
 			out = append(out, e)
 		}
 		return out, nil
+	case "alerts":
+		alerts := s.alerts.List("all", 2000)
+		out := make([]any, 0, len(alerts))
+		for _, a := range alerts {
+			out = append(out, a)
+		}
+		return out, nil
 	case "jobs":
 		jobs := s.queue.List()
 		out := make([]any, 0, len(jobs))
