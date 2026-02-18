@@ -998,3 +998,98 @@ resources:
 		t.Fatalf("expected preflight fail status: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestRulebookEventPipeline(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x12.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	ruleBody := []byte(`{
+		"name":"critical alert remediation",
+		"source_prefix":"external.alert",
+		"match_mode":"all",
+		"conditions":[{"field":"fields.sev","comparator":"eq","value":"critical"}],
+		"actions":[{"type":"enqueue_apply","config_path":"c.yaml","priority":"high"}]
+	}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/rules", bytes.NewReader(ruleBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("rule create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var createdRule struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &createdRule); err != nil {
+		t.Fatalf("rule decode failed: %v", err)
+	}
+	if createdRule.ID == "" {
+		t.Fatalf("expected created rule id")
+	}
+
+	eventBody := []byte(`{"type":"external.alert","message":"disk full","fields":{"sev":"critical"}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(eventBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		rr = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/v1/jobs", nil)
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("jobs list failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var jobs []map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &jobs); err != nil {
+			t.Fatalf("jobs decode failed: %v", err)
+		}
+		found := false
+		for _, job := range jobs {
+			if priority, _ := job["priority"].(string); priority == "high" {
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for rule-triggered high-priority job")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 
 type Server struct {
 	httpServer  *http.Server
+	baseDir     string
 	queue       *control.Queue
 	scheduler   *control.Scheduler
 	templates   *control.TemplateStore
@@ -28,6 +30,7 @@ type Server struct {
 	assocs      *control.AssociationStore
 	commands    *control.CommandIngestStore
 	canaries    *control.CanaryStore
+	rules       *control.RuleEngine
 	objectStore storage.ObjectStore
 	events      *control.EventStore
 	runCancel   context.CancelFunc
@@ -56,6 +59,7 @@ func New(addr, baseDir string) *Server {
 	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
 	canaries := control.NewCanaryStore(queue)
+	rules := control.NewRuleEngine()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -68,6 +72,7 @@ func New(addr, baseDir string) *Server {
 
 	mux := http.NewServeMux()
 	s := &Server{
+		baseDir:     baseDir,
 		queue:       queue,
 		scheduler:   scheduler,
 		templates:   templates,
@@ -75,6 +80,7 @@ func New(addr, baseDir string) *Server {
 		assocs:      assocs,
 		commands:    commands,
 		canaries:    canaries,
+		rules:       rules,
 		objectStore: objectStore,
 		events:      events,
 		metrics:     map[string]int64{},
@@ -91,7 +97,7 @@ func New(addr, baseDir string) *Server {
 	}
 
 	queue.Subscribe(func(job control.Job) {
-		s.events.Append(control.Event{
+		s.recordEvent(control.Event{
 			Type:    "job." + string(job.Status),
 			Message: "job state updated",
 			Fields: map[string]any{
@@ -99,7 +105,7 @@ func New(addr, baseDir string) *Server {
 				"status":   job.Status,
 				"priority": job.Priority,
 			},
-		})
+		}, true)
 		s.observeQueueBacklog()
 	})
 	s.observeQueueBacklog()
@@ -113,6 +119,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
+	mux.HandleFunc("/v1/rules", s.handleRules)
+	mux.HandleFunc("/v1/rules/", s.handleRuleAction)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
 	mux.HandleFunc("/v1/runs/", s.handleRunAction(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
@@ -203,11 +211,11 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 	if req.Message == "" {
 		req.Message = "external event"
 	}
-	s.events.Append(control.Event{
+	s.recordEvent(control.Event{
 		Type:    req.Type,
 		Message: req.Message,
 		Fields:  req.Fields,
-	})
+	}, true)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "ingested"})
 }
 
@@ -303,6 +311,98 @@ func (s *Server) handleCommandDeadLetters(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, s.commands.DeadLetters())
+}
+
+func (s *Server) handleRules(w http.ResponseWriter, r *http.Request) {
+	type createReq struct {
+		Name            string                  `json:"name"`
+		SourcePrefix    string                  `json:"source_prefix"`
+		Enabled         bool                    `json:"enabled"`
+		MatchMode       string                  `json:"match_mode"`
+		Conditions      []control.RuleCondition `json:"conditions"`
+		Actions         []control.RuleAction    `json:"actions"`
+		CooldownSeconds int                     `json:"cooldown_seconds"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.rules.List())
+	case http.MethodPost:
+		var req createReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		rule, err := s.rules.Create(control.Rule{
+			Name:            req.Name,
+			SourcePrefix:    req.SourcePrefix,
+			Enabled:         req.Enabled,
+			MatchMode:       req.MatchMode,
+			Conditions:      req.Conditions,
+			Actions:         req.Actions,
+			CooldownSeconds: req.CooldownSeconds,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.events.Append(control.Event{
+			Type:    "rule.created",
+			Message: "event rule created",
+			Fields: map[string]any{
+				"rule_id":       rule.ID,
+				"source_prefix": rule.SourcePrefix,
+			},
+		})
+		writeJSON(w, http.StatusCreated, rule)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleRuleAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/rules/{id} or /v1/rules/{id}/enable|disable
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 3 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid rule path"})
+		return
+	}
+	id := parts[2]
+	if len(parts) == 3 {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		rule, err := s.rules.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rule)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	action := parts[3]
+	switch action {
+	case "enable":
+		rule, err := s.rules.SetEnabled(id, true)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rule)
+	case "disable":
+		rule, err := s.rules.SetEnabled(id, false)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rule)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown rule action"})
+	}
 }
 
 func (s *Server) handleRuns(baseDir string) http.HandlerFunc {
@@ -1341,6 +1441,85 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func (s *Server) recordEvent(e control.Event, evaluateRules bool) {
+	s.events.Append(e)
+	if !evaluateRules || s.rules == nil {
+		return
+	}
+	matches, err := s.rules.Evaluate(e)
+	if err != nil {
+		s.events.Append(control.Event{
+			Type:    "rule.evaluate.error",
+			Message: "rule evaluation failed",
+			Fields: map[string]any{
+				"event_type": e.Type,
+				"error":      err.Error(),
+			},
+		})
+		return
+	}
+	for _, match := range matches {
+		s.events.Append(control.Event{
+			Type:    "rule.matched",
+			Message: "event matched rule",
+			Fields: map[string]any{
+				"rule_id":    match.RuleID,
+				"rule_name":  match.RuleName,
+				"event_type": e.Type,
+			},
+		})
+		for _, action := range match.Actions {
+			if err := s.executeRuleAction(match, action); err != nil {
+				s.events.Append(control.Event{
+					Type:    "rule.action.error",
+					Message: "rule action failed",
+					Fields: map[string]any{
+						"rule_id":     match.RuleID,
+						"action_type": action.Type,
+						"error":       err.Error(),
+					},
+				})
+				continue
+			}
+			s.events.Append(control.Event{
+				Type:    "rule.action.succeeded",
+				Message: "rule action executed",
+				Fields: map[string]any{
+					"rule_id":     match.RuleID,
+					"action_type": action.Type,
+				},
+			})
+		}
+	}
+}
+
+func (s *Server) executeRuleAction(match control.RuleMatch, action control.RuleAction) error {
+	switch action.Type {
+	case "enqueue_apply":
+		configPath := action.ConfigPath
+		if !filepath.IsAbs(configPath) {
+			configPath = filepath.Join(s.baseDir, configPath)
+		}
+		if _, err := os.Stat(configPath); err != nil {
+			return err
+		}
+		_, err := s.queue.Enqueue(configPath, "", action.Force, action.Priority)
+		return err
+	case "launch_template":
+		tpl, ok := s.templates.Get(action.TemplateID)
+		if !ok {
+			return errors.New("template not found: " + action.TemplateID)
+		}
+		_, err := s.queue.Enqueue(tpl.ConfigPath, "", action.Force, action.Priority)
+		return err
+	case "launch_workflow":
+		_, err := s.workflows.Launch(action.WorkflowID, action.Priority, action.Force)
+		return err
+	default:
+		return errors.New("unsupported rule action type: " + action.Type)
+	}
 }
 
 func (s *Server) wrapHTTP(next http.Handler) http.Handler {
