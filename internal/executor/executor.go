@@ -323,18 +323,7 @@ func (e *Executor) applyOverSSH(step planner.Step, r config.Resource) (bool, boo
 }
 
 func (e *Executor) runSSH(host config.Host, script string) ([]byte, error) {
-	target := host.Address
-	if target == "" {
-		target = host.Name
-	}
-	if host.User != "" {
-		target = host.User + "@" + target
-	}
-	args := make([]string, 0, 8)
-	if host.Port > 0 {
-		args = append(args, "-p", strconv.Itoa(host.Port))
-	}
-	args = append(args, target, "sh", "-lc", script)
+	args := e.buildSSHArgs(host, script)
 
 	ctx, cancel := context.WithTimeout(context.Background(), e.stepTimeout)
 	defer cancel()
@@ -344,6 +333,43 @@ func (e *Executor) runSSH(host config.Host, script string) ([]byte, error) {
 		return out, fmt.Errorf("ssh apply failed: %w: %s", err, string(out))
 	}
 	return out, nil
+}
+
+func (e *Executor) buildSSHArgs(host config.Host, script string) []string {
+	target := strings.TrimSpace(host.Address)
+	if target == "" {
+		target = strings.TrimSpace(host.Name)
+	}
+	if strings.TrimSpace(host.User) != "" {
+		target = strings.TrimSpace(host.User) + "@" + target
+	}
+
+	args := make([]string, 0, 12)
+	if host.Port > 0 {
+		args = append(args, "-p", strconv.Itoa(host.Port))
+	}
+	if jump := buildSSHJumpTarget(host); jump != "" {
+		args = append(args, "-J", jump)
+	}
+	if proxy := strings.TrimSpace(host.ProxyCommand); proxy != "" {
+		args = append(args, "-o", "ProxyCommand="+proxy)
+	}
+	args = append(args, target, "sh", "-lc", script)
+	return args
+}
+
+func buildSSHJumpTarget(host config.Host) string {
+	jumpHost := strings.TrimSpace(host.JumpAddress)
+	if jumpHost == "" {
+		return ""
+	}
+	if strings.TrimSpace(host.JumpUser) != "" {
+		jumpHost = strings.TrimSpace(host.JumpUser) + "@" + jumpHost
+	}
+	if host.JumpPort > 0 {
+		jumpHost += ":" + strconv.Itoa(host.JumpPort)
+	}
+	return jumpHost
 }
 
 func (e *Executor) applyOverWinRM(step planner.Step, r config.Resource) (bool, bool, string, error) {

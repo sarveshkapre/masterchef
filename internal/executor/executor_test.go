@@ -3,6 +3,7 @@ package executor
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -392,5 +393,41 @@ func TestApply_CustomTransportPluginHandler(t *testing.T) {
 	}
 	if run.Status != state.RunSucceeded || len(run.Results) != 1 || !run.Results[0].Changed {
 		t.Fatalf("expected successful custom transport run, got %#v", run)
+	}
+}
+
+func TestBuildSSHArgs_WithJumpHostAndProxyCommand(t *testing.T) {
+	ex := New("")
+	host := config.Host{
+		Name:         "app-1",
+		Transport:    "ssh",
+		Address:      "10.0.0.10",
+		User:         "ubuntu",
+		Port:         2222,
+		JumpAddress:  "bastion.internal",
+		JumpUser:     "ops",
+		JumpPort:     2200,
+		ProxyCommand: "nc -x proxy.internal:1080 %h %p",
+	}
+	args := ex.buildSSHArgs(host, "echo ready")
+	want := []string{
+		"-p", "2222",
+		"-J", "ops@bastion.internal:2200",
+		"-o", "ProxyCommand=nc -x proxy.internal:1080 %h %p",
+		"ubuntu@10.0.0.10",
+		"sh", "-lc", "echo ready",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("unexpected ssh args:\nwant: %#v\ngot:  %#v", want, args)
+	}
+}
+
+func TestBuildSSHJumpTarget(t *testing.T) {
+	if got := buildSSHJumpTarget(config.Host{}); got != "" {
+		t.Fatalf("expected empty jump target, got %q", got)
+	}
+	host := config.Host{JumpAddress: "bastion", JumpUser: "ops", JumpPort: 2022}
+	if got := buildSSHJumpTarget(host); got != "ops@bastion:2022" {
+		t.Fatalf("unexpected jump target %q", got)
 	}
 }

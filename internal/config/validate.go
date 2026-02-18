@@ -47,6 +47,17 @@ func Validate(cfg *Config) error {
 			}
 			return fmt.Errorf("host %q has unsupported transport %q", h.Name, h.Transport)
 		}
+		cfg.Inventory.Hosts[i].Address = strings.TrimSpace(cfg.Inventory.Hosts[i].Address)
+		cfg.Inventory.Hosts[i].User = strings.TrimSpace(cfg.Inventory.Hosts[i].User)
+		cfg.Inventory.Hosts[i].JumpAddress = strings.TrimSpace(cfg.Inventory.Hosts[i].JumpAddress)
+		cfg.Inventory.Hosts[i].JumpUser = strings.TrimSpace(cfg.Inventory.Hosts[i].JumpUser)
+		cfg.Inventory.Hosts[i].ProxyCommand = strings.TrimSpace(cfg.Inventory.Hosts[i].ProxyCommand)
+		if cfg.Inventory.Hosts[i].Port < 0 || cfg.Inventory.Hosts[i].Port > 65535 {
+			return fmt.Errorf("host %q has invalid port %d", h.Name, cfg.Inventory.Hosts[i].Port)
+		}
+		if cfg.Inventory.Hosts[i].JumpPort < 0 || cfg.Inventory.Hosts[i].JumpPort > 65535 {
+			return fmt.Errorf("host %q has invalid jump_port %d", h.Name, cfg.Inventory.Hosts[i].JumpPort)
+		}
 		if len(cfg.Inventory.Hosts[i].Roles) > 0 {
 			seen := map[string]struct{}{}
 			roles := make([]string, 0, len(cfg.Inventory.Hosts[i].Roles))

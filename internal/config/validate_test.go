@@ -170,6 +170,48 @@ func TestValidate_NormalizesHostMetadata(t *testing.T) {
 	}
 }
 
+func TestValidate_HostConnectionRoutingFields(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{
+				{
+					Name:         "edge-1",
+					Transport:    "ssh",
+					Port:         22,
+					JumpAddress:  " bastion.internal ",
+					JumpUser:     "  ops ",
+					JumpPort:     2222,
+					ProxyCommand: " nc -x proxy.internal:1080 %h %p ",
+				},
+			},
+		},
+		Resources: []Resource{
+			{ID: "c1", Type: "command", Host: "edge-1", Command: "echo ok"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected valid host connection routing settings, got %v", err)
+	}
+	host := cfg.Inventory.Hosts[0]
+	if host.JumpAddress != "bastion.internal" || host.JumpUser != "ops" {
+		t.Fatalf("expected trimmed jump settings, got %#v", host)
+	}
+	if host.ProxyCommand != "nc -x proxy.internal:1080 %h %p" {
+		t.Fatalf("expected trimmed proxy_command, got %q", host.ProxyCommand)
+	}
+
+	cfg.Inventory.Hosts[0].JumpPort = 70000
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected jump_port validation error")
+	}
+	cfg.Inventory.Hosts[0].JumpPort = 2222
+	cfg.Inventory.Hosts[0].Port = -1
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected port validation error")
+	}
+}
+
 func TestValidate_AllowsPluginTransports(t *testing.T) {
 	cfg := &Config{
 		Version: "v0",
