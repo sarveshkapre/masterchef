@@ -8,20 +8,24 @@ import (
 )
 
 type Schedule struct {
-	ID         string        `json:"id"`
-	ConfigPath string        `json:"config_path"`
-	Priority   string        `json:"priority"`
-	Interval   time.Duration `json:"interval"`
-	Jitter     time.Duration `json:"jitter"`
-	Enabled    bool          `json:"enabled"`
-	CreatedAt  time.Time     `json:"created_at"`
-	LastRunAt  time.Time     `json:"last_run_at,omitempty"`
-	NextRunAt  time.Time     `json:"next_run_at,omitempty"`
+	ID          string        `json:"id"`
+	ConfigPath  string        `json:"config_path"`
+	Priority    string        `json:"priority"`
+	Host        string        `json:"host,omitempty"`
+	Cluster     string        `json:"cluster,omitempty"`
+	Environment string        `json:"environment,omitempty"`
+	Interval    time.Duration `json:"interval"`
+	Jitter      time.Duration `json:"jitter"`
+	Enabled     bool          `json:"enabled"`
+	CreatedAt   time.Time     `json:"created_at"`
+	LastRunAt   time.Time     `json:"last_run_at,omitempty"`
+	NextRunAt   time.Time     `json:"next_run_at,omitempty"`
 }
 
 type Scheduler struct {
 	mu        sync.RWMutex
 	queue     *Queue
+	maint     *MaintenanceStore
 	schedules map[string]*Schedule
 	cancel    map[string]context.CancelFunc
 	nextID    int64
@@ -30,6 +34,7 @@ type Scheduler struct {
 func NewScheduler(q *Queue) *Scheduler {
 	return &Scheduler{
 		queue:     q,
+		maint:     NewMaintenanceStore(),
 		schedules: map[string]*Schedule{},
 		cancel:    map[string]context.CancelFunc{},
 	}
@@ -40,6 +45,27 @@ func (s *Scheduler) Create(configPath string, interval, jitter time.Duration) *S
 }
 
 func (s *Scheduler) CreateWithPriority(configPath string, interval, jitter time.Duration, priority string) *Schedule {
+	return s.CreateWithOptions(ScheduleOptions{
+		ConfigPath: configPath,
+		Interval:   interval,
+		Jitter:     jitter,
+		Priority:   priority,
+	})
+}
+
+type ScheduleOptions struct {
+	ConfigPath  string
+	Priority    string
+	Host        string
+	Cluster     string
+	Environment string
+	Interval    time.Duration
+	Jitter      time.Duration
+}
+
+func (s *Scheduler) CreateWithOptions(opts ScheduleOptions) *Schedule {
+	interval := opts.Interval
+	jitter := opts.Jitter
 	if interval <= 0 {
 		interval = time.Minute
 	}
@@ -52,14 +78,17 @@ func (s *Scheduler) CreateWithPriority(configPath string, interval, jitter time.
 	id := "sched-" + itoa(s.nextID)
 	now := time.Now().UTC()
 	sc := &Schedule{
-		ID:         id,
-		ConfigPath: configPath,
-		Priority:   normalizePriority(priority),
-		Interval:   interval,
-		Jitter:     jitter,
-		Enabled:    true,
-		CreatedAt:  now,
-		NextRunAt:  now.Add(interval),
+		ID:          id,
+		ConfigPath:  opts.ConfigPath,
+		Priority:    normalizePriority(opts.Priority),
+		Host:        opts.Host,
+		Cluster:     opts.Cluster,
+		Environment: opts.Environment,
+		Interval:    interval,
+		Jitter:      jitter,
+		Enabled:     true,
+		CreatedAt:   now,
+		NextRunAt:   now.Add(interval),
 	}
 	s.schedules[id] = sc
 	s.startLocked(sc)
@@ -106,6 +135,19 @@ func (s *Scheduler) Enable(id string) bool {
 	return true
 }
 
+func (s *Scheduler) Shutdown() {
+	s.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(s.cancel))
+	for id, cancel := range s.cancel {
+		cancels = append(cancels, cancel)
+		delete(s.cancel, id)
+	}
+	s.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
 func (s *Scheduler) startLocked(sc *Schedule) {
 	if !sc.Enabled {
 		return
@@ -122,7 +164,9 @@ func (s *Scheduler) startLocked(sc *Schedule) {
 				timer.Stop()
 				return
 			case <-timer.C:
-				_, _ = s.queue.Enqueue(sc.ConfigPath, "", false, sc.Priority)
+				if !s.skipForMaintenance(sc) {
+					_, _ = s.queue.Enqueue(sc.ConfigPath, "", false, sc.Priority)
+				}
 				s.mu.Lock()
 				if cur, ok := s.schedules[scheduleID]; ok {
 					now := time.Now().UTC()
@@ -133,6 +177,30 @@ func (s *Scheduler) startLocked(sc *Schedule) {
 			}
 		}
 	}(sc.ID)
+}
+
+func (s *Scheduler) SetMaintenance(kind, name string, enabled bool, reason string) (MaintenanceTarget, error) {
+	return s.maint.Set(kind, name, enabled, reason)
+}
+
+func (s *Scheduler) MaintenanceStatus() []MaintenanceTarget {
+	return s.maint.List()
+}
+
+func (s *Scheduler) skipForMaintenance(sc *Schedule) bool {
+	if sc == nil {
+		return false
+	}
+	if s.maint.IsActive("host", sc.Host) {
+		return true
+	}
+	if s.maint.IsActive("cluster", sc.Cluster) {
+		return true
+	}
+	if s.maint.IsActive("environment", sc.Environment) {
+		return true
+	}
+	return false
 }
 
 func randomJitter(j time.Duration) time.Duration {

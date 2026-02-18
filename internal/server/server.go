@@ -24,6 +24,7 @@ type Server struct {
 	scheduler  *control.Scheduler
 	templates  *control.TemplateStore
 	events     *control.EventStore
+	runCancel  context.CancelFunc
 	metricsMu  sync.Mutex
 	metrics    map[string]int64
 
@@ -41,7 +42,8 @@ type backlogSample struct {
 func New(addr, baseDir string) *Server {
 	runner := control.NewRunner(baseDir)
 	queue := control.NewQueue(512)
-	queue.StartWorker(context.Background(), runner)
+	runCtx, runCancel := context.WithCancel(context.Background())
+	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
 	templates := control.NewTemplateStore()
 	events := control.NewEventStore(20_000)
@@ -53,6 +55,7 @@ func New(addr, baseDir string) *Server {
 		templates: templates,
 		events:    events,
 		metrics:   map[string]int64{},
+		runCancel: runCancel,
 		backlogThreshold: readIntEnv(
 			"MC_QUEUE_BACKLOG_SLO_THRESHOLD",
 			100,
@@ -87,6 +90,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
+	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
@@ -101,6 +105,15 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	if s.runCancel != nil {
+		s.runCancel()
+	}
+	if s.scheduler != nil {
+		s.scheduler.Shutdown()
+	}
+	if s.queue != nil {
+		s.queue.Wait()
+	}
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -259,6 +272,9 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 		IntervalSeconds int    `json:"interval_seconds"`
 		JitterSeconds   int    `json:"jitter_seconds"`
 		Priority        string `json:"priority"`
+		Host            string `json:"host"`
+		Cluster         string `json:"cluster"`
+		Environment     string `json:"environment"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -284,12 +300,15 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
 				return
 			}
-			sc := s.scheduler.CreateWithPriority(
-				req.ConfigPath,
-				time.Duration(req.IntervalSeconds)*time.Second,
-				time.Duration(req.JitterSeconds)*time.Second,
-				req.Priority,
-			)
+			sc := s.scheduler.CreateWithOptions(control.ScheduleOptions{
+				ConfigPath:  req.ConfigPath,
+				Priority:    req.Priority,
+				Host:        req.Host,
+				Cluster:     req.Cluster,
+				Environment: req.Environment,
+				Interval:    time.Duration(req.IntervalSeconds) * time.Second,
+				Jitter:      time.Duration(req.JitterSeconds) * time.Second,
+			})
 			writeJSON(w, http.StatusCreated, sc)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -436,6 +455,44 @@ func (s *Server) handleEmergencyStop(w http.ResponseWriter, r *http.Request) {
 			Fields: map[string]any{
 				"active": st.Active,
 				"reason": st.Reason,
+			},
+		})
+		writeJSON(w, http.StatusOK, st)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleMaintenance(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Kind    string `json:"kind"`
+		Name    string `json:"name"`
+		Enabled bool   `json:"enabled"`
+		Reason  string `json:"reason"`
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.scheduler.MaintenanceStatus())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		st, err := s.scheduler.SetMaintenance(req.Kind, req.Name, req.Enabled, req.Reason)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.events.Append(control.Event{
+			Type:    "control.maintenance",
+			Message: "maintenance mode updated",
+			Fields: map[string]any{
+				"kind":    st.Kind,
+				"name":    st.Name,
+				"enabled": st.Enabled,
+				"reason":  st.Reason,
 			},
 		})
 		writeJSON(w, http.StatusOK, st)

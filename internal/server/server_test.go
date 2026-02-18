@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +49,9 @@ resources:
 	}
 
 	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -120,6 +124,21 @@ resources:
 		t.Fatalf("queue status code: got=%d body=%s", rr.Code, rr.Body.String())
 	}
 
+	body = []byte(`{"kind":"environment","name":"prod","enabled":true,"reason":"window"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/maintenance", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("maintenance set status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/maintenance", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("maintenance list status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
 	body = []byte(`{"max_age_seconds":1}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/control/recover-stuck", bytes.NewReader(body))
@@ -170,6 +189,9 @@ resources:
 	}
 
 	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
 
 	pauseBody := []byte(`{"action":"pause"}`)
 	rr := httptest.NewRecorder()
