@@ -188,6 +188,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/vars/encrypted/keys", s.handleEncryptedVariableKeys)
 	mux.HandleFunc("/v1/vars/encrypted/files", s.handleEncryptedVariableFiles)
 	mux.HandleFunc("/v1/vars/encrypted/files/", s.handleEncryptedVariableFileAction)
+	mux.HandleFunc("/v1/pillar/resolve", s.handlePillarResolve)
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
 	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
@@ -1792,6 +1793,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/vars/encrypted/files",
 			"GET /v1/vars/encrypted/files/{name}",
 			"DELETE /v1/vars/encrypted/files/{name}",
+			"POST /v1/pillar/resolve",
 			"POST /v1/events/ingest",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",
