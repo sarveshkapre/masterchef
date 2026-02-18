@@ -22,6 +22,7 @@ import (
 	"github.com/masterchef/masterchef/internal/policy"
 	"github.com/masterchef/masterchef/internal/server"
 	"github.com/masterchef/masterchef/internal/state"
+	"github.com/masterchef/masterchef/internal/testimpact"
 )
 
 func Run(args []string) error {
@@ -37,6 +38,8 @@ func Run(args []string) error {
 		return runFmt(args[1:])
 	case "doctor":
 		return runDoctor(args[1:])
+	case "test-impact":
+		return runTestImpact(args[1:])
 	case "plan":
 		return runPlan(args[1:])
 	case "check":
@@ -61,6 +64,7 @@ masterchef commands:
   validate [-f masterchef.yaml]
   fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
   doctor [-f masterchef.yaml] [-format json|human]
+  test-impact [-changes file1,file2,...] [-format json|human]
   plan [-f masterchef.yaml] [-o plan.json]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -204,6 +208,37 @@ func runDoctor(args []string) error {
 	for _, d := range diags {
 		if d.Severity == config.SeverityError {
 			return ExitError{Code: 4, Msg: "doctor found blocking errors"}
+		}
+	}
+	return nil
+}
+
+func runTestImpact(args []string) error {
+	fs := flag.NewFlagSet("test-impact", flag.ContinueOnError)
+	changes := fs.String("changes", "", "comma-separated changed file paths")
+	format := fs.String("format", "human", "output format: human|json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	files := make([]string, 0)
+	for _, raw := range strings.Split(*changes, ",") {
+		raw = strings.TrimSpace(raw)
+		if raw != "" {
+			files = append(files, raw)
+		}
+	}
+	report := testimpact.Analyze(files)
+	switch strings.ToLower(strings.TrimSpace(*format)) {
+	case "json":
+		b, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(b))
+	default:
+		if report.FallbackToAll {
+			fmt.Printf("fallback-to-safe-set: %s\n", report.Reason)
+		}
+		fmt.Println("impacted packages:")
+		for _, pkg := range report.ImpactedPackages {
+			fmt.Printf("- %s\n", pkg)
 		}
 	}
 	return nil
