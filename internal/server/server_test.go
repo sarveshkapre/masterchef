@@ -1252,6 +1252,136 @@ resources:
 	}
 }
 
+func TestUniversalSearchEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-search.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/templates", bytes.NewReader([]byte(`{"name":"payments policy","config_path":"c.yaml"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("template create for search failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runbooks", bytes.NewReader([]byte(`{"name":"payments rollback","target_type":"config","config_path":"c.yaml","risk_level":"high","owner":"sre","tags":["payments"]}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("runbook create for search failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(`{"type":"external.alert","message":"payments latency high","fields":{"workload":"payments","service":"payments-api","host":"pay-01"}}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest for search failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	st := state.New(tmp)
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "run-search-1",
+		StartedAt: time.Now().UTC().Add(-2 * time.Minute),
+		EndedAt:   time.Now().UTC(),
+		Status:    state.RunSucceeded,
+		Results: []state.ResourceRun{
+			{ResourceID: "deploy", Type: "file", Host: "pay-01", Changed: true, Message: "updated"},
+		},
+	}); err != nil {
+		t.Fatalf("save run for search failed: %v", err)
+	}
+
+	type searchResp struct {
+		Items []struct {
+			Type  string `json:"type"`
+			Title string `json:"title"`
+		} `json:"items"`
+	}
+	hasType := func(items []struct {
+		Type  string `json:"type"`
+		Title string `json:"title"`
+	}, expected string) bool {
+		for _, item := range items {
+			if item.Type == expected {
+				return true
+			}
+		}
+		return false
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/search?q=payments&limit=25", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("search failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var result searchResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode search response failed: %v body=%s", err, rr.Body.String())
+	}
+	if !hasType(result.Items, "service") || !hasType(result.Items, "policy") {
+		t.Fatalf("expected service and policy search results, got %#v", result.Items)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/search?q=pay-01&type=host", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("search host filter failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	result = searchResp{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode host-filter search response failed: %v body=%s", err, rr.Body.String())
+	}
+	if len(result.Items) == 0 || !hasType(result.Items, "host") {
+		t.Fatalf("expected host search results, got %#v", result.Items)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/search?q=blue-green&type=module", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("search module filter failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	result = searchResp{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode module-filter search response failed: %v body=%s", err, rr.Body.String())
+	}
+	if len(result.Items) == 0 || !hasType(result.Items, "module") {
+		t.Fatalf("expected module search results, got %#v", result.Items)
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
