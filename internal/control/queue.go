@@ -39,6 +39,7 @@ type Queue struct {
 	byIdempotency  map[string]string
 	pending        chan string
 	workerShutdown chan struct{}
+	subscribers    []func(Job)
 }
 
 func NewQueue(buffer int) *Queue {
@@ -53,13 +54,23 @@ func NewQueue(buffer int) *Queue {
 	}
 }
 
-func (q *Queue) Enqueue(configPath, key string) *Job {
+func (q *Queue) Subscribe(fn func(Job)) {
+	if fn == nil {
+		return
+	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	q.subscribers = append(q.subscribers, fn)
+}
+
+func (q *Queue) Enqueue(configPath, key string) *Job {
+	q.mu.Lock()
 
 	if key != "" {
 		if existingID, ok := q.byIdempotency[key]; ok {
-			return q.clone(q.jobs[existingID])
+			cp := q.clone(q.jobs[existingID])
+			q.mu.Unlock()
+			return cp
 		}
 	}
 
@@ -77,7 +88,10 @@ func (q *Queue) Enqueue(configPath, key string) *Job {
 		q.byIdempotency[key] = id
 	}
 	q.pending <- id
-	return q.clone(j)
+	cp := q.clone(j)
+	q.mu.Unlock()
+	q.publish(*cp)
+	return cp
 }
 
 func (q *Queue) Get(id string) (*Job, bool) {
@@ -102,16 +116,20 @@ func (q *Queue) List() []Job {
 
 func (q *Queue) Cancel(id string) error {
 	q.mu.Lock()
-	defer q.mu.Unlock()
 	j, ok := q.jobs[id]
 	if !ok {
+		q.mu.Unlock()
 		return errors.New("job not found")
 	}
 	if j.Status == JobSucceeded || j.Status == JobFailed {
+		q.mu.Unlock()
 		return errors.New("job already finished")
 	}
 	j.Status = JobCanceled
 	j.EndedAt = time.Now().UTC()
+	cp := *j
+	q.mu.Unlock()
+	q.publish(cp)
 	return nil
 }
 
@@ -142,14 +160,16 @@ func (q *Queue) runOne(id string, exec Executor) {
 	}
 	j.Status = JobRunning
 	j.StartedAt = time.Now().UTC()
+	cp := *j
 	q.mu.Unlock()
+	q.publish(cp)
 
 	err := exec.ApplyPath(j.ConfigPath)
 
 	q.mu.Lock()
-	defer q.mu.Unlock()
 	j = q.jobs[id]
 	if j.Status == JobCanceled {
+		q.mu.Unlock()
 		return
 	}
 	if err != nil {
@@ -159,6 +179,9 @@ func (q *Queue) runOne(id string, exec Executor) {
 		j.Status = JobSucceeded
 	}
 	j.EndedAt = time.Now().UTC()
+	cp = *j
+	q.mu.Unlock()
+	q.publish(cp)
 }
 
 func (q *Queue) clone(j *Job) *Job {
@@ -167,6 +190,16 @@ func (q *Queue) clone(j *Job) *Job {
 	}
 	cp := *j
 	return &cp
+}
+
+func (q *Queue) publish(job Job) {
+	q.mu.RLock()
+	subs := make([]func(Job), len(q.subscribers))
+	copy(subs, q.subscribers)
+	q.mu.RUnlock()
+	for _, fn := range subs {
+		fn(job)
+	}
 }
 
 func itoa(n int64) string {

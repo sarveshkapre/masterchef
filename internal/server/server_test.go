@@ -54,6 +54,9 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("health status code: got=%d", rr.Code)
 	}
+	if rr.Header().Get("X-Request-ID") == "" {
+		t.Fatalf("expected request ID header")
+	}
 
 	body := []byte(`{"config_path":"c.yaml","interval_seconds":1}`)
 	rr = httptest.NewRecorder()
@@ -61,5 +64,12 @@ resources:
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("schedule create status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/metrics", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("metrics status code: got=%d", rr.Code)
 	}
 }

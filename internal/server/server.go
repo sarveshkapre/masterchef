@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/masterchef/masterchef/internal/control"
@@ -18,6 +20,9 @@ type Server struct {
 	httpServer *http.Server
 	queue      *control.Queue
 	scheduler  *control.Scheduler
+	events     *control.EventStore
+	metricsMu  sync.Mutex
+	metrics    map[string]int64
 }
 
 func New(addr, baseDir string) *Server {
@@ -25,20 +30,36 @@ func New(addr, baseDir string) *Server {
 	queue := control.NewQueue(512)
 	queue.StartWorker(context.Background(), runner)
 	scheduler := control.NewScheduler(queue)
+	events := control.NewEventStore(20_000)
 
 	mux := http.NewServeMux()
 	s := &Server{
-		httpServer: &http.Server{
-			Addr:              addr,
-			Handler:           mux,
-			ReadHeaderTimeout: 5 * time.Second,
-		},
 		queue:     queue,
 		scheduler: scheduler,
+		events:    events,
+		metrics:   map[string]int64{},
 	}
+	s.httpServer = &http.Server{
+		Addr:              addr,
+		Handler:           s.wrapHTTP(mux),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	queue.Subscribe(func(job control.Job) {
+		s.events.Append(control.Event{
+			Type:    "job." + string(job.Status),
+			Message: "job state updated",
+			Fields: map[string]any{
+				"job_id": job.ID,
+				"status": job.Status,
+			},
+		})
+	})
 
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
+	mux.HandleFunc("/v1/activity", s.handleActivity)
+	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
@@ -59,6 +80,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"status": "ok",
 		"time":   time.Now().UTC(),
 	})
+}
+
+func (s *Server) handleActivity(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.events.List())
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
+	out := map[string]int64{}
+	for k, v := range s.metrics {
+		out[k] = v
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleFeatureSummary(baseDir string) http.HandlerFunc {
@@ -222,4 +257,46 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func (s *Server) wrapHTTP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now().UTC()
+		reqID := randomID()
+		w.Header().Set("X-Request-ID", reqID)
+
+		s.metricsMu.Lock()
+		s.metrics["requests_total"]++
+		s.metrics["requests."+r.Method]++
+		s.metrics["requests."+r.URL.Path]++
+		s.metricsMu.Unlock()
+
+		s.events.Append(control.Event{
+			Type:    "http.request",
+			Message: "request received",
+			Fields: map[string]any{
+				"id":     reqID,
+				"method": r.Method,
+				"path":   r.URL.Path,
+			},
+		})
+
+		next.ServeHTTP(w, r)
+
+		s.events.Append(control.Event{
+			Type:    "http.response",
+			Message: "request completed",
+			Fields: map[string]any{
+				"id":         reqID,
+				"method":     r.Method,
+				"path":       r.URL.Path,
+				"started_at": start,
+				"ended_at":   time.Now().UTC(),
+			},
+		})
+	})
+}
+
+func randomID() string {
+	return fmt.Sprintf("req-%d-%d", time.Now().UTC().UnixNano(), rand.Int63())
 }
