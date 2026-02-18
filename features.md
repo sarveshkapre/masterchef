@@ -384,3 +384,120 @@
 - Release artifact signing and SBOM generation
 - Vulnerability scanning and CVE policy enforcement on releases
 - Release provenance attestations linked to source commit, test runs, and build environment
+
+## Competitor Feature Traceability Matrix (Strict 1:1)
+
+Each competitor feature row maps to exactly one Masterchef feature line.
+
+### Chef -> Masterchef
+
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-01 | Recipes/resources | Core resources for file, directory, template, package, service, user, group, command, cron, and sysctl |
+| CHEF-02 | Cookbooks | Module registry with versioning and signatures |
+| CHEF-03 | Attribute precedence | Variable precedence model with explicit conflict resolution |
+| CHEF-04 | Roles | Chef-style role and environment objects with file-backed and API-backed workflows |
+| CHEF-05 | Environments | Per-environment run-list and policy overrides with deterministic precedence |
+| CHEF-06 | Data bags | Data bag/global object store with encrypted item support and structured search |
+| CHEF-07 | Policyfiles | Versioned policy bundles with lockfiles (Policyfile-style) |
+| CHEF-08 | Run-list | Named run-lists and policy-group targeting for staged rollout promotion |
+| CHEF-09 | Node search | Query API for facts, resources, events, reports, and catalogs with both human-friendly and AST modes |
+| CHEF-10 | Ohai facts | Fact collection engine (system, custom, and external facts) |
+| CHEF-11 | chef-client periodic converge | Agent-based periodic converge loop |
+| CHEF-12 | Knife bootstrap | Secure bootstrap flow from agentless to agent mode |
+| CHEF-13 | Handlers/reporting | Exception and report handler pipeline with pluggable sinks and ordered execution |
+| CHEF-14 | Chef Server push jobs / remote jobs | Remote execution API for one-off fleet commands |
+| CHEF-15 | Encrypted data bags | Data bag/global object store with encrypted item support and structured search |
+| CHEF-16 | Cookbook dependency locks | Module dependency resolution and lockfiles |
+| CHEF-17 | Test Kitchen style integration runs | Ephemeral test environment runner for integration checks |
+| CHEF-18 | InSpec/audit profile execution | Compliance profile engine (CIS, STIG, custom) |
+| CHEF-19 | File backup semantics | Filebucket-style content backup and checksum-addressable file history for managed files |
+| CHEF-20 | Chef local/solo style operation | Masterless execution mode with local state/pillar rendering for disconnected operations |
+| CHEF-21 | Chef org auditability | Immutable event logs for every action |
+| CHEF-22 | Multi-org content controls | Curated content channels (certified, validated, community) with controlled sync lists |
+
+### Ansible -> Masterchef
+
+| ID | Ansible Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| ANS-01 | Playbooks | Declarative typed configuration with schema validation |
+| ANS-02 | Roles | Role/profile/environment inheritance model |
+| ANS-03 | Collections/Galaxy packaging | Module registry with versioning and signatures |
+| ANS-04 | Static inventory | Static inventory management |
+| ANS-05 | Dynamic inventory plugins | Dynamic inventory providers |
+| ANS-06 | Variable precedence | Variable precedence model with explicit conflict resolution |
+| ANS-07 | group_vars/host_vars data layering | Hierarchical data lookup engine (Hiera/Data Bag style) |
+| ANS-08 | Vault encrypted vars | Encrypted variable files with key rotation (Vault-style) |
+| ANS-09 | Check mode | Read-only `check/noop` mode with exit codes for CI gating |
+| ANS-10 | Diff mode | Change diff previews for every resource action |
+| ANS-11 | Handlers | Handler/notification model for event-triggered resource actions |
+| ANS-12 | Tags and --tags/--skip-tags | Task tags with include/exclude run filters for selective execution |
+| ANS-13 | Strategy linear/free | Run strategy modes (`linear`, `free`, `serial`) |
+| ANS-14 | max_fail_percentage/any_errors_fatal | Failure thresholds (`max_fail_percentage`, `any_errors_fatal`-style controls) |
+| ANS-15 | delegate_to | Delegated execution (`delegate_to`/local execution equivalents) |
+| ANS-16 | become | Privilege escalation policies (`sudo`/`run-as`) with audit trails |
+| ANS-17 | async/poll | Async task execution with poll and timeout controls |
+| ANS-18 | Ad-hoc commands | Ad hoc command mode with guardrails and audit logging |
+| ANS-19 | Callback/lookup/filter/vars/strategy plugins | Ansible-compatible plugin extension points (callback, lookup, filter, vars, strategy) |
+| ANS-20 | AWX/Tower job templates and schedules | Job templates, workflow templates, schedules, and prompted launch parameters |
+| ANS-21 | AWX/Tower surveys | Survey/form-driven run launches with schema-validated inputs |
+| ANS-22 | Execution environments | Hermetic execution environments with pinned dependency sets for reproducible runs |
+| ANS-23 | Automation mesh | Overlay execution mesh with peer routing and hop nodes |
+| ANS-24 | ansible-pull style model | Policy pull from control plane or signed Git sources |
+| ANS-25 | Event-Driven Ansible rulebooks | Rulebook/event source engine with source-rule-condition-action pipelines |
+| ANS-26 | Network automation transports | Network device transport support (NETCONF, RESTCONF, API-driven) |
+| ANS-27 | WinRM support | Agentless execution over WinRM |
+
+### Puppet -> Masterchef
+
+| ID | Puppet Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| PUP-01 | Puppet resource DSL | Declarative typed configuration with schema validation |
+| PUP-02 | Catalog compilation | Catalog compile-and-distribute flow for agent runs |
+| PUP-03 | Agent pull cadence | Agent-based periodic converge loop |
+| PUP-04 | Hiera data | Hierarchical data lookup engine (Hiera/Data Bag style) |
+| PUP-05 | Facter | Fact collection engine (system, custom, and external facts) |
+| PUP-06 | ENC integration | External node classifier (ENC) interface for third-party classification engines |
+| PUP-07 | Modules | Module registry with versioning and signatures |
+| PUP-08 | Environments | Chef-style role and environment objects with file-backed and API-backed workflows |
+| PUP-09 | require/before/notify/subscribe | Explicit `require`/`before`/`notify`/`subscribe` style resource relationships |
+| PUP-10 | Virtual/exported resources and collectors | Virtual and exported resource model with collector syntax for cross-node service discovery patterns |
+| PUP-11 | PuppetDB querying | Query API for facts, resources, events, reports, and catalogs with both human-friendly and AST modes |
+| PUP-12 | Report processors | Exception and report handler pipeline with pluggable sinks and ordered execution |
+| PUP-13 | Puppet CA/certs | Agent certificate issuance, rotation, and revocation workflows |
+| PUP-14 | Filebucket backups | Filebucket-style content backup and checksum-addressable file history for managed files |
+| PUP-15 | Code Manager deploy triggers | Webhook, API, and CLI triggers for environment code deployments |
+| PUP-16 | File sync | Staging-to-live file-sync pipeline for distributed compiler/worker nodes |
+| PUP-17 | noop | Read-only `check/noop` mode with exit codes for CI gating |
+| PUP-18 | Orchestrator jobs | Workflow engine for multi-step orchestration pipelines |
+| PUP-19 | Bolt plans/tasks | Task and plan framework with module-packaged actions and reusable orchestration primitives |
+| PUP-20 | Ordered run stages | Dependency-aware orchestration and ordered phases |
+| PUP-21 | puppet apply/local mode | Masterless execution mode with local state/pillar rendering for disconnected operations |
+| PUP-22 | Multi-master scale patterns | Multi-master control mode with centralized job/event cache |
+
+### Salt -> Masterchef
+
+| ID | Salt Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| SALT-01 | States | Declarative typed configuration with schema validation |
+| SALT-02 | Highstate application | Versioned policy bundles with lockfiles (Policyfile-style) |
+| SALT-03 | Pillar data | Pillar-style hierarchical data with explicit merge strategies (`merge-first`, `merge-last`, `overwrite`, `remove`) |
+| SALT-04 | Grains | Salt-style grains compatibility layer over fact data for migration ease |
+| SALT-05 | Salt Mine | Cross-node shared fact cache (Salt Mine style) for service-discovery and orchestration use cases |
+| SALT-06 | Beacons/Reactor | Salt-style beacon/reactor compatibility patterns for event-driven remediation |
+| SALT-07 | Event bus | Event bus integrations (Kafka, NATS, webhooks) |
+| SALT-08 | Orchestrate runner | Workflow engine for multi-step orchestration pipelines |
+| SALT-09 | Proxy minions | Proxy-minion mode for devices that cannot run full agents |
+| SALT-10 | Syndic topology | Hierarchical relay/syndic topology for very large fleets and segmented networks |
+| SALT-11 | Salt SSH | Agentless execution over SSH |
+| SALT-12 | Masterless mode | Masterless execution mode with local state/pillar rendering for disconnected operations |
+| SALT-13 | Compound targeting | Partial and targeted applies by host, group, tag, and resource |
+| SALT-14 | Batch mode | Serial, batch, and percentage rollout controls |
+| SALT-15 | Returners | Report processor plugins for custom post-run processing |
+| SALT-16 | Job cache/events | Multi-master control mode with centralized job/event cache |
+| SALT-17 | Scheduler | Scheduled association-style policy assignments with revision history and replay controls |
+| SALT-18 | Fileserver-backed artifacts | Pluggable object storage for artifacts and logs |
+| SALT-19 | test=True dry-run | Read-only `check/noop` mode with exit codes for CI gating |
+| SALT-20 | Requisites/watch/onchanges | Resource refresh-on-change semantics with `only_if`/`unless` guards |
+| SALT-21 | ext_pillar | External data source plugins for variables and policy inputs |
+| SALT-22 | NetAPI/API surface | REST API and gRPC API for automation integration |
