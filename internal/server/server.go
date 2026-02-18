@@ -225,6 +225,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
 	mux.HandleFunc("/v1/control/schema-migrations", s.handleSchemaMigrations)
 	mux.HandleFunc("/v1/control/preflight", s.handlePreflight)
+	mux.HandleFunc("/v1/control/invariants/check", s.handleInvariantChecks)
 	mux.HandleFunc("/v1/control/blast-radius-map", s.handleBlastRadiusMap(baseDir))
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
@@ -1778,6 +1779,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/schema-migrations",
 			"GET /v1/control/schema-migrations",
 			"POST /v1/control/preflight",
+			"POST /v1/control/invariants/check",
 			"POST /v1/control/blast-radius-map",
 			"POST /v1/control/queue",
 			"GET /v1/control/queue",

@@ -104,6 +104,7 @@ Per-step plan explainability (reason/trigger/outcome/risk hints) is available vi
 Topology-aware blast-radius maps for impacted hosts/resources/dependencies are available via `POST /v1/control/blast-radius-map`.
 Human-readable pre-apply risk summaries are available via `POST /v1/plans/risk-summary`.
 Policy simulation and gating checks are available via `POST /v1/policy/simulate`.
+Post-run invariant checks with configurable severity are available via `POST /v1/control/invariants/check`.
 Release blocker policy enforcement with craftsmanship tiers is available via `GET/POST /v1/release/blocker-policy`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
