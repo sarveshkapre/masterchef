@@ -139,6 +139,29 @@ resources:
 		t.Fatalf("maintenance list status code: got=%d body=%s", rr.Code, rr.Body.String())
 	}
 
+	body = []byte(`{"action":"set_capacity","max_backlog":200,"max_execution_cost":20}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/capacity", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("capacity set status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	body = []byte(`{"action":"set_host_health","host":"db-01","healthy":false}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/capacity", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("capacity host health status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/capacity", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("capacity get status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
 	body = []byte(`{"max_age_seconds":1}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/control/recover-stuck", bytes.NewReader(body))

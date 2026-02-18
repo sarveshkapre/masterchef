@@ -72,3 +72,53 @@ func TestScheduler_MaintenanceSkipsScheduledRuns(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+func TestScheduler_CapacityGuardsBacklogHostHealthAndCost(t *testing.T) {
+	t.Run("backlog", func(t *testing.T) {
+		q := NewQueue(32)
+		s := NewScheduler(q)
+		if _, err := q.Enqueue("seed.yaml", "", false, "normal"); err != nil {
+			t.Fatalf("unexpected seed enqueue error: %v", err)
+		}
+		s.SetCapacity(1, 10)
+		s.CreateWithOptions(ScheduleOptions{
+			ConfigPath: "blocked-by-backlog.yaml",
+			Interval:   25 * time.Millisecond,
+		})
+		time.Sleep(120 * time.Millisecond)
+		if got := len(q.List()); got != 1 {
+			t.Fatalf("expected backlog guard to block new scheduled jobs, got %d jobs", got)
+		}
+	})
+
+	t.Run("host-health", func(t *testing.T) {
+		q := NewQueue(32)
+		s := NewScheduler(q)
+		s.SetCapacity(100, 10)
+		s.SetHostHealth("db-01", false)
+		s.CreateWithOptions(ScheduleOptions{
+			ConfigPath: "blocked-by-host-health.yaml",
+			Interval:   25 * time.Millisecond,
+			Host:       "db-01",
+		})
+		time.Sleep(120 * time.Millisecond)
+		if got := len(q.List()); got != 0 {
+			t.Fatalf("expected host health guard to block scheduled jobs, got %d jobs", got)
+		}
+	})
+
+	t.Run("execution-cost", func(t *testing.T) {
+		q := NewQueue(32)
+		s := NewScheduler(q)
+		s.SetCapacity(100, 1)
+		s.CreateWithOptions(ScheduleOptions{
+			ConfigPath:    "blocked-by-cost.yaml",
+			Interval:      25 * time.Millisecond,
+			ExecutionCost: 3,
+		})
+		time.Sleep(120 * time.Millisecond)
+		if got := len(q.List()); got != 0 {
+			t.Fatalf("expected execution cost guard to block scheduled jobs, got %d jobs", got)
+		}
+	})
+}

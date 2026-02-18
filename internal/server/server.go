@@ -91,6 +91,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
+	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
@@ -272,6 +273,7 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 		IntervalSeconds int    `json:"interval_seconds"`
 		JitterSeconds   int    `json:"jitter_seconds"`
 		Priority        string `json:"priority"`
+		ExecutionCost   int    `json:"execution_cost"`
 		Host            string `json:"host"`
 		Cluster         string `json:"cluster"`
 		Environment     string `json:"environment"`
@@ -301,13 +303,14 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 				return
 			}
 			sc := s.scheduler.CreateWithOptions(control.ScheduleOptions{
-				ConfigPath:  req.ConfigPath,
-				Priority:    req.Priority,
-				Host:        req.Host,
-				Cluster:     req.Cluster,
-				Environment: req.Environment,
-				Interval:    time.Duration(req.IntervalSeconds) * time.Second,
-				Jitter:      time.Duration(req.JitterSeconds) * time.Second,
+				ConfigPath:    req.ConfigPath,
+				Priority:      req.Priority,
+				ExecutionCost: req.ExecutionCost,
+				Host:          req.Host,
+				Cluster:       req.Cluster,
+				Environment:   req.Environment,
+				Interval:      time.Duration(req.IntervalSeconds) * time.Second,
+				Jitter:        time.Duration(req.JitterSeconds) * time.Second,
 			})
 			writeJSON(w, http.StatusCreated, sc)
 		default:
@@ -495,6 +498,60 @@ func (s *Server) handleMaintenance(w http.ResponseWriter, r *http.Request) {
 				"reason":  st.Reason,
 			},
 		})
+		writeJSON(w, http.StatusOK, st)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleCapacity(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Action           string `json:"action"` // set_capacity|set_host_health
+		MaxBacklog       int    `json:"max_backlog"`
+		MaxExecutionCost int    `json:"max_execution_cost"`
+		Host             string `json:"host"`
+		Healthy          bool   `json:"healthy"`
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.scheduler.CapacityStatus())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		var st control.SchedulerCapacityStatus
+		switch req.Action {
+		case "set_capacity":
+			st = s.scheduler.SetCapacity(req.MaxBacklog, req.MaxExecutionCost)
+			s.events.Append(control.Event{
+				Type:    "control.capacity",
+				Message: "scheduler capacity updated",
+				Fields: map[string]any{
+					"max_backlog":        st.MaxBacklog,
+					"max_execution_cost": st.MaxExecutionCost,
+				},
+			})
+		case "set_host_health":
+			if strings.TrimSpace(req.Host) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "host is required for set_host_health"})
+				return
+			}
+			st = s.scheduler.SetHostHealth(req.Host, req.Healthy)
+			s.events.Append(control.Event{
+				Type:    "control.capacity.host_health",
+				Message: "host health override updated",
+				Fields: map[string]any{
+					"host":    strings.ToLower(strings.TrimSpace(req.Host)),
+					"healthy": req.Healthy,
+				},
+			})
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
+			return
+		}
 		writeJSON(w, http.StatusOK, st)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

@@ -3,40 +3,48 @@ package control
 import (
 	"context"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Schedule struct {
-	ID          string        `json:"id"`
-	ConfigPath  string        `json:"config_path"`
-	Priority    string        `json:"priority"`
-	Host        string        `json:"host,omitempty"`
-	Cluster     string        `json:"cluster,omitempty"`
-	Environment string        `json:"environment,omitempty"`
-	Interval    time.Duration `json:"interval"`
-	Jitter      time.Duration `json:"jitter"`
-	Enabled     bool          `json:"enabled"`
-	CreatedAt   time.Time     `json:"created_at"`
-	LastRunAt   time.Time     `json:"last_run_at,omitempty"`
-	NextRunAt   time.Time     `json:"next_run_at,omitempty"`
+	ID            string        `json:"id"`
+	ConfigPath    string        `json:"config_path"`
+	Priority      string        `json:"priority"`
+	ExecutionCost int           `json:"execution_cost"`
+	Host          string        `json:"host,omitempty"`
+	Cluster       string        `json:"cluster,omitempty"`
+	Environment   string        `json:"environment,omitempty"`
+	Interval      time.Duration `json:"interval"`
+	Jitter        time.Duration `json:"jitter"`
+	Enabled       bool          `json:"enabled"`
+	CreatedAt     time.Time     `json:"created_at"`
+	LastRunAt     time.Time     `json:"last_run_at,omitempty"`
+	NextRunAt     time.Time     `json:"next_run_at,omitempty"`
 }
 
 type Scheduler struct {
-	mu        sync.RWMutex
-	queue     *Queue
-	maint     *MaintenanceStore
-	schedules map[string]*Schedule
-	cancel    map[string]context.CancelFunc
-	nextID    int64
+	mu               sync.RWMutex
+	queue            *Queue
+	maint            *MaintenanceStore
+	schedules        map[string]*Schedule
+	cancel           map[string]context.CancelFunc
+	nextID           int64
+	maxBacklog       int
+	maxExecutionCost int
+	hostHealth       map[string]bool
 }
 
 func NewScheduler(q *Queue) *Scheduler {
 	return &Scheduler{
-		queue:     q,
-		maint:     NewMaintenanceStore(),
-		schedules: map[string]*Schedule{},
-		cancel:    map[string]context.CancelFunc{},
+		queue:            q,
+		maint:            NewMaintenanceStore(),
+		schedules:        map[string]*Schedule{},
+		cancel:           map[string]context.CancelFunc{},
+		maxBacklog:       100,
+		maxExecutionCost: 10,
+		hostHealth:       map[string]bool{},
 	}
 }
 
@@ -54,13 +62,14 @@ func (s *Scheduler) CreateWithPriority(configPath string, interval, jitter time.
 }
 
 type ScheduleOptions struct {
-	ConfigPath  string
-	Priority    string
-	Host        string
-	Cluster     string
-	Environment string
-	Interval    time.Duration
-	Jitter      time.Duration
+	ConfigPath    string
+	Priority      string
+	ExecutionCost int
+	Host          string
+	Cluster       string
+	Environment   string
+	Interval      time.Duration
+	Jitter        time.Duration
 }
 
 func (s *Scheduler) CreateWithOptions(opts ScheduleOptions) *Schedule {
@@ -72,23 +81,25 @@ func (s *Scheduler) CreateWithOptions(opts ScheduleOptions) *Schedule {
 	if jitter < 0 {
 		jitter = 0
 	}
+	cost := normalizeExecutionCost(opts.ExecutionCost)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextID++
 	id := "sched-" + itoa(s.nextID)
 	now := time.Now().UTC()
 	sc := &Schedule{
-		ID:          id,
-		ConfigPath:  opts.ConfigPath,
-		Priority:    normalizePriority(opts.Priority),
-		Host:        opts.Host,
-		Cluster:     opts.Cluster,
-		Environment: opts.Environment,
-		Interval:    interval,
-		Jitter:      jitter,
-		Enabled:     true,
-		CreatedAt:   now,
-		NextRunAt:   now.Add(interval),
+		ID:            id,
+		ConfigPath:    opts.ConfigPath,
+		Priority:      normalizePriority(opts.Priority),
+		ExecutionCost: cost,
+		Host:          opts.Host,
+		Cluster:       opts.Cluster,
+		Environment:   opts.Environment,
+		Interval:      interval,
+		Jitter:        jitter,
+		Enabled:       true,
+		CreatedAt:     now,
+		NextRunAt:     now.Add(interval),
 	}
 	s.schedules[id] = sc
 	s.startLocked(sc)
@@ -164,7 +175,7 @@ func (s *Scheduler) startLocked(sc *Schedule) {
 				timer.Stop()
 				return
 			case <-timer.C:
-				if !s.skipForMaintenance(sc) {
+				if s.allowDispatch(sc) {
 					_, _ = s.queue.Enqueue(sc.ConfigPath, "", false, sc.Priority)
 				}
 				s.mu.Lock()
@@ -201,6 +212,94 @@ func (s *Scheduler) skipForMaintenance(sc *Schedule) bool {
 		return true
 	}
 	return false
+}
+
+type SchedulerCapacityStatus struct {
+	MaxBacklog       int             `json:"max_backlog"`
+	MaxExecutionCost int             `json:"max_execution_cost"`
+	HostHealth       map[string]bool `json:"host_health"`
+}
+
+func (s *Scheduler) SetCapacity(maxBacklog, maxExecutionCost int) SchedulerCapacityStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if maxBacklog > 0 {
+		s.maxBacklog = maxBacklog
+	}
+	if maxExecutionCost > 0 {
+		s.maxExecutionCost = maxExecutionCost
+	}
+	return s.capacityStatusLocked()
+}
+
+func (s *Scheduler) SetHostHealth(host string, healthy bool) SchedulerCapacityStatus {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return s.CapacityStatus()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hostHealth[host] = healthy
+	return s.capacityStatusLocked()
+}
+
+func (s *Scheduler) CapacityStatus() SchedulerCapacityStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.capacityStatusLocked()
+}
+
+func (s *Scheduler) capacityStatusLocked() SchedulerCapacityStatus {
+	health := make(map[string]bool, len(s.hostHealth))
+	for host, healthy := range s.hostHealth {
+		health[host] = healthy
+	}
+	return SchedulerCapacityStatus{
+		MaxBacklog:       s.maxBacklog,
+		MaxExecutionCost: s.maxExecutionCost,
+		HostHealth:       health,
+	}
+}
+
+func (s *Scheduler) allowDispatch(sc *Schedule) bool {
+	if sc == nil {
+		return false
+	}
+	if s.skipForMaintenance(sc) {
+		return false
+	}
+
+	s.mu.RLock()
+	maxBacklog := s.maxBacklog
+	maxExecutionCost := s.maxExecutionCost
+	healthy, hasHealth := s.hostHealth[strings.ToLower(strings.TrimSpace(sc.Host))]
+	s.mu.RUnlock()
+
+	if hasHealth && !healthy {
+		return false
+	}
+	if sc.ExecutionCost > maxExecutionCost {
+		return false
+	}
+
+	queueState := s.queue.ControlStatus()
+	if queueState.Pending >= maxBacklog {
+		return false
+	}
+	if sc.Priority == "low" && maxBacklog > 1 && queueState.Pending >= (maxBacklog/2) {
+		return false
+	}
+	return true
+}
+
+func normalizeExecutionCost(cost int) int {
+	if cost <= 0 {
+		return 1
+	}
+	if cost > 1_000 {
+		return 1_000
+	}
+	return cost
 }
 
 func randomJitter(j time.Duration) time.Duration {
