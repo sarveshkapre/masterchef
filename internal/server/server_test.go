@@ -2378,6 +2378,16 @@ resources:
 		t.Fatalf("expected during phase timeline items")
 	}
 
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/runs/run-export-1/correlations", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("run correlations failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"correlation_id"`) || !strings.Contains(rr.Body.String(), `"trace_url"`) {
+		t.Fatalf("expected correlation ids and trace links in response: %s", rr.Body.String())
+	}
+
 	createBody := []byte(`{
 		"config_path":"c.yaml",
 		"target_kind":"environment",

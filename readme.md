@@ -87,6 +87,7 @@ Noise-reduction alert inbox is available via `GET/POST /v1/alerts/inbox` with de
 Run failure triage bundles are exportable via `POST /v1/runs/{id}/triage-bundle` for incident debugging context.
 Cross-run diff analysis (failed vs successful execution comparison) is available via `GET /v1/runs/compare`.
 Drift trend analytics with root-cause hints/remediations are available via `GET /v1/drift/insights`.
+Run-step observability correlation IDs are available via `GET /v1/runs/{id}/correlations`.
 Notification integrations are managed via `/v1/notifications/targets` and `/v1/notifications/deliveries` for ChatOps/incident/ticket routing.
 Change records and approval workflows are exposed via `/v1/change-records` to tie execution to ticketed change control.
 Self-service runbook catalog with approval-gated launches is available via `/v1/runbooks`.

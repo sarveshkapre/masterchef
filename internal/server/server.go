@@ -1339,6 +1339,22 @@ func (s *Server) handleRunAction(baseDir string) http.HandlerFunc {
 				"phase_breakdown": timelineSummary(items),
 				"count":           len(items),
 			})
+		case "correlations":
+			if r.Method != http.MethodGet {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			run, err := state.New(baseDir).GetRun(runID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			items := buildRunCorrelations(run)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"run_id":       runID,
+				"count":        len(items),
+				"correlations": items,
+			})
 		case "retry":
 			if r.Method != http.MethodPost {
 				w.WriteHeader(http.StatusMethodNotAllowed)
@@ -1770,6 +1786,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/runs/digest",
 			"GET /v1/runs/compare",
 			"GET /v1/runs/{id}/timeline",
+			"GET /v1/runs/{id}/correlations",
 			"POST /v1/runs/{id}/retry",
 			"POST /v1/runs/{id}/rollback",
 			"POST /v1/runs/{id}/export",
