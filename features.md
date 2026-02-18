@@ -30,6 +30,7 @@
 - Full-fidelity simulation contract for built-in providers (no silent skip behavior)
 - Plan confidence scoring that flags non-simulatable actions before execution
 - Policy gate to block applies below minimum simulation confidence
+- Simulation coverage report per provider/module with explicit unsupported-action inventory
 - Change freeze enforcement and emergency override workflow
 - Idempotent resource provider contract
 - Provider side-effect declaration and purity metadata
@@ -40,6 +41,7 @@
 - Parallel execution with configurable concurrency limits
 - Distributed execution locks to avoid conflicting runs
 - Concurrency guards by environment and service criticality
+- Adaptive concurrency controller that auto-tunes parallelism by host health and failure rate
 - Transaction checkpoints and resumable execution
 - Automatic retry policies with jitter and backoff controls
 - Rollback support for reversible resources
@@ -75,6 +77,8 @@
 - Agent-based periodic converge loop
 - Event-triggered converge runs in addition to interval-based scheduling
 - Real-time converge trigger API for policy, package, and security events
+- Native scheduler first approach (systemd timers, cron, Windows scheduled tasks) for recurring runs
+- Short-lived stateless worker execution model to avoid long-running process state drift
 - Proxy-minion mode for devices that cannot run full agents
 - Catalog compile-and-distribute flow for agent runs
 - Compiled catalog caching and signed catalog replay on disconnected nodes
@@ -83,6 +87,7 @@
 - Agent certificate issuance, rotation, and revocation workflows
 - Policy-based certificate autosigning with CSR attribute validation and manual-approval fallback
 - Zero-touch certificate lifecycle with automatic renewal and expiry SLO alerts
+- Identity bootstrap with hardware/cloud attestation before certificate issuance
 - Hybrid push + pull mode per environment
 - Secure bootstrap flow from agentless to agent mode
 - Policy pull from control plane or signed Git sources
@@ -92,6 +97,7 @@
 - Egress-only execution-node connectivity via hosted hop/ingress relays
 - Minimal-footprint deployment profile (single binary, embedded defaults, no external queue)
 - Progressive deployment profiles from single-node to HA without architecture rewrites
+- Guided topology advisor for scaling from small teams to large fleets without replatforming
 - Cross-platform support for Linux, macOS, and Windows nodes
 - Windows-specific resources for DSC, PowerShell, services, and registry
 - Package manager abstraction for apt, yum/dnf, zypper, brew, winget, and chocolatey
@@ -129,6 +135,7 @@
 - Drift SLO tracking with breach alerts and automated incident creation hooks
 - Drift root-cause hints and remediation recommendations
 - Desired-vs-observed diff history with trend analytics
+- Stateful desired/observed store available for both agentless and agent modes
 - Run history with full audit trail
 - Immutable event logs for every action
 - Real-time run streaming and event subscriptions
@@ -163,6 +170,8 @@
 - Secret usage tracing and redaction-by-default logs
 - Encrypted variable files with key rotation (Vault-style)
 - Runtime secret materialization in memory only with zeroization after use
+- Hermetic execution environments with pinned dependency sets for reproducible runs
+- Signed execution environment images with policy enforcement at run admission
 - Short-lived execution credentials
 - mTLS between all components
 - OIDC workload identity support
@@ -247,6 +256,7 @@
 - Migration assessment report with parity and risk scoring
 - Semantic equivalence testing for migrated policies before production rollout
 - Auto-generated migration diff reports highlighting behavior mismatches
+- Deprecation-risk scanner for source platforms and modules with migration urgency scoring
 - Import/export tooling for existing inventories and variables
 - Bulk import from CMDB and asset inventory systems
 - Import assistants for existing secrets, facts, and role/group hierarchies
