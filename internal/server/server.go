@@ -161,6 +161,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/docs/actions", s.handleActionDocs)
 	mux.HandleFunc("/v1/docs/actions/", s.handleActionDocByID)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
+	mux.HandleFunc("/v1/release/blocker-policy", s.handleReleaseBlockerPolicy)
 	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
 	mux.HandleFunc("/v1/release/upgrade-assistant", s.handleUpgradeAssistant)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
@@ -1724,6 +1725,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/workspace-templates/{id}/bootstrap",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
+			"POST /v1/release/blocker-policy",
+			"GET /v1/release/blocker-policy",
 			"GET /v1/release/api-contract",
 			"POST /v1/release/api-contract",
 			"GET /v1/release/upgrade-assistant",

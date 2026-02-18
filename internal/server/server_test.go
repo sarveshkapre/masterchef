@@ -3172,6 +3172,77 @@ resources:
 	}
 }
 
+func TestReleaseBlockerPolicyEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-release-blocker.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/release/blocker-policy", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("release blocker policy get failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	failBody := []byte(`{
+		"signals":{"quality_score":0.7,"reliability_score":0.7,"performance_score":0.7,"test_pass_rate":0.7,"flake_rate":0.1,"open_critical_incidents":1,"p95_apply_latency_ms":999999},
+		"simulation_confidence":0.5
+	}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/blocker-policy", bytes.NewReader(failBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected release blocker conflict: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"craftsmanship_tier":"bronze"`) {
+		t.Fatalf("expected bronze tier when blocked: %s", rr.Body.String())
+	}
+
+	passBody := []byte(`{
+		"signals":{"quality_score":0.97,"reliability_score":0.97,"performance_score":0.96,"test_pass_rate":0.995,"flake_rate":0.005,"open_critical_incidents":0,"p95_apply_latency_ms":1200},
+		"simulation_confidence":0.99
+	}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/blocker-policy", bytes.NewReader(passBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected release blocker pass: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"craftsmanship_tier":"gold"`) {
+		t.Fatalf("expected gold tier when passing: %s", rr.Body.String())
+	}
+}
+
 func TestWebhookEndpointsAndDeliveries(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
