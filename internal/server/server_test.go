@@ -1978,6 +1978,75 @@ resources:
 	}
 }
 
+func TestPolicySimulationAndRiskSummaryEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: setup
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "setup.txt")+`
+    content: "setup\n"
+  - id: deploy
+    type: command
+    host: localhost
+    command: "echo deploy"
+    depends_on:
+      - setup
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/policy/simulate", bytes.NewReader([]byte(`{
+		"config_path":"c.yaml",
+		"deny_resource_types":["command"],
+		"minimum_confidence":1.0
+	}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("policy simulate failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"would_block_apply":true`) {
+		t.Fatalf("expected policy simulation to block apply: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `deploy`) {
+		t.Fatalf("expected deploy step in policy simulation: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/plans/risk-summary", bytes.NewReader([]byte(`{"config_path":"c.yaml"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("plan risk summary failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"risk_score"`) || !strings.Contains(rr.Body.String(), `"mitigations"`) {
+		t.Fatalf("expected risk summary fields in response: %s", rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
