@@ -104,3 +104,19 @@ func (s *Store) GetRun(id string) (RunRecord, error) {
 	}
 	return r, nil
 }
+
+func (s *Store) ReplaceRuns(runs []RunRecord) error {
+	runsDir := filepath.Join(s.baseDir, "runs")
+	if err := os.RemoveAll(runsDir); err != nil {
+		return fmt.Errorf("remove existing runs dir: %w", err)
+	}
+	if err := os.MkdirAll(runsDir, 0o755); err != nil {
+		return fmt.Errorf("create runs dir: %w", err)
+	}
+	for _, run := range runs {
+		if err := s.SaveRun(run); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -1314,3 +1314,107 @@ resources:
 		t.Fatalf("expected compatibility conflict: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestBackupRestoreEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x16.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	st := state.New(tmp)
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "backup-run-1",
+		StartedAt: time.Now().UTC().Add(-time.Second),
+		EndedAt:   time.Now().UTC(),
+		Status:    state.RunSucceeded,
+	}); err != nil {
+		t.Fatalf("save run failed: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(`{"type":"external.alert","message":"from monitor","fields":{"sev":"high"}}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/backup", bytes.NewReader([]byte(`{"include_runs":true,"include_events":true}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("backup failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+	var backupResp struct {
+		Object struct {
+			Key string `json:"key"`
+		} `json:"object"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &backupResp); err != nil {
+		t.Fatalf("backup decode failed: %v", err)
+	}
+	if backupResp.Object.Key == "" {
+		t.Fatalf("expected backup object key")
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/backups", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("backups list failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/restore", bytes.NewReader([]byte(`{"key":"`+backupResp.Object.Key+`","verify_only":true}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("restore verify failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	if err := st.ReplaceRuns([]state.RunRecord{}); err != nil {
+		t.Fatalf("clear runs failed: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/restore", bytes.NewReader([]byte(`{"key":"`+backupResp.Object.Key+`"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("restore failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	runs, err := st.ListRuns(10)
+	if err != nil {
+		t.Fatalf("list runs after restore failed: %v", err)
+	}
+	if len(runs) != 1 || runs[0].ID != "backup-run-1" {
+		t.Fatalf("expected restored run record, got %+v", runs)
+	}
+}

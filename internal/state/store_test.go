@@ -46,4 +46,23 @@ func TestStore_SaveAndListRuns(t *testing.T) {
 	if got.ID != "r1" {
 		t.Fatalf("expected run id r1, got %s", got.ID)
 	}
+
+	replacement := []RunRecord{
+		{
+			ID:        "r3",
+			StartedAt: time.Now().UTC(),
+			EndedAt:   time.Now().UTC().Add(time.Second),
+			Status:    RunSucceeded,
+		},
+	}
+	if err := s.ReplaceRuns(replacement); err != nil {
+		t.Fatalf("expected replace runs to succeed: %v", err)
+	}
+	runs, err = s.ListRuns(10)
+	if err != nil {
+		t.Fatalf("list runs after replace failed: %v", err)
+	}
+	if len(runs) != 1 || runs[0].ID != "r3" {
+		t.Fatalf("expected replacement runs only, got %+v", runs)
+	}
 }

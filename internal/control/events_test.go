@@ -16,3 +16,17 @@ func TestEventStore_RespectsLimit(t *testing.T) {
 		t.Fatalf("unexpected rollover result: %#v", out)
 	}
 }
+
+func TestEventStore_Replace(t *testing.T) {
+	s := NewEventStore(2)
+	s.Append(Event{Type: "old1"})
+	s.Append(Event{Type: "old2"})
+	s.Replace([]Event{{Type: "new1"}, {Type: "new2"}, {Type: "new3"}})
+	out := s.List()
+	if len(out) != 2 {
+		t.Fatalf("expected replace to honor limit, got %d", len(out))
+	}
+	if out[0].Type != "new2" || out[1].Type != "new3" {
+		t.Fatalf("unexpected replaced events: %#v", out)
+	}
+}

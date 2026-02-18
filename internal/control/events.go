@@ -49,3 +49,18 @@ func (s *EventStore) List() []Event {
 	copy(out, s.events)
 	return out
 }
+
+func (s *EventStore) Replace(items []Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if items == nil {
+		s.events = s.events[:0]
+		return
+	}
+	if len(items) > s.limit {
+		items = items[len(items)-s.limit:]
+	}
+	out := make([]Event, len(items))
+	copy(out, items)
+	s.events = out
+}
