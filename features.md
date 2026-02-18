@@ -13,6 +13,9 @@
 - Handler/notification model for event-triggered resource actions
 - Explicit `require`/`before`/`notify`/`subscribe` style resource relationships
 - Resource refresh-on-change semantics with `only_if`/`unless` guards
+- Task and plan framework with module-packaged actions and reusable orchestration primitives
+- Typed task metadata with strict input validation and schema-enforced parameter contracts
+- Sensitive task/plan parameter masking in logs and API responses
 - Resource graph compiler with explicit dependencies, cycle detection, and diagnostics
 - Resource graph query API for impact and dependency analysis
 - Hierarchical data lookup engine (Hiera/Data Bag style)
@@ -38,6 +41,7 @@
 - Execution graph visualization in CLI and UI
 - Long-running run leases with heartbeat and stale-lease recovery
 - Per-step execution snapshots for mid-run forensic analysis
+- Asynchronous command ingestion API with checksum verification and dead-letter handling
 - Run strategy modes (`linear`, `free`, `serial`)
 - Failure thresholds (`max_fail_percentage`, `any_errors_fatal`-style controls)
 - `block`/`rescue`/`always` execution semantics for robust error handling
@@ -62,14 +66,20 @@
 - Session recording for privileged remote executions
 - Network device transport support (NETCONF, RESTCONF, API-driven)
 - Agent-based periodic converge loop
+- Proxy-minion mode for devices that cannot run full agents
 - Catalog compile-and-distribute flow for agent runs
 - Compiled catalog caching and signed catalog replay on disconnected nodes
 - Agent check-in jitter/splay controls to prevent thundering herd
 - Message-bus option for scalable agent dispatch
 - Agent certificate issuance, rotation, and revocation workflows
+- Policy-based certificate autosigning with CSR attribute validation and manual-approval fallback
 - Hybrid push + pull mode per environment
 - Secure bootstrap flow from agentless to agent mode
 - Policy pull from control plane or signed Git sources
+- Multi-master control mode with centralized job/event cache
+- Separation of control and execution planes for independent scaling
+- Overlay execution mesh with peer routing and hop nodes
+- Egress-only execution-node connectivity via hosted hop/ingress relays
 - Cross-platform support for Linux, macOS, and Windows nodes
 - Windows-specific resources for DSC, PowerShell, services, and registry
 - Package manager abstraction for apt, yum/dnf, zypper, brew, winget, and chocolatey
@@ -96,6 +106,7 @@
 - Health probe integrations to gate promotion and rollback
 - Pre-run policy simulation with host-level explain output
 - Post-run invariant checks with configurable failure severity
+- Per-policy enforcement modes: audit, apply-and-monitor, and apply-and-autocorrect
 - Desired-state snapshot storage
 - Observed-state collection and normalization
 - Continuous drift detection
@@ -117,16 +128,22 @@
 - Ad hoc command mode with guardrails and audit logging
 - CLI TUI mode for interactive run inspection
 - Web UI for plans, runs, drift, compliance, and approvals
+- Activity stream API and UI timeline for identity/resource change auditing
 - Fleet health dashboards with SLO and error-budget views
 - Self-service catalog for approved runbooks
 - REST API and gRPC API for automation integration
 - Event bus integrations (Kafka, NATS, webhooks)
+- Rulebook/event source engine with source-rule-condition-action pipelines
+- Event stream ingress endpoints for external SaaS and webhook producers
 - GitOps workflow support with signed plan artifacts
 - Pull-request plan comments and approval gates
 - Multi-environment promotions with policy checks
 - Drift-aware GitOps reconciliation loop
 - Branch-based ephemeral environment previews for infrastructure changes
 - Promotion pipelines with immutable artifact pinning
+- Branch-per-environment control-repo workflow with automatic environment materialization
+- Webhook, API, and CLI triggers for environment code deployments
+- Staging-to-live file-sync pipeline for distributed compiler/worker nodes
 - Secrets manager integrations
 - Built-in encrypted secrets store with envelope encryption
 - Secret rotation workflows and expiry enforcement
@@ -139,6 +156,7 @@
 - Signed module and provider packages
 - Provenance metadata for modules and providers
 - Sigstore/Cosign signature verification support
+- Signed collection/image policy enforcement with client-side verification keyrings
 - Policy engine for pre-apply and runtime guardrails
 - Policy simulation mode before enforcement
 - Policy bundles with staged rollout and canary enforcement
@@ -164,6 +182,8 @@
 - WASI runtime support for untrusted provider plugins
 - Module registry with versioning and signatures
 - Private and public registry support
+- Curated content channels (certified, validated, community) with controlled sync lists
+- Per-organization sync remotes secured by API tokens
 - Module dependency resolution and lockfiles
 - Module scaffolding generator and best-practice templates
 - Module quality scoring and trust badges
@@ -188,6 +208,8 @@
 - Point-in-time restore for state and audit data
 - Control plane schema migrations with forward/backward compatibility checks
 - Disaster recovery drills with automated restore verification
+- Scheduled association-style policy assignments with revision history and replay controls
+- Association execution output export to object storage for long-term evidence retention
 - Scale profile for fleets from 10 to 10,000+ nodes
 - Fleet sharding and tenancy-aware scheduler partitioning
 - Performance profiling and bottleneck diagnostics
