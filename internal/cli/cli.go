@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -209,6 +210,8 @@ func runCheck(args []string) error {
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
 	path := fs.String("f", "masterchef.yaml", "config path")
+	autoApprove := fs.Bool("yes", false, "auto approve apply without prompt")
+	nonInteractive := fs.Bool("non-interactive", false, "fail instead of prompting for approval")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -220,6 +223,11 @@ func runApply(args []string) error {
 	if err != nil {
 		return err
 	}
+
+	if err := requireApplyApproval(p, *autoApprove, *nonInteractive); err != nil {
+		return err
+	}
+
 	ex := executor.New(".")
 	run, err := ex.Apply(p)
 	if err != nil {
@@ -233,6 +241,41 @@ func runApply(args []string) error {
 	fmt.Println(string(b))
 	if run.Status != state.RunSucceeded {
 		return fmt.Errorf("apply failed")
+	}
+	return nil
+}
+
+func requireApplyApproval(p *planner.Plan, autoApprove, nonInteractive bool) error {
+	if autoApprove {
+		return nil
+	}
+	if nonInteractive || strings.ToLower(os.Getenv("CI")) == "true" {
+		return ExitError{
+			Code: 5,
+			Msg:  "apply requires explicit approval in non-interactive mode; re-run with -yes",
+		}
+	}
+
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return fmt.Errorf("stdin stat: %w", err)
+	}
+	if fi.Mode()&os.ModeCharDevice == 0 {
+		return ExitError{
+			Code: 5,
+			Msg:  "apply requires interactive approval; no TTY detected, re-run with -yes",
+		}
+	}
+
+	fmt.Printf("Apply plan with %d steps? [y/N]: ", len(p.Steps))
+	in := bufio.NewReader(os.Stdin)
+	line, err := in.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("read approval input: %w", err)
+	}
+	answer := strings.TrimSpace(strings.ToLower(line))
+	if answer != "y" && answer != "yes" {
+		return ExitError{Code: 5, Msg: "apply canceled by user"}
 	}
 	return nil
 }
