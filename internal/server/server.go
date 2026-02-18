@@ -40,6 +40,7 @@ type Server struct {
 	checklists         *control.ChecklistStore
 	views              *control.SavedViewStore
 	bulk               *control.BulkManager
+	actionDocs         *control.ActionDocCatalog
 	migrations         *control.MigrationStore
 	solutionPacks      *control.SolutionPackCatalog
 	useCaseTemplates   *control.UseCaseTemplateCatalog
@@ -83,6 +84,7 @@ func New(addr, baseDir string) *Server {
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
 	bulk := control.NewBulkManager(15 * time.Minute)
+	actionDocs := control.NewActionDocCatalog()
 	migrations := control.NewMigrationStore()
 	solutionPacks := control.NewSolutionPackCatalog()
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
@@ -118,6 +120,7 @@ func New(addr, baseDir string) *Server {
 		checklists:         checklists,
 		views:              views,
 		bulk:               bulk,
+		actionDocs:         actionDocs,
 		migrations:         migrations,
 		solutionPacks:      solutionPacks,
 		useCaseTemplates:   useCaseTemplates,
@@ -155,6 +158,8 @@ func New(addr, baseDir string) *Server {
 
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
+	mux.HandleFunc("/v1/docs/actions", s.handleActionDocs)
+	mux.HandleFunc("/v1/docs/actions/", s.handleActionDocByID)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
 	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
 	mux.HandleFunc("/v1/release/upgrade-assistant", s.handleUpgradeAssistant)
@@ -1672,6 +1677,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/incidents/view",
 			"GET /v1/metrics",
 			"GET /v1/features/summary",
+			"GET /v1/docs/actions",
+			"GET /v1/docs/actions/{id}",
 			"GET /v1/alerts/inbox",
 			"POST /v1/alerts/inbox",
 			"GET /v1/notifications/targets",
