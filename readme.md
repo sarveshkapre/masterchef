@@ -82,6 +82,7 @@ Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to 
 On-call handoff packages are available via `GET /v1/control/handoff` to summarize risks, active rollouts, and blocked actions.
 Deployment-window change digests are available via `GET /v1/runs/digest` with latent-risk scoring.
 Noise-reduction alert inbox is available via `GET/POST /v1/alerts/inbox` with dedup, suppression windows, and routing.
+Run failure triage bundles are exportable via `POST /v1/runs/{id}/triage-bundle` for incident debugging context.
 
 ## Release Tooling (Current CLI)
 

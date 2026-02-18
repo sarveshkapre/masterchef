@@ -883,15 +883,32 @@ resources:
 		StartedAt: time.Now().UTC().Add(-time.Second),
 		EndedAt:   time.Now().UTC(),
 		Status:    state.RunSucceeded,
+		Results: []state.ResourceRun{
+			{ResourceID: "f1", Host: "localhost", Type: "file", Changed: true},
+		},
 	}); err != nil {
 		t.Fatalf("save run failed: %v", err)
 	}
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/runs/run-export-1/export", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(`{"type":"external.alert","message":"run context","fields":{"sev":"high"}}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runs/run-export-1/export", nil)
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("run export failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runs/run-export-1/triage-bundle", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("triage bundle export failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
 	createBody := []byte(`{
@@ -932,8 +949,8 @@ resources:
 	if err := json.Unmarshal(rr.Body.Bytes(), &objects); err != nil {
 		t.Fatalf("object list decode failed: %v", err)
 	}
-	if len(objects) < 1 {
-		t.Fatalf("expected at least one exported object")
+	if len(objects) < 2 {
+		t.Fatalf("expected run export and triage bundle objects")
 	}
 }
 

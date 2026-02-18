@@ -785,6 +785,85 @@ func (s *Server) handleRunAction(baseDir string) http.HandlerFunc {
 				"run_id": runID,
 				"object": obj,
 			})
+		case "triage-bundle":
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			if s.objectStore == nil {
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "object store unavailable"})
+				return
+			}
+			run, err := state.New(baseDir).GetRun(runID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			events := s.events.List()
+			windowStart := run.StartedAt.Add(-5 * time.Minute)
+			windowEnd := run.EndedAt.Add(5 * time.Minute)
+			if run.StartedAt.IsZero() {
+				windowStart = time.Time{}
+			}
+			if run.EndedAt.IsZero() {
+				windowEnd = time.Time{}
+			}
+			correlated := make([]control.Event, 0)
+			for _, evt := range events {
+				if !windowStart.IsZero() && evt.Time.Before(windowStart) {
+					continue
+				}
+				if !windowEnd.IsZero() && evt.Time.After(windowEnd) {
+					continue
+				}
+				correlated = append(correlated, evt)
+				if len(correlated) >= 1000 {
+					break
+				}
+			}
+			hostSet := map[string]struct{}{}
+			for _, result := range run.Results {
+				if strings.TrimSpace(result.Host) == "" {
+					continue
+				}
+				hostSet[result.Host] = struct{}{}
+			}
+			hosts := make([]string, 0, len(hostSet))
+			for host := range hostSet {
+				hosts = append(hosts, host)
+			}
+			sort.Strings(hosts)
+
+			payload, err := json.MarshalIndent(map[string]any{
+				"run":               run,
+				"correlated_events": correlated,
+				"host_metadata": map[string]any{
+					"hosts":      hosts,
+					"host_count": len(hosts),
+				},
+				"artifacts": map[string]any{
+					"provider_output": "captured in run results",
+					"diffs":           "captured in checker/check report surfaces",
+					"facts":           "available through query API/entity integrations",
+				},
+				"generated_at": time.Now().UTC(),
+			}, "", "  ")
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			key := storage.TimestampedJSONKey("runs/"+runID, "triage-bundle")
+			obj, err := s.objectStore.Put(key, payload, "application/json")
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"run_id":            runID,
+				"object":            obj,
+				"correlated_events": len(correlated),
+				"host_count":        len(hosts),
+			})
 		default:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown run action"})
 		}
@@ -961,6 +1040,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
 			"POST /v1/runs/{id}/export",
+			"POST /v1/runs/{id}/triage-bundle",
 			"GET /v1/jobs",
 			"POST /v1/jobs",
 			"GET /v1/jobs/{id}",
