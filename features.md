@@ -186,6 +186,29 @@
 - Low-bandwidth UI mode optimized for remote operations and degraded network conditions
 - Built-in docs and inline examples at point of action, not separate documentation hunting
 - Workspace templates for common big-tech patterns (stateless services, stateful clusters, edge fleets)
+- Opinionated solution packs for stateless microservices on VMs and Kubernetes
+- Opinionated solution packs for stateful databases (PostgreSQL, MySQL, MongoDB) with maintenance-safe orchestration
+- Opinionated solution packs for caching tiers (Redis, Memcached) with shard-aware rollouts
+- Opinionated solution packs for messaging/streaming platforms (Kafka, RabbitMQ, NATS)
+- Opinionated solution packs for search and analytics clusters (OpenSearch, Elasticsearch, ClickHouse)
+- Opinionated solution packs for observability stacks (Prometheus, OpenTelemetry collectors, log pipelines)
+- Opinionated solution packs for CI/CD worker fleets and ephemeral build runners
+- Opinionated solution packs for GPU/accelerator fleet provisioning and runtime tuning
+- Opinionated solution packs for ML training clusters and model-serving fleets
+- Opinionated solution packs for batch processing and data pipeline worker pools
+- Opinionated solution packs for edge/retail/branch deployments with intermittent connectivity
+- Opinionated solution packs for network and security appliance configuration at scale
+- Opinionated solution packs for hybrid datacenter + cloud migration waves
+- Opinionated solution packs for SaaS multi-tenant platform operations
+- Use-case templates for blue/green, canary, and rolling application releases with traffic gates
+- Use-case templates for zero-downtime OS patching and coordinated reboot campaigns
+- Use-case templates for large-scale certificate rotation and trust store updates
+- Use-case templates for database schema-change orchestration with preflight and rollback hooks
+- Use-case templates for disaster recovery cutover, failback, and post-recovery reconciliation
+- Use-case templates for fleet-wide emergency remediation of critical vulnerabilities
+- Use-case templates for seasonal scale-up and scale-down operations with guardrails
+- Use-case templates for brownfield onboarding and legacy-to-modern migration programs
+- Use-case templates for service ownership transfer and platform tenancy carve-outs
 - Consistent object model and naming across CLI, UI, and API to reduce context switching
 - Accessibility-first UX (screen-reader support, full keyboard controls, high-contrast themes)
 - Activity stream API and UI timeline for identity/resource change auditing
