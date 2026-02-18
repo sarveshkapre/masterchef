@@ -667,3 +667,92 @@ resources:
 		t.Fatalf("association replay failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestQueryEndpointHumanAndASTModes(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x8.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(`{"type":"external.alert","message":"monitor","fields":{"env":"prod","sev":"high"}}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader([]byte(`{"config_path":"c.yaml","priority":"high"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("job enqueue failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	humanQuery := []byte(`{"entity":"events","mode":"human","query":"type=external.alert AND fields.env=prod","limit":20}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader(humanQuery))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("human query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var humanResp struct {
+		MatchedCount int `json:"matched_count"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &humanResp); err != nil {
+		t.Fatalf("human query decode failed: %v", err)
+	}
+	if humanResp.MatchedCount < 1 {
+		t.Fatalf("expected human query to match at least one event")
+	}
+
+	astQuery := []byte(`{
+		"entity":"jobs",
+		"mode":"ast",
+		"query_ast":{"field":"priority","comparator":"eq","value":"high"},
+		"limit":20
+	}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader(astQuery))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("ast query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var astResp struct {
+		MatchedCount int `json:"matched_count"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &astResp); err != nil {
+		t.Fatalf("ast query decode failed: %v", err)
+	}
+	if astResp.MatchedCount < 1 {
+		t.Fatalf("expected ast query to match at least one job")
+	}
+}
