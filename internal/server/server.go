@@ -209,6 +209,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/rules/", s.handleRuleAction)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
 	mux.HandleFunc("/v1/runs/digest", s.handleRunDigest(baseDir))
+	mux.HandleFunc("/v1/runs/compare", s.handleRunCompare(baseDir))
 	mux.HandleFunc("/v1/runs/", s.handleRunAction(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
@@ -1765,6 +1766,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/recover-stuck",
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
+			"GET /v1/runs/compare",
 			"GET /v1/runs/{id}/timeline",
 			"POST /v1/runs/{id}/retry",
 			"POST /v1/runs/{id}/rollback",

@@ -2501,6 +2501,79 @@ resources:
 	}
 }
 
+func TestRunCompareEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-compare.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	st := state.New(tmp)
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "run-compare-failed",
+		StartedAt: time.Now().UTC().Add(-3 * time.Minute),
+		EndedAt:   time.Now().UTC().Add(-2 * time.Minute),
+		Status:    state.RunFailed,
+		Results: []state.ResourceRun{
+			{ResourceID: "f1", Type: "file", Host: "localhost", Changed: true, Message: "write failed"},
+		},
+	}); err != nil {
+		t.Fatalf("save failed run: %v", err)
+	}
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "run-compare-success",
+		StartedAt: time.Now().UTC().Add(-90 * time.Second),
+		EndedAt:   time.Now().UTC().Add(-30 * time.Second),
+		Status:    state.RunSucceeded,
+		Results: []state.ResourceRun{
+			{ResourceID: "f1", Type: "file", Host: "localhost", Changed: false, Message: "already converged"},
+		},
+	}); err != nil {
+		t.Fatalf("save success run: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/runs/compare?run_a=run-compare-failed&run_b=run-compare-success", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("run compare failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"diff_count"`) {
+		t.Fatalf("expected diff_count in run compare response: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `changed flag differs`) {
+		t.Fatalf("expected changed flag diff in response: %s", rr.Body.String())
+	}
+}
+
 func TestCanaryEndpointsAndHealthSummary(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
