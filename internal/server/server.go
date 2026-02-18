@@ -120,6 +120,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
 	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
+	mux.HandleFunc("/v1/release/upgrade-assistant", s.handleUpgradeAssistant)
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
@@ -664,6 +665,43 @@ func (s *Server) handleAPIContract(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleUpgradeAssistant(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Baseline control.APISpec `json:"baseline"`
+	}
+	cur := currentAPISpec()
+	switch r.Method {
+	case http.MethodGet:
+		report := control.DiffAPISpec(control.APISpec{
+			Version:   cur.Version,
+			Endpoints: cur.Endpoints,
+		}, cur)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"current_spec": cur,
+			"report":       report,
+			"advice":       control.GenerateUpgradeAdvice(report),
+		})
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		report := control.DiffAPISpec(req.Baseline, cur)
+		resp := map[string]any{
+			"report": report,
+			"advice": control.GenerateUpgradeAdvice(report),
+		}
+		if !report.DeprecationLifecyclePass {
+			writeJSON(w, http.StatusConflict, resp)
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 func currentAPISpec() control.APISpec {
 	return control.APISpec{
 		Version: "v1",
@@ -676,6 +714,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/readiness",
 			"GET /v1/release/api-contract",
 			"POST /v1/release/api-contract",
+			"GET /v1/release/upgrade-assistant",
+			"POST /v1/release/upgrade-assistant",
 			"POST /v1/query",
 			"POST /v1/events/ingest",
 			"POST /v1/commands/ingest",

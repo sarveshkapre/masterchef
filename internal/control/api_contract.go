@@ -1,6 +1,7 @@
 package control
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -30,6 +31,13 @@ type APIDiffReport struct {
 	BackwardCompatible       bool             `json:"backward_compatible"`
 	ForwardCompatible        bool             `json:"forward_compatible"`
 	DeprecationLifecyclePass bool             `json:"deprecation_lifecycle_pass"`
+}
+
+type UpgradeAdvice struct {
+	Severity string `json:"severity"` // error|warn|info
+	Endpoint string `json:"endpoint,omitempty"`
+	Message  string `json:"message"`
+	Action   string `json:"action,omitempty"`
 }
 
 func DiffAPISpec(baseline, current APISpec) APIDiffReport {
@@ -144,4 +152,65 @@ func versionMajor(raw string) int {
 		return 0
 	}
 	return n
+}
+
+func GenerateUpgradeAdvice(report APIDiffReport) []UpgradeAdvice {
+	out := make([]UpgradeAdvice, 0)
+	for _, v := range report.DeprecationViolations {
+		out = append(out, UpgradeAdvice{
+			Severity: "error",
+			Message:  v,
+			Action:   "keep endpoint available until deprecation window is satisfied or publish migration exception",
+		})
+	}
+	for _, dep := range report.DeprecationsAdded {
+		msg := fmt.Sprintf("%s deprecated in %s and scheduled for removal after %s", dep.Endpoint, dep.AnnouncedVersion, dep.RemoveAfterVersion)
+		out = append(out, UpgradeAdvice{
+			Severity: "warn",
+			Endpoint: dep.Endpoint,
+			Message:  msg,
+			Action:   replacementAction(dep.Replacement),
+		})
+	}
+	if len(report.Removed) > 0 && report.DeprecationLifecyclePass {
+		for _, ep := range report.Removed {
+			out = append(out, UpgradeAdvice{
+				Severity: "info",
+				Endpoint: ep,
+				Message:  ep + " removed with compliant lifecycle window",
+				Action:   "verify downstream clients migrated to supported alternatives",
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		oi := adviceOrder(out[i].Severity)
+		oj := adviceOrder(out[j].Severity)
+		if oi != oj {
+			return oi < oj
+		}
+		if out[i].Endpoint != out[j].Endpoint {
+			return out[i].Endpoint < out[j].Endpoint
+		}
+		return out[i].Message < out[j].Message
+	})
+	return out
+}
+
+func adviceOrder(severity string) int {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "error":
+		return 0
+	case "warn":
+		return 1
+	default:
+		return 2
+	}
+}
+
+func replacementAction(replacement string) string {
+	replacement = strings.TrimSpace(replacement)
+	if replacement == "" {
+		return "migrate client usage before scheduled removal"
+	}
+	return "migrate usage to " + replacement
 }

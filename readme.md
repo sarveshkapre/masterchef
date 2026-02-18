@@ -76,6 +76,7 @@ See `FEATURES.md`, `agents.md`, and `ROADMAP.md` for detailed scope.
 Active implementation phase.
 
 Current control-plane DR surface includes backup, point-in-time restore, and automated restore-verification drills.
+API contract governance includes deprecation lifecycle checks plus an upgrade-assistant endpoint for migration guidance.
 
 ## Release Tooling (Current CLI)
 
