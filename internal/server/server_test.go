@@ -1494,4 +1494,20 @@ resources:
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected backward-compat conflict, got code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	lifecycleConflictBody := []byte(`{"baseline":{"version":"v1","endpoints":["GET /healthz","GET /v1/legacy-endpoint"],"deprecations":[{"endpoint":"GET /v1/legacy-endpoint","announced_version":"v1","remove_after_version":"v3"}]}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/api-contract", bytes.NewReader(lifecycleConflictBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected deprecation lifecycle conflict for early removal, got code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	lifecyclePassBody := []byte(`{"baseline":{"version":"v1","endpoints":["GET /healthz","GET /v1/legacy-endpoint"],"deprecations":[{"endpoint":"GET /v1/legacy-endpoint","announced_version":"v1","remove_after_version":"v1"}]}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/api-contract", bytes.NewReader(lifecyclePassBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected lifecycle-compliant removal to pass, got code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

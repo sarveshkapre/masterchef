@@ -653,7 +653,7 @@ func (s *Server) handleAPIContract(w http.ResponseWriter, r *http.Request) {
 		}
 		cur := currentAPISpec()
 		report := control.DiffAPISpec(req.Baseline, cur)
-		if !report.BackwardCompatible {
+		if !report.DeprecationLifecyclePass {
 			writeJSON(w, http.StatusConflict, report)
 			return
 		}
@@ -740,6 +740,14 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/webhooks/{id}/enable",
 			"POST /v1/webhooks/{id}/disable",
 			"GET /v1/webhooks/deliveries",
+		},
+		Deprecations: []control.APIDeprecation{
+			{
+				Endpoint:           "DELETE /v1/templates/{id}/delete",
+				AnnouncedVersion:   "v1",
+				RemoveAfterVersion: "v3",
+				Replacement:        "DELETE /v1/templates/{id}",
+			},
 		},
 	}
 }

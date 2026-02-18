@@ -14,6 +14,7 @@ Build a single platform that supports:
 - Policy and compliance as first-class capabilities
 - Strong plugin boundaries so the community can extend safely
 - Upgrade channels with explicit protocol support matrix (`stable`, `candidate`, `edge`, `lts`)
+- API versioning with deprecation lifecycle guarantees for safe contract evolution
 
 ## First-Principles Design
 

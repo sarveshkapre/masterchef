@@ -2,21 +2,34 @@ package control
 
 import (
 	"sort"
+	"strconv"
+	"strings"
 )
 
+type APIDeprecation struct {
+	Endpoint           string `json:"endpoint"`
+	AnnouncedVersion   string `json:"announced_version"`
+	RemoveAfterVersion string `json:"remove_after_version"`
+	Replacement        string `json:"replacement,omitempty"`
+}
+
 type APISpec struct {
-	Version   string   `json:"version"`
-	Endpoints []string `json:"endpoints"`
+	Version      string           `json:"version"`
+	Endpoints    []string         `json:"endpoints"`
+	Deprecations []APIDeprecation `json:"deprecations,omitempty"`
 }
 
 type APIDiffReport struct {
-	BaselineVersion    string   `json:"baseline_version"`
-	CurrentVersion     string   `json:"current_version"`
-	Added              []string `json:"added"`
-	Removed            []string `json:"removed"`
-	Unchanged          []string `json:"unchanged"`
-	BackwardCompatible bool     `json:"backward_compatible"`
-	ForwardCompatible  bool     `json:"forward_compatible"`
+	BaselineVersion          string           `json:"baseline_version"`
+	CurrentVersion           string           `json:"current_version"`
+	Added                    []string         `json:"added"`
+	Removed                  []string         `json:"removed"`
+	Unchanged                []string         `json:"unchanged"`
+	DeprecationsAdded        []APIDeprecation `json:"deprecations_added,omitempty"`
+	DeprecationViolations    []string         `json:"deprecation_violations,omitempty"`
+	BackwardCompatible       bool             `json:"backward_compatible"`
+	ForwardCompatible        bool             `json:"forward_compatible"`
+	DeprecationLifecyclePass bool             `json:"deprecation_lifecycle_pass"`
 }
 
 func DiffAPISpec(baseline, current APISpec) APIDiffReport {
@@ -45,17 +58,90 @@ func DiffAPISpec(baseline, current APISpec) APIDiffReport {
 			removed = append(removed, e)
 		}
 	}
+	deprecationsAdded := diffDeprecations(baseline.Deprecations, current.Deprecations)
+	violations := validateDeprecationLifecycle(removed, baseline.Deprecations, current.Version)
+
 	sort.Strings(added)
 	sort.Strings(removed)
 	sort.Strings(unchanged)
+	sort.Strings(violations)
 
 	return APIDiffReport{
-		BaselineVersion:    baseline.Version,
-		CurrentVersion:     current.Version,
-		Added:              added,
-		Removed:            removed,
-		Unchanged:          unchanged,
-		BackwardCompatible: len(removed) == 0,
-		ForwardCompatible:  len(added) == 0,
+		BaselineVersion:          baseline.Version,
+		CurrentVersion:           current.Version,
+		Added:                    added,
+		Removed:                  removed,
+		Unchanged:                unchanged,
+		DeprecationsAdded:        deprecationsAdded,
+		DeprecationViolations:    violations,
+		BackwardCompatible:       len(removed) == 0,
+		ForwardCompatible:        len(added) == 0,
+		DeprecationLifecyclePass: len(violations) == 0,
 	}
+}
+
+func diffDeprecations(baseline, current []APIDeprecation) []APIDeprecation {
+	base := map[string]APIDeprecation{}
+	for _, d := range baseline {
+		if ep := strings.TrimSpace(d.Endpoint); ep != "" {
+			base[ep] = d
+		}
+	}
+	out := make([]APIDeprecation, 0)
+	for _, d := range current {
+		ep := strings.TrimSpace(d.Endpoint)
+		if ep == "" {
+			continue
+		}
+		if _, ok := base[ep]; !ok {
+			out = append(out, d)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Endpoint < out[j].Endpoint })
+	return out
+}
+
+func validateDeprecationLifecycle(removed []string, baselineDeps []APIDeprecation, currentVersion string) []string {
+	if len(removed) == 0 {
+		return nil
+	}
+	baseByEndpoint := map[string]APIDeprecation{}
+	for _, dep := range baselineDeps {
+		ep := strings.TrimSpace(dep.Endpoint)
+		if ep == "" {
+			continue
+		}
+		baseByEndpoint[ep] = dep
+	}
+	currentMajor := versionMajor(currentVersion)
+	violations := make([]string, 0)
+	for _, ep := range removed {
+		dep, ok := baseByEndpoint[ep]
+		if !ok {
+			violations = append(violations, ep+": removed without prior deprecation")
+			continue
+		}
+		removeAfter := versionMajor(dep.RemoveAfterVersion)
+		if removeAfter > 0 && currentMajor > 0 && currentMajor < removeAfter {
+			violations = append(violations, ep+": removed before declared remove_after_version "+dep.RemoveAfterVersion)
+		}
+	}
+	return violations
+}
+
+func versionMajor(raw string) int {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" {
+		return 0
+	}
+	raw = strings.TrimPrefix(raw, "v")
+	part := raw
+	if idx := strings.Index(raw, "."); idx >= 0 {
+		part = raw[:idx]
+	}
+	n, err := strconv.Atoi(part)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
