@@ -89,6 +89,7 @@ Self-service runbook catalog with approval-gated launches is available via `/v1/
 Operator checklist mode for high-risk changes is available via `/v1/control/checklists`.
 Saved views with share tokens and dashboard pinning are available via `/v1/views`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters.
+Solution pack/workspace template catalog is available via `/v1/solution-packs` with scaffold/apply flows.
 
 ## Release Tooling (Current CLI)
 

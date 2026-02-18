@@ -39,6 +39,7 @@ type Server struct {
 	changeRecords *control.ChangeRecordStore
 	checklists    *control.ChecklistStore
 	views         *control.SavedViewStore
+	solutionPacks *control.SolutionPackCatalog
 	channels      *control.ChannelManager
 	schemaMigs    *control.SchemaMigrationManager
 	objectStore   storage.ObjectStore
@@ -77,6 +78,7 @@ func New(addr, baseDir string) *Server {
 	changeRecords := control.NewChangeRecordStore()
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
+	solutionPacks := control.NewSolutionPackCatalog()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
@@ -107,6 +109,7 @@ func New(addr, baseDir string) *Server {
 		changeRecords: changeRecords,
 		checklists:    checklists,
 		views:         views,
+		solutionPacks: solutionPacks,
 		channels:      channels,
 		schemaMigs:    schemaMigs,
 		objectStore:   objectStore,
@@ -155,6 +158,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
 	mux.HandleFunc("/v1/views", s.handleViews)
 	mux.HandleFunc("/v1/views/", s.handleViewAction)
+	mux.HandleFunc("/v1/solution-packs", s.handleSolutionPacks(baseDir))
+	mux.HandleFunc("/v1/solution-packs/", s.handleSolutionPackAction(baseDir))
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
@@ -704,6 +709,130 @@ func (s *Server) handleViewAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, view)
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown view action"})
+	}
+}
+
+func (s *Server) handleSolutionPacks(baseDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		packs := s.solutionPacks.List()
+		category := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("category")))
+		if category == "" {
+			writeJSON(w, http.StatusOK, packs)
+			return
+		}
+		filtered := make([]control.SolutionPack, 0, len(packs))
+		for _, p := range packs {
+			if strings.ToLower(strings.TrimSpace(p.Category)) == category {
+				filtered = append(filtered, p)
+			}
+		}
+		writeJSON(w, http.StatusOK, filtered)
+		_ = baseDir
+	}
+}
+
+func (s *Server) handleSolutionPackAction(baseDir string) http.HandlerFunc {
+	type applyReq struct {
+		OutputPath     string `json:"output_path"`
+		CreateTemplate bool   `json:"create_template"`
+		CreateRunbook  bool   `json:"create_runbook"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		// /v1/solution-packs/{id}/apply
+		parts := splitPath(r.URL.Path)
+		if len(parts) < 4 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid solution pack action path"})
+			return
+		}
+		id := parts[2]
+		action := parts[3]
+		if action != "apply" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown solution pack action"})
+			return
+		}
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req applyReq
+		if r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+		}
+		pack, err := s.solutionPacks.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		out := strings.TrimSpace(req.OutputPath)
+		if out == "" {
+			out = filepath.Join("solution-packs", id+".yaml")
+		}
+		if !filepath.IsAbs(out) {
+			out = filepath.Join(baseDir, out)
+		}
+		if _, statErr := os.Stat(out); statErr == nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "output_path already exists"})
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := os.WriteFile(out, []byte(pack.StarterConfigYAML), 0o644); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		if !req.CreateTemplate && !req.CreateRunbook {
+			req.CreateTemplate = true
+		}
+		var createdTemplate *control.Template
+		if req.CreateTemplate {
+			tpl := s.templates.Create(control.Template{
+				Name:        "solution-pack/" + pack.ID,
+				Description: pack.Description,
+				ConfigPath:  out,
+				Defaults:    map[string]string{},
+				Survey:      map[string]control.SurveyField{},
+			})
+			createdTemplate = &tpl
+		}
+		var createdRunbook *control.Runbook
+		if req.CreateRunbook {
+			rbInput := control.Runbook{
+				Name:        "runbook/" + pack.ID,
+				Description: "Generated from solution pack catalog",
+				TargetType:  control.RunbookTargetConfig,
+				ConfigPath:  out,
+				RiskLevel:   "medium",
+				Owner:       "platform",
+				Tags:        append([]string{}, pack.RecommendedTags...),
+			}
+			rb, err := s.runbooks.Create(rbInput)
+			if err == nil {
+				approved, _ := s.runbooks.Approve(rb.ID)
+				createdRunbook = &approved
+			}
+		}
+
+		resp := map[string]any{
+			"solution_pack": pack,
+			"output_path":   out,
+		}
+		if createdTemplate != nil {
+			resp["template"] = *createdTemplate
+		}
+		if createdRunbook != nil {
+			resp["runbook"] = *createdRunbook
+		}
+		writeJSON(w, http.StatusCreated, resp)
 	}
 }
 
@@ -1399,6 +1528,8 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/views/{id}",
 			"POST /v1/views/{id}/pin",
 			"POST /v1/views/{id}/share",
+			"GET /v1/solution-packs",
+			"POST /v1/solution-packs/{id}/apply",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
 			"GET /v1/release/api-contract",
