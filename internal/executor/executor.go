@@ -1,23 +1,38 @@
 package executor
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"time"
 
 	"github.com/masterchef/masterchef/internal/planner"
+	"github.com/masterchef/masterchef/internal/provider"
 	"github.com/masterchef/masterchef/internal/state"
 )
 
 type Executor struct {
-	baseDir string
+	stepTimeout time.Duration
+	registry    *provider.Registry
 }
 
-func New(baseDir string) *Executor {
-	return &Executor{baseDir: baseDir}
+func New(_ string) *Executor {
+	return &Executor{
+		stepTimeout: 30 * time.Second,
+		registry:    provider.NewBuiltinRegistry(),
+	}
+}
+
+func NewWithRegistry(stepTimeout time.Duration, reg *provider.Registry) *Executor {
+	if stepTimeout <= 0 {
+		stepTimeout = 30 * time.Second
+	}
+	if reg == nil {
+		reg = provider.NewBuiltinRegistry()
+	}
+	return &Executor{
+		stepTimeout: stepTimeout,
+		registry:    reg,
+	}
 }
 
 func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
@@ -47,27 +62,23 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 			Host:       r.Host,
 		}
 
-		switch r.Type {
-		case "file":
-			changed, msg, err := e.applyFile(r.Path, r.Content, r.Mode)
-			res.Changed = changed
-			res.Message = msg
-			if err != nil {
-				run.Status = state.RunFailed
-				res.Message = err.Error()
-			}
-		case "command":
-			changed, skipped, msg, err := e.applyCommand(r.Command, r.Creates, r.Unless)
-			res.Changed = changed
-			res.Skipped = skipped
-			res.Message = msg
-			if err != nil {
-				run.Status = state.RunFailed
-				res.Message = err.Error()
-			}
-		default:
+		h, ok := e.registry.Lookup(r.Type)
+		if !ok {
 			run.Status = state.RunFailed
-			res.Message = fmt.Sprintf("unsupported resource type %q", r.Type)
+			res.Message = fmt.Sprintf("no provider registered for type %q", r.Type)
+			run.Results = append(run.Results, res)
+			break
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), e.stepTimeout)
+		pRes, err := h.Apply(ctx, r)
+		cancel()
+		res.Changed = pRes.Changed
+		res.Skipped = pRes.Skipped
+		res.Message = pRes.Message
+		if err != nil {
+			run.Status = state.RunFailed
+			res.Message = err.Error()
 		}
 
 		run.Results = append(run.Results, res)
@@ -81,44 +92,4 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 		run.Status = state.RunSucceeded
 	}
 	return run, nil
-}
-
-func (e *Executor) applyFile(path, content, mode string) (bool, string, error) {
-	full := filepath.Clean(path)
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		return false, "", fmt.Errorf("mkdir for file resource: %w", err)
-	}
-
-	current, err := os.ReadFile(full)
-	if err == nil && bytes.Equal(current, []byte(content)) {
-		return false, "file already in desired state", nil
-	}
-	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-		return false, "", fmt.Errorf("write file: %w", err)
-	}
-	if mode != "" {
-		// ignore parse error fallback to no-op mode setting for v0 stability
-		_ = os.Chmod(full, 0o644)
-	}
-	return true, "file updated", nil
-}
-
-func (e *Executor) applyCommand(cmdText, creates, unless string) (bool, bool, string, error) {
-	if creates != "" {
-		if _, err := os.Stat(creates); err == nil {
-			return false, true, "command skipped: creates path already exists", nil
-		}
-	}
-	if unless != "" {
-		if err := exec.Command("sh", "-c", unless).Run(); err == nil {
-			return false, true, "command skipped: unless condition succeeded", nil
-		}
-	}
-
-	cmd := exec.Command("sh", "-c", cmdText)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return false, false, string(out), fmt.Errorf("command failed: %w: %s", err, string(out))
-	}
-	return true, false, string(out), nil
 }
