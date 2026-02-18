@@ -20,6 +20,7 @@ type Server struct {
 	httpServer *http.Server
 	queue      *control.Queue
 	scheduler  *control.Scheduler
+	templates  *control.TemplateStore
 	events     *control.EventStore
 	metricsMu  sync.Mutex
 	metrics    map[string]int64
@@ -30,12 +31,14 @@ func New(addr, baseDir string) *Server {
 	queue := control.NewQueue(512)
 	queue.StartWorker(context.Background(), runner)
 	scheduler := control.NewScheduler(queue)
+	templates := control.NewTemplateStore()
 	events := control.NewEventStore(20_000)
 
 	mux := http.NewServeMux()
 	s := &Server{
 		queue:     queue,
 		scheduler: scheduler,
+		templates: templates,
 		events:    events,
 		metrics:   map[string]int64{},
 	}
@@ -62,6 +65,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
+	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
+	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
 	mux.HandleFunc("/v1/schedules/", s.handleScheduleAction)
 	return s
@@ -207,6 +212,105 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
+	}
+}
+
+func (s *Server) handleTemplates(baseDir string) http.HandlerFunc {
+	type createReq struct {
+		Name        string            `json:"name"`
+		Description string            `json:"description"`
+		ConfigPath  string            `json:"config_path"`
+		Defaults    map[string]string `json:"defaults"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, s.templates.List())
+		case http.MethodPost:
+			var req createReq
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+			if req.Name == "" || req.ConfigPath == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and config_path are required"})
+				return
+			}
+			if !filepath.IsAbs(req.ConfigPath) {
+				req.ConfigPath = filepath.Join(baseDir, req.ConfigPath)
+			}
+			if _, err := os.Stat(req.ConfigPath); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
+				return
+			}
+			t := s.templates.Create(control.Template{
+				Name:        req.Name,
+				Description: req.Description,
+				ConfigPath:  req.ConfigPath,
+				Defaults:    req.Defaults,
+			})
+			s.events.Append(control.Event{
+				Type:    "template.created",
+				Message: "template created",
+				Fields: map[string]any{
+					"template_id": t.ID,
+					"name":        t.Name,
+				},
+			})
+			writeJSON(w, http.StatusCreated, t)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/templates/{id}/launch
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 4 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid template action path"})
+		return
+	}
+	id := parts[2]
+	action := parts[3]
+
+	switch action {
+	case "launch":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		t, ok := s.templates.Get(id)
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "template not found"})
+			return
+		}
+		key := r.Header.Get("Idempotency-Key")
+		job := s.queue.Enqueue(t.ConfigPath, key)
+		s.events.Append(control.Event{
+			Type:    "template.launched",
+			Message: "template launch enqueued",
+			Fields: map[string]any{
+				"template_id": t.ID,
+				"job_id":      job.ID,
+			},
+		})
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"template": t,
+			"job":      job,
+		})
+	case "delete":
+		if r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if err := s.templates.Delete(id); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown template action"})
 	}
 }
 

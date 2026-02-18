@@ -72,4 +72,12 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("metrics status code: got=%d", rr.Code)
 	}
+
+	body = []byte(`{"name":"demo","config_path":"c.yaml"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/templates", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("template create status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
 }
