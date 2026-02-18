@@ -47,6 +47,7 @@ type Server struct {
 	workspaceTemplates *control.WorkspaceTemplateCatalog
 	channels           *control.ChannelManager
 	schemaMigs         *control.SchemaMigrationManager
+	dataBags           *control.DataBagStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -91,6 +92,7 @@ func New(addr, baseDir string) *Server {
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
+	dataBags := control.NewDataBagStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -127,6 +129,7 @@ func New(addr, baseDir string) *Server {
 		workspaceTemplates: workspaceTemplates,
 		channels:           channels,
 		schemaMigs:         schemaMigs,
+		dataBags:           dataBags,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -169,6 +172,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/policy/simulate", s.handlePolicySimulation(baseDir))
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
+	mux.HandleFunc("/v1/data-bags", s.handleDataBags)
+	mux.HandleFunc("/v1/data-bags/search", s.handleDataBagSearch)
+	mux.HandleFunc("/v1/data-bags/", s.handleDataBagItem)
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
 	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
@@ -1752,6 +1758,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/upgrade-assistant",
 			"POST /v1/release/upgrade-assistant",
 			"POST /v1/query",
+			"GET /v1/data-bags",
+			"POST /v1/data-bags",
+			"GET /v1/data-bags/{bag}/{item}",
+			"PUT /v1/data-bags/{bag}/{item}",
+			"DELETE /v1/data-bags/{bag}/{item}",
+			"POST /v1/data-bags/search",
 			"POST /v1/events/ingest",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",

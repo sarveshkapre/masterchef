@@ -222,6 +222,13 @@ func (s *Server) queryEntityRecords(entity, baseDir string) ([]any, error) {
 			out = append(out, run)
 		}
 		return out, nil
+	case "data_bag_items":
+		items := s.dataBags.ListSummaries()
+		out := make([]any, 0, len(items))
+		for _, item := range items {
+			out = append(out, item)
+		}
+		return out, nil
 	case "associations":
 		list := s.assocs.List()
 		out := make([]any, 0, len(list))

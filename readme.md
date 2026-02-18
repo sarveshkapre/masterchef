@@ -98,6 +98,7 @@ Persona-based home views for SRE/platform/release/service-owner workflows are av
 Workload-centric operational views grouped by service/application are available via `GET /v1/views/workloads`.
 Fleet node views with cursor-based incremental loading and compact mode are available via `GET /v1/fleet/nodes`.
 Universal command-palette search across hosts, services, runs, policies, and modules is available via `GET /v1/search`.
+Data bag/global object store with encrypted item support and structured search is available via `/v1/data-bags` and `/v1/data-bags/search`.
 Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.
