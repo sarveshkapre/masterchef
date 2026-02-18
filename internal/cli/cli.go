@@ -33,6 +33,8 @@ func Run(args []string) error {
 		return runInit(args[1:])
 	case "validate":
 		return runValidate(args[1:])
+	case "fmt":
+		return runFmt(args[1:])
 	case "plan":
 		return runPlan(args[1:])
 	case "check":
@@ -55,6 +57,7 @@ func usage() error {
 masterchef commands:
   init [-f masterchef.yaml]
   validate [-f masterchef.yaml]
+  fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
   plan [-f masterchef.yaml] [-o plan.json]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -122,6 +125,51 @@ func runValidate(args []string) error {
 		return err
 	}
 	fmt.Printf("config valid: %s\n", *path)
+	return nil
+}
+
+func runFmt(args []string) error {
+	fs := flag.NewFlagSet("fmt", flag.ContinueOnError)
+	path := fs.String("f", "masterchef.yaml", "config path")
+	out := fs.String("o", "", "output path (defaults to stdout)")
+	format := fs.String("format", "", "output format: yaml|json (defaults to input extension)")
+	writeInPlace := fs.Bool("w", false, "write output in-place to input file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := config.Load(*path)
+	if err != nil {
+		return err
+	}
+
+	outFormat := strings.TrimSpace(*format)
+	if outFormat == "" {
+		ext := strings.ToLower(filepath.Ext(*path))
+		if ext == ".json" {
+			outFormat = "json"
+		} else {
+			outFormat = "yaml"
+		}
+	}
+	body, err := config.MarshalCanonical(cfg, outFormat)
+	if err != nil {
+		return err
+	}
+	target := strings.TrimSpace(*out)
+	if *writeInPlace {
+		target = *path
+	}
+	if target == "" {
+		fmt.Print(string(body))
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(target, body, 0o644); err != nil {
+		return err
+	}
+	fmt.Printf("formatted config written: %s\n", target)
 	return nil
 }
 
