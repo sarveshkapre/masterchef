@@ -17,8 +17,11 @@ func TestApply_FileIsIdempotent(t *testing.T) {
 	p := &planner.Plan{
 		Steps: []planner.Step{
 			{
-				Order:         1,
-				HostTransport: "local",
+				Order: 1,
+				Host: config.Host{
+					Name:      "localhost",
+					Transport: "local",
+				},
 				Resource: config.Resource{
 					ID:      "f1",
 					Type:    "file",
@@ -56,8 +59,11 @@ func TestApply_CommandCreatesSkipsSecondRun(t *testing.T) {
 	p := &planner.Plan{
 		Steps: []planner.Step{
 			{
-				Order:         1,
-				HostTransport: "local",
+				Order: 1,
+				Host: config.Host{
+					Name:      "localhost",
+					Transport: "local",
+				},
 				Resource: config.Resource{
 					ID:      "c1",
 					Type:    "command",

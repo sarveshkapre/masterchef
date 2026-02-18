@@ -12,9 +12,9 @@ type Plan struct {
 }
 
 type Step struct {
-	Order         int             `json:"order"`
-	HostTransport string          `json:"host_transport"`
-	Resource      config.Resource `json:"resource"`
+	Order    int             `json:"order"`
+	Host     config.Host     `json:"host"`
+	Resource config.Resource `json:"resource"`
 }
 
 // Build constructs a deterministic topological plan from config resources.
@@ -27,9 +27,9 @@ func Build(cfg *config.Config) (*Plan, error) {
 		idToRes[r.ID] = r
 		inDegree[r.ID] = 0
 	}
-	hostToTransport := map[string]string{}
+	hostByName := map[string]config.Host{}
 	for _, h := range cfg.Inventory.Hosts {
-		hostToTransport[h.Name] = h.Transport
+		hostByName[h.Name] = h
 	}
 
 	for _, r := range cfg.Resources {
@@ -71,9 +71,9 @@ func Build(cfg *config.Config) (*Plan, error) {
 	steps := make([]Step, 0, len(ordered))
 	for i, id := range ordered {
 		steps = append(steps, Step{
-			Order:         i + 1,
-			HostTransport: hostToTransport[idToRes[id].Host],
-			Resource:      idToRes[id],
+			Order:    i + 1,
+			Host:     hostByName[idToRes[id].Host],
+			Resource: idToRes[id],
 		})
 	}
 	return &Plan{Steps: steps}, nil

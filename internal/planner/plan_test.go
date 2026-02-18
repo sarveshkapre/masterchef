@@ -28,6 +28,9 @@ func TestBuild_DeterministicOrder(t *testing.T) {
 	if p.Steps[0].Resource.ID != "a" || p.Steps[1].Resource.ID != "b" || p.Steps[2].Resource.ID != "c" {
 		t.Fatalf("unexpected order: %#v", p.Steps)
 	}
+	if p.Steps[0].Host.Transport != "local" {
+		t.Fatalf("expected host transport in plan step")
+	}
 }
 
 func TestBuild_CycleFails(t *testing.T) {
