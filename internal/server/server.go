@@ -50,6 +50,7 @@ type Server struct {
 	dataBags           *control.DataBagStore
 	roleEnv            *control.RoleEnvironmentStore
 	encryptedVars      *control.EncryptedVariableStore
+	facts              *control.FactCache
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -97,6 +98,7 @@ func New(addr, baseDir string) *Server {
 	dataBags := control.NewDataBagStore()
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
 	encryptedVars := control.NewEncryptedVariableStore(baseDir)
+	facts := control.NewFactCache(5 * time.Minute)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -136,6 +138,7 @@ func New(addr, baseDir string) *Server {
 		dataBags:           dataBags,
 		roleEnv:            roleEnv,
 		encryptedVars:      encryptedVars,
+		facts:              facts,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -189,6 +192,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/vars/encrypted/files", s.handleEncryptedVariableFiles)
 	mux.HandleFunc("/v1/vars/encrypted/files/", s.handleEncryptedVariableFileAction)
 	mux.HandleFunc("/v1/pillar/resolve", s.handlePillarResolve)
+	mux.HandleFunc("/v1/facts/cache", s.handleFactCache)
+	mux.HandleFunc("/v1/facts/cache/", s.handleFactCacheNode)
+	mux.HandleFunc("/v1/facts/mine/query", s.handleFactMineQuery)
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
 	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
@@ -1794,6 +1800,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/vars/encrypted/files/{name}",
 			"DELETE /v1/vars/encrypted/files/{name}",
 			"POST /v1/pillar/resolve",
+			"GET /v1/facts/cache",
+			"POST /v1/facts/cache",
+			"GET /v1/facts/cache/{node}",
+			"DELETE /v1/facts/cache/{node}",
+			"POST /v1/facts/mine/query",
 			"POST /v1/events/ingest",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",

@@ -102,6 +102,7 @@ Data bag/global object store with encrypted item support and structured search i
 Chef-style role and environment objects with deterministic per-environment resolution are available via `/v1/roles`, `/v1/environments`, and `GET /v1/roles/{name}/resolve`.
 Encrypted variable files with key rotation (Vault-style) are available via `/v1/vars/encrypted/files` and `/v1/vars/encrypted/keys`.
 Pillar/Hiera-style hierarchical data resolution with explicit merge strategies is available via `POST /v1/pillar/resolve`.
+Fact caching with TTL/invalidation and Salt Mine-style cross-node fact queries are available via `/v1/facts/cache` and `POST /v1/facts/mine/query`.
 Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.
