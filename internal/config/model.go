@@ -13,11 +13,14 @@ type Inventory struct {
 }
 
 type Host struct {
-	Name      string `json:"name" yaml:"name"`
-	Transport string `json:"transport" yaml:"transport"` // local, ssh, winrm
-	Address   string `json:"address,omitempty" yaml:"address,omitempty"`
-	User      string `json:"user,omitempty" yaml:"user,omitempty"`
-	Port      int    `json:"port,omitempty" yaml:"port,omitempty"`
+	Name      string            `json:"name" yaml:"name"`
+	Transport string            `json:"transport" yaml:"transport"` // local, ssh, winrm
+	Address   string            `json:"address,omitempty" yaml:"address,omitempty"`
+	User      string            `json:"user,omitempty" yaml:"user,omitempty"`
+	Port      int               `json:"port,omitempty" yaml:"port,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+	Roles     []string          `json:"roles,omitempty" yaml:"roles,omitempty"`
+	Topology  map[string]string `json:"topology,omitempty" yaml:"topology,omitempty"`
 }
 
 // Resource is a compact typed resource model for v0.

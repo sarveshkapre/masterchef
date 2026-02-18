@@ -18,6 +18,10 @@ func Canonicalize(cfg *Config) Config {
 	sort.Slice(out.Inventory.Hosts, func(i, j int) bool {
 		return out.Inventory.Hosts[i].Name < out.Inventory.Hosts[j].Name
 	})
+	for i := range out.Inventory.Hosts {
+		out.Inventory.Hosts[i].Roles = append([]string{}, out.Inventory.Hosts[i].Roles...)
+		sort.Strings(out.Inventory.Hosts[i].Roles)
+	}
 
 	out.Resources = append([]Resource{}, cfg.Resources...)
 	for i := range out.Resources {

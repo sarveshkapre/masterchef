@@ -44,6 +44,45 @@ func Validate(cfg *Config) error {
 		default:
 			return fmt.Errorf("host %q has unsupported transport %q", h.Name, h.Transport)
 		}
+		if len(cfg.Inventory.Hosts[i].Roles) > 0 {
+			seen := map[string]struct{}{}
+			roles := make([]string, 0, len(cfg.Inventory.Hosts[i].Roles))
+			for _, role := range cfg.Inventory.Hosts[i].Roles {
+				role = strings.ToLower(strings.TrimSpace(role))
+				if role == "" {
+					continue
+				}
+				if _, ok := seen[role]; ok {
+					continue
+				}
+				seen[role] = struct{}{}
+				roles = append(roles, role)
+			}
+			sort.Strings(roles)
+			cfg.Inventory.Hosts[i].Roles = roles
+		}
+		if len(cfg.Inventory.Hosts[i].Labels) > 0 {
+			labels := map[string]string{}
+			for k, v := range cfg.Inventory.Hosts[i].Labels {
+				key := strings.ToLower(strings.TrimSpace(k))
+				if key == "" {
+					continue
+				}
+				labels[key] = strings.TrimSpace(v)
+			}
+			cfg.Inventory.Hosts[i].Labels = labels
+		}
+		if len(cfg.Inventory.Hosts[i].Topology) > 0 {
+			topology := map[string]string{}
+			for k, v := range cfg.Inventory.Hosts[i].Topology {
+				key := strings.ToLower(strings.TrimSpace(k))
+				if key == "" {
+					continue
+				}
+				topology[key] = strings.TrimSpace(v)
+			}
+			cfg.Inventory.Hosts[i].Topology = topology
+		}
 	}
 
 	resSet := map[string]struct{}{}

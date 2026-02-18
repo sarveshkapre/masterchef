@@ -190,6 +190,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/policy/simulate", s.handlePolicySimulation(baseDir))
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
+	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
 	mux.HandleFunc("/v1/data-bags", s.handleDataBags)
 	mux.HandleFunc("/v1/data-bags/search", s.handleDataBagSearch)
 	mux.HandleFunc("/v1/data-bags/", s.handleDataBagItem)
@@ -1743,6 +1744,7 @@ func currentAPISpec() control.APISpec {
 			"GET /healthz",
 			"GET /v1/activity",
 			"GET /v1/search",
+			"GET /v1/inventory/groups",
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
 			"GET /v1/drift/insights",

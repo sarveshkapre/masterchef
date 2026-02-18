@@ -132,3 +132,40 @@ func TestValidate_DelegateToHost(t *testing.T) {
 		t.Fatalf("expected delegate_to validation error")
 	}
 }
+
+func TestValidate_NormalizesHostMetadata(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{
+				{
+					Name:      "h1",
+					Transport: "local",
+					Roles:     []string{"App", " app ", "DB"},
+					Labels: map[string]string{
+						" Team ": "platform",
+					},
+					Topology: map[string]string{
+						" Zone ": "us-east-1a",
+					},
+				},
+			},
+		},
+		Resources: []Resource{
+			{ID: "f1", Type: "file", Host: "h1", Path: "/tmp/x"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("validate failed: %v", err)
+	}
+	host := cfg.Inventory.Hosts[0]
+	if len(host.Roles) != 2 || host.Roles[0] != "app" || host.Roles[1] != "db" {
+		t.Fatalf("expected normalized roles, got %#v", host.Roles)
+	}
+	if host.Labels["team"] != "platform" {
+		t.Fatalf("expected normalized labels map key, got %#v", host.Labels)
+	}
+	if host.Topology["zone"] != "us-east-1a" {
+		t.Fatalf("expected normalized topology key, got %#v", host.Topology)
+	}
+}
