@@ -1095,6 +1095,65 @@ resources:
 	}
 }
 
+func TestReleaseReadinessEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x14.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/release/readiness", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("threshold get failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	failBody := []byte(`{"signals":{"quality_score":0.5,"reliability_score":0.5,"performance_score":0.5,"test_pass_rate":0.5,"flake_rate":0.5,"open_critical_incidents":1,"p95_apply_latency_ms":999999}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/readiness", bytes.NewReader(failBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected readiness block (409), got code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	passBody := []byte(`{"signals":{"quality_score":0.95,"reliability_score":0.95,"performance_score":0.95,"test_pass_rate":0.99,"flake_rate":0.01,"open_critical_incidents":0,"p95_apply_latency_ms":1000}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/readiness", bytes.NewReader(passBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected readiness pass (200), got code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestWebhookEndpointsAndDeliveries(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

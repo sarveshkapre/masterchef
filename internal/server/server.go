@@ -115,6 +115,7 @@ func New(addr, baseDir string) *Server {
 
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
+	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
@@ -601,6 +602,31 @@ func (s *Server) handleFeatureSummary(baseDir string) http.HandlerFunc {
 		}
 		report := features.Verify(doc)
 		writeJSON(w, http.StatusOK, report)
+	}
+}
+
+func (s *Server) handleReleaseReadiness(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Signals    control.ReadinessSignals    `json:"signals"`
+		Thresholds control.ReadinessThresholds `json:"thresholds"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, control.DefaultReadinessThresholds())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		report := control.EvaluateReadiness(req.Signals, req.Thresholds)
+		if !report.Pass {
+			writeJSON(w, http.StatusConflict, report)
+			return
+		}
+		writeJSON(w, http.StatusOK, report)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
