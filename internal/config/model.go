@@ -35,9 +35,12 @@ type Resource struct {
 	Mode    string `json:"mode,omitempty" yaml:"mode,omitempty"`
 
 	// command
-	Command string `json:"command,omitempty" yaml:"command,omitempty"`
-	Creates string `json:"creates,omitempty" yaml:"creates,omitempty"`
-	Unless  string `json:"unless,omitempty" yaml:"unless,omitempty"`
+	Command           string `json:"command,omitempty" yaml:"command,omitempty"`
+	Creates           string `json:"creates,omitempty" yaml:"creates,omitempty"`
+	Unless            string `json:"unless,omitempty" yaml:"unless,omitempty"`
+	Retries           int    `json:"retries,omitempty" yaml:"retries,omitempty"`
+	RetryDelaySeconds int    `json:"retry_delay_seconds,omitempty" yaml:"retry_delay_seconds,omitempty"`
+	UntilContains     string `json:"until_contains,omitempty" yaml:"until_contains,omitempty"`
 }
 
 type Execution struct {

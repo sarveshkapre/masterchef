@@ -102,6 +102,42 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 }
 
 func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
+	attempts := 1
+	if step.Resource.Retries > 0 {
+		attempts = step.Resource.Retries + 1
+	}
+	delay := time.Duration(step.Resource.RetryDelaySeconds) * time.Second
+	untilContains := strings.TrimSpace(step.Resource.UntilContains)
+
+	var last state.ResourceRun
+	var failed bool
+	for attempt := 1; attempt <= attempts; attempt++ {
+		last, failed = e.executeSingleStep(step)
+		if !failed && untilContains != "" && !strings.Contains(last.Message, untilContains) {
+			failed = true
+			if strings.TrimSpace(last.Message) == "" {
+				last.Message = "until_contains condition not met: " + untilContains
+			} else {
+				last.Message = strings.TrimSpace(last.Message) + "; until_contains condition not met: " + untilContains
+			}
+		}
+		if !failed {
+			if attempt > 1 {
+				last.Message = strings.TrimSpace(last.Message + " (succeeded after " + strconv.Itoa(attempt) + " attempts)")
+			}
+			return last, false
+		}
+		if attempt < attempts && delay > 0 {
+			time.Sleep(delay)
+		}
+	}
+	if attempts > 1 {
+		last.Message = strings.TrimSpace(last.Message + " (failed after " + strconv.Itoa(attempts) + " attempts)")
+	}
+	return last, true
+}
+
+func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool) {
 	r := step.Resource
 	if step.Host.Transport != "local" && step.Host.Transport != "ssh" {
 		return state.ResourceRun{

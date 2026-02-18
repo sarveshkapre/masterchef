@@ -69,6 +69,12 @@ func Validate(cfg *Config) error {
 			if strings.TrimSpace(r.Command) == "" {
 				return fmt.Errorf("resource %q command.command is required", r.ID)
 			}
+			if r.Retries < 0 {
+				return fmt.Errorf("resource %q command.retries must be >= 0", r.ID)
+			}
+			if r.RetryDelaySeconds < 0 {
+				return fmt.Errorf("resource %q command.retry_delay_seconds must be >= 0", r.ID)
+			}
 		default:
 			return fmt.Errorf("resource %q has unsupported type %q", r.ID, r.Type)
 		}

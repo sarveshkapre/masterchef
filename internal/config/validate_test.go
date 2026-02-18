@@ -78,3 +78,35 @@ func TestValidate_NormalizesResourceTags(t *testing.T) {
 		t.Fatalf("expected normalized sorted deduped tags, got %#v", cfg.Resources[0].Tags)
 	}
 }
+
+func TestValidate_CommandRetryPolicy(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:                "c1",
+				Type:              "command",
+				Host:              "localhost",
+				Command:           "echo ok",
+				Retries:           2,
+				RetryDelaySeconds: 1,
+				UntilContains:     "ok",
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected valid retry policy, got %v", err)
+	}
+	cfg.Resources[0].Retries = -1
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected retries validation error")
+	}
+	cfg.Resources[0].Retries = 0
+	cfg.Resources[0].RetryDelaySeconds = -1
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected retry delay validation error")
+	}
+}

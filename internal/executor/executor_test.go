@@ -3,6 +3,7 @@ package executor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/masterchef/masterchef/internal/config"
@@ -225,5 +226,97 @@ func TestApply_MaxFailPercentageStopsFreeStrategy(t *testing.T) {
 	}
 	if len(run.Results) != 1 {
 		t.Fatalf("expected failure percentage policy to stop run, got %d", len(run.Results))
+	}
+}
+
+func TestApply_CommandRetriesUntilSuccess(t *testing.T) {
+	tmp := t.TempDir()
+	marker := filepath.Join(tmp, "retry.marker")
+	cmd := "if [ ! -f " + marker + " ]; then touch " + marker + "; echo warming-up; exit 1; fi; echo ready"
+
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:                "retry-step",
+					Type:              "command",
+					Host:              "localhost",
+					Command:           cmd,
+					Retries:           1,
+					RetryDelaySeconds: 0,
+				},
+			},
+		},
+	}
+
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded {
+		t.Fatalf("expected succeeded after retry, got %s with results %#v", run.Status, run.Results)
+	}
+	if len(run.Results) != 1 || !strings.Contains(run.Results[0].Message, "succeeded after 2 attempts") {
+		t.Fatalf("expected retry success message, got %#v", run.Results)
+	}
+}
+
+func TestApply_CommandUntilContains(t *testing.T) {
+	tmp := t.TempDir()
+	marker := filepath.Join(tmp, "until.marker")
+	cmd := "if [ ! -f " + marker + " ]; then touch " + marker + "; echo pending; exit 0; fi; echo done"
+
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:                "until-step",
+					Type:              "command",
+					Host:              "localhost",
+					Command:           cmd,
+					UntilContains:     "done",
+					Retries:           1,
+					RetryDelaySeconds: 0,
+				},
+			},
+		},
+	}
+
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded {
+		t.Fatalf("expected until condition to succeed on retry, got %s", run.Status)
+	}
+
+	failPlan := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:            "until-fail",
+					Type:          "command",
+					Host:          "localhost",
+					Command:       "echo never",
+					UntilContains: "always-missing",
+					Retries:       1,
+				},
+			},
+		},
+	}
+	run, err = ex.Apply(failPlan)
+	if err != nil {
+		t.Fatalf("apply failed unexpectedly: %v", err)
+	}
+	if run.Status != state.RunFailed {
+		t.Fatalf("expected until condition failure, got %s", run.Status)
 	}
 }
