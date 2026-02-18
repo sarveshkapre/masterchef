@@ -321,10 +321,11 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 
 func (s *Server) handleTemplates(baseDir string) http.HandlerFunc {
 	type createReq struct {
-		Name        string            `json:"name"`
-		Description string            `json:"description"`
-		ConfigPath  string            `json:"config_path"`
-		Defaults    map[string]string `json:"defaults"`
+		Name        string                         `json:"name"`
+		Description string                         `json:"description"`
+		ConfigPath  string                         `json:"config_path"`
+		Defaults    map[string]string              `json:"defaults"`
+		Survey      map[string]control.SurveyField `json:"survey"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -352,6 +353,7 @@ func (s *Server) handleTemplates(baseDir string) http.HandlerFunc {
 				Description: req.Description,
 				ConfigPath:  req.ConfigPath,
 				Defaults:    req.Defaults,
+				Survey:      req.Survey,
 			})
 			s.events.Append(control.Event{
 				Type:    "template.created",
@@ -385,7 +387,8 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		type launchReq struct {
-			Priority string `json:"priority"`
+			Priority string            `json:"priority"`
+			Answers  map[string]string `json:"answers"`
 		}
 		var launch launchReq
 		if r.ContentLength > 0 {
@@ -397,6 +400,10 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 		t, ok := s.templates.Get(id)
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "template not found"})
+			return
+		}
+		if err := control.ValidateSurveyAnswers(t.Survey, launch.Answers); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 		key := r.Header.Get("Idempotency-Key")
@@ -421,6 +428,7 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"template": t,
 			"job":      job,
+			"answers":  launch.Answers,
 		})
 	case "delete":
 		if r.Method != http.MethodDelete {

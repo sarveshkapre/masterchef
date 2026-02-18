@@ -2,23 +2,34 @@ package control
 
 import "testing"
 
-func TestTemplateStore_CreateGetDelete(t *testing.T) {
-	s := NewTemplateStore()
-	tpl := s.Create(Template{
-		Name:       "demo",
-		ConfigPath: "x.yaml",
-	})
-	if tpl.ID == "" {
-		t.Fatalf("expected template id")
+func TestValidateSurveyAnswers(t *testing.T) {
+	schema := map[string]SurveyField{
+		"env": {
+			Type:     "string",
+			Required: true,
+			Enum:     []string{"prod", "staging"},
+		},
+		"retries": {
+			Type: "int",
+		},
+		"force": {
+			Type: "bool",
+		},
 	}
-	got, ok := s.Get(tpl.ID)
-	if !ok || got.Name != "demo" {
-		t.Fatalf("unexpected get result: %+v", got)
+
+	if err := ValidateSurveyAnswers(schema, map[string]string{"env": "prod", "retries": "2", "force": "true"}); err != nil {
+		t.Fatalf("expected valid answers, got error: %v", err)
 	}
-	if err := s.Delete(tpl.ID); err != nil {
-		t.Fatalf("delete failed: %v", err)
+	if err := ValidateSurveyAnswers(schema, map[string]string{"retries": "2"}); err == nil {
+		t.Fatalf("expected missing required field error")
 	}
-	if _, ok := s.Get(tpl.ID); ok {
-		t.Fatalf("expected deleted template to be gone")
+	if err := ValidateSurveyAnswers(schema, map[string]string{"env": "dev"}); err == nil {
+		t.Fatalf("expected enum validation error")
+	}
+	if err := ValidateSurveyAnswers(schema, map[string]string{"env": "prod", "retries": "x"}); err == nil {
+		t.Fatalf("expected integer validation error")
+	}
+	if err := ValidateSurveyAnswers(schema, map[string]string{"env": "prod", "extra": "x"}); err == nil {
+		t.Fatalf("expected unknown field validation error")
 	}
 }

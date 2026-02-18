@@ -2,17 +2,27 @@ package control
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
+type SurveyField struct {
+	Type     string   `json:"type"` // string|int|bool
+	Required bool     `json:"required,omitempty"`
+	Enum     []string `json:"enum,omitempty"`
+}
+
 type Template struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	ConfigPath  string            `json:"config_path"`
-	Defaults    map[string]string `json:"defaults,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description,omitempty"`
+	ConfigPath  string                 `json:"config_path"`
+	Defaults    map[string]string      `json:"defaults,omitempty"`
+	Survey      map[string]SurveyField `json:"survey,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
 }
 
 type TemplateStore struct {
@@ -35,6 +45,9 @@ func (s *TemplateStore) Create(t Template) Template {
 	t.CreatedAt = time.Now().UTC()
 	if t.Defaults == nil {
 		t.Defaults = map[string]string{}
+	}
+	if t.Survey == nil {
+		t.Survey = map[string]SurveyField{}
 	}
 	cp := t
 	s.templates[t.ID] = &cp
@@ -80,5 +93,61 @@ func cloneTemplate(t *Template) *Template {
 	for k, v := range t.Defaults {
 		cp.Defaults[k] = v
 	}
+	cp.Survey = map[string]SurveyField{}
+	for k, v := range t.Survey {
+		cp.Survey[k] = v
+	}
 	return &cp
+}
+
+func ValidateSurveyAnswers(schema map[string]SurveyField, answers map[string]string) error {
+	if len(schema) == 0 {
+		return nil
+	}
+	if answers == nil {
+		answers = map[string]string{}
+	}
+
+	for key := range answers {
+		if _, ok := schema[key]; !ok {
+			return fmt.Errorf("unknown survey answer field: %s", key)
+		}
+	}
+
+	for field, def := range schema {
+		raw, ok := answers[field]
+		raw = strings.TrimSpace(raw)
+		if def.Required && (!ok || raw == "") {
+			return fmt.Errorf("missing required survey field: %s", field)
+		}
+		if !ok || raw == "" {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(def.Type)) {
+		case "", "string":
+		case "int", "integer":
+			if _, err := strconv.Atoi(raw); err != nil {
+				return fmt.Errorf("invalid integer value for %s", field)
+			}
+		case "bool", "boolean":
+			if _, err := strconv.ParseBool(raw); err != nil {
+				return fmt.Errorf("invalid boolean value for %s", field)
+			}
+		default:
+			return fmt.Errorf("unsupported survey field type for %s: %s", field, def.Type)
+		}
+		if len(def.Enum) > 0 {
+			match := false
+			for _, allowed := range def.Enum {
+				if raw == allowed {
+					match = true
+					break
+				}
+			}
+			if !match {
+				return fmt.Errorf("invalid value for %s: must be one of %v", field, def.Enum)
+			}
+		}
+	}
+	return nil
 }
