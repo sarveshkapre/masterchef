@@ -1,18 +1,23 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/masterchef/masterchef/internal/config"
 	"github.com/masterchef/masterchef/internal/executor"
 	"github.com/masterchef/masterchef/internal/features"
 	"github.com/masterchef/masterchef/internal/planner"
+	"github.com/masterchef/masterchef/internal/server"
 	"github.com/masterchef/masterchef/internal/state"
 )
 
@@ -29,6 +34,8 @@ func Run(args []string) error {
 		return runPlan(args[1:])
 	case "apply":
 		return runApply(args[1:])
+	case "serve":
+		return runServe(args[1:])
 	case "features":
 		return runFeatures(args[1:])
 	default:
@@ -43,6 +50,7 @@ masterchef commands:
   validate [-f masterchef.yaml]
   plan [-f masterchef.yaml] [-o plan.json]
   apply [-f masterchef.yaml]
+  serve [-addr :8080]
   features [matrix|summary|verify] [-f features.md]
 `))
 	return errors.New("invalid command")
@@ -197,4 +205,31 @@ func runFeatures(args []string) error {
 		return fmt.Errorf("unknown features subcommand %q", sub)
 	}
 	return nil
+}
+
+func runServe(args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	addr := fs.String("addr", ":8080", "bind address")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	s := server.New(*addr, ".")
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- s.ListenAndServe()
+	}()
+	fmt.Printf("server listening on %s\n", *addr)
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case sig := <-sigCh:
+		fmt.Printf("received signal %s, shutting down\n", sig.String())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return s.Shutdown(ctx)
+	case err := <-errCh:
+		return err
+	}
 }
