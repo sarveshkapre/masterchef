@@ -23,6 +23,7 @@ type Server struct {
 	queue      *control.Queue
 	scheduler  *control.Scheduler
 	templates  *control.TemplateStore
+	workflows  *control.WorkflowStore
 	events     *control.EventStore
 	runCancel  context.CancelFunc
 	metricsMu  sync.Mutex
@@ -46,6 +47,7 @@ func New(addr, baseDir string) *Server {
 	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
 	templates := control.NewTemplateStore()
+	workflows := control.NewWorkflowStore(queue, templates)
 	events := control.NewEventStore(20_000)
 
 	mux := http.NewServeMux()
@@ -53,6 +55,7 @@ func New(addr, baseDir string) *Server {
 		queue:     queue,
 		scheduler: scheduler,
 		templates: templates,
+		workflows: workflows,
 		events:    events,
 		metrics:   map[string]int64{},
 		runCancel: runCancel,
@@ -97,6 +100,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
+	mux.HandleFunc("/v1/workflows", s.handleWorkflows)
+	mux.HandleFunc("/v1/workflows/", s.handleWorkflowAction)
+	mux.HandleFunc("/v1/workflow-runs", s.handleWorkflowRuns)
+	mux.HandleFunc("/v1/workflow-runs/", s.handleWorkflowRunByID)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
 	mux.HandleFunc("/v1/schedules/", s.handleScheduleAction)
 	return s
@@ -444,6 +451,117 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown template action"})
 	}
+}
+
+func (s *Server) handleWorkflows(w http.ResponseWriter, r *http.Request) {
+	type createReq struct {
+		Name        string                 `json:"name"`
+		Description string                 `json:"description"`
+		Steps       []control.WorkflowStep `json:"steps"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.workflows.List())
+	case http.MethodPost:
+		var req createReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		wf, err := s.workflows.Create(control.WorkflowTemplate{
+			Name:        req.Name,
+			Description: req.Description,
+			Steps:       req.Steps,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.events.Append(control.Event{
+			Type:    "workflow.created",
+			Message: "workflow created",
+			Fields: map[string]any{
+				"workflow_id": wf.ID,
+				"name":        wf.Name,
+			},
+		})
+		writeJSON(w, http.StatusCreated, wf)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleWorkflowAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/workflows/{id}/launch
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 4 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid workflow action path"})
+		return
+	}
+	id := parts[2]
+	action := parts[3]
+
+	if action != "launch" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown workflow action"})
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	type launchReq struct {
+		Priority string `json:"priority"`
+		Force    bool   `json:"force"`
+	}
+	var req launchReq
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+	}
+	force := req.Force || strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
+	run, err := s.workflows.Launch(id, req.Priority, force)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.events.Append(control.Event{
+		Type:    "workflow.launched",
+		Message: "workflow launch started",
+		Fields: map[string]any{
+			"workflow_id": id,
+			"run_id":      run.ID,
+		},
+	})
+	writeJSON(w, http.StatusAccepted, run)
+}
+
+func (s *Server) handleWorkflowRuns(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.workflows.ListRuns())
+}
+
+func (s *Server) handleWorkflowRunByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	id := filepath.Base(r.URL.Path)
+	if id == "" || id == "workflow-runs" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing workflow run id"})
+		return
+	}
+	run, err := s.workflows.GetRun(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
 }
 
 func (s *Server) handleEmergencyStop(w http.ResponseWriter, r *http.Request) {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSplitPath(t *testing.T) {
@@ -395,5 +396,120 @@ resources:
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected force apply to bypass freeze: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestWorkflowEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x5.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	makeTemplate := func(name string) string {
+		body := []byte(`{"name":"` + name + `","config_path":"c.yaml"}`)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/templates", bytes.NewReader(body))
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("template create failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var tpl struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &tpl); err != nil {
+			t.Fatalf("template decode failed: %v", err)
+		}
+		return tpl.ID
+	}
+
+	step1 := makeTemplate("wf-step-1")
+	step2 := makeTemplate("wf-step-2")
+
+	wfBody := []byte(`{
+		"name":"pipeline",
+		"steps":[
+			{"template_id":"` + step1 + `","priority":"high"},
+			{"template_id":"` + step2 + `","priority":"normal"}
+		]
+	}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/workflows", bytes.NewReader(wfBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("workflow create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var wf struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &wf); err != nil {
+		t.Fatalf("workflow decode failed: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/workflows/"+wf.ID+"/launch", bytes.NewReader([]byte(`{"priority":"normal"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("workflow launch failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var run struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &run); err != nil {
+		t.Fatalf("workflow run decode failed: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		rr = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/v1/workflow-runs/"+run.ID, nil)
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("workflow run get failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var cur struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &cur); err != nil {
+			t.Fatalf("workflow run status decode failed: %v", err)
+		}
+		if cur.Status == "succeeded" {
+			break
+		}
+		if cur.Status == "failed" {
+			t.Fatalf("workflow run failed unexpectedly: %s", rr.Body.String())
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for workflow run completion")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
