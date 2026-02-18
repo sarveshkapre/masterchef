@@ -4,7 +4,10 @@
 - Open schema model using YAML + CUE + JSON Schema
 - Configuration composition via includes, imports, and overlays
 - Role/profile/environment inheritance model
+- Chef-style role and environment objects with file-backed and API-backed workflows
+- Per-environment run-list and policy overrides with deterministic precedence
 - Node classification rules based on facts, labels, and policy
+- External node classifier (ENC) interface for third-party classification engines
 - Variable precedence model with explicit conflict resolution
 - `explain` command to show final merged variable values
 - Variable source graph and precedence conflict detector with hard-fail policy option
@@ -22,7 +25,10 @@
 - Resource graph query API for impact and dependency analysis
 - Hierarchical data lookup engine (Hiera/Data Bag style)
 - External data source plugins for variables and policy inputs
+- Data bag/global object store with encrypted item support and structured search
+- Pillar-style hierarchical data with explicit merge strategies (`merge-first`, `merge-last`, `overwrite`, `remove`)
 - Versioned policy bundles with lockfiles (Policyfile-style)
+- Named run-lists and policy-group targeting for staged rollout promotion
 - Deterministic `plan` output for identical inputs
 - Plan reproducibility checks across different runners
 - Mandatory `plan` before every `apply`
@@ -55,6 +61,8 @@
 - Async task execution with poll and timeout controls
 - Delegated execution (`delegate_to`/local execution equivalents)
 - Privilege escalation policies (`sudo`/`run-as`) with audit trails
+- Task tags with include/exclude run filters for selective execution
+- Step-level retries and `until`-style retry conditions for transient failures
 - Static inventory management
 - Dynamic inventory providers
 - Cloud inventory sync for AWS, Azure, GCP, and vSphere
@@ -65,6 +73,8 @@
 - Lifecycle workflows for node bootstrap, quarantine, and decommission
 - Fact collection engine (system, custom, and external facts)
 - Fact caching with TTL and invalidation controls
+- Salt-style grains compatibility layer over fact data for migration ease
+- Cross-node shared fact cache (Salt Mine style) for service-discovery and orchestration use cases
 - Agentless execution over SSH
 - Agentless execution over WinRM
 - Local execution mode (`connection=local` equivalent) for image builds and CI runners
@@ -103,6 +113,8 @@
 - Package manager abstraction for apt, yum/dnf, zypper, brew, winget, and chocolatey
 - Core resources for file, directory, template, package, service, user, group, command, cron, and sysctl
 - Advanced resources for firewall, kernel module, mount, certificate, registry, and scheduled tasks
+- Virtual and exported resource model with collector syntax for cross-node service discovery patterns
+- Filebucket-style content backup and checksum-addressable file history for managed files
 - SELinux/AppArmor policy and context management resources
 - Systemd unit management and drop-in override resources
 - Artifact deployment resources with checksum pinning and staged rollout
@@ -139,6 +151,7 @@
 - Run history with full audit trail
 - Immutable event logs for every action
 - Real-time run streaming and event subscriptions
+- Exception and report handler pipeline with pluggable sinks and ordered execution
 - Structured logs, metrics, traces, and run replay
 - OpenTelemetry-native export for logs, metrics, and traces
 - Correlation IDs linking each run step to external observability systems
@@ -182,6 +195,7 @@
 - Event bus integrations (Kafka, NATS, webhooks)
 - Rulebook/event source engine with source-rule-condition-action pipelines
 - Event stream ingress endpoints for external SaaS and webhook producers
+- Salt-style beacon/reactor compatibility patterns for event-driven remediation
 - GitOps workflow support with signed plan artifacts
 - Pull-request plan comments and approval gates
 - Multi-environment promotions with policy checks
@@ -227,6 +241,7 @@
 - Provider test fixtures and contract test harness
 - Versioned provider protocol with backward compatibility guarantees
 - Provider capability negotiation and feature-flag compatibility mapping
+- Ansible-compatible plugin extension points (callback, lookup, filter, vars, strategy)
 - Sandboxed third-party providers with least privilege isolation
 - WASI runtime support for untrusted provider plugins
 - Module registry with versioning and signatures
@@ -253,6 +268,8 @@
 - Capacity-aware scheduling using host health, backlog pressure, and execution cost
 - Queue backlog SLO tracking with predictive saturation alerts
 - Workflow engine for multi-step orchestration pipelines
+- Job templates, workflow templates, schedules, and prompted launch parameters
+- Survey/form-driven run launches with schema-validated inputs
 - HA control plane reference architecture
 - Production deployment blueprints for Kubernetes, VMs, and bare metal
 - Preflight deployment validator for network, DNS, storage, database, and queue dependencies
@@ -266,6 +283,7 @@
 - PostgreSQL-backed state and event storage
 - Pluggable queue backends for scale and resiliency
 - Pluggable object storage for artifacts and logs
+- Query API for facts, resources, events, reports, and catalogs with both human-friendly and AST modes
 - Backup and disaster recovery workflows
 - Point-in-time restore for state and audit data
 - Control plane schema migrations with forward/backward compatibility checks
@@ -322,6 +340,8 @@
 - Offline and air-gapped operation mode
 - Signed offline bundle creation and verification
 - Offline registry mirroring and synchronization tooling
+- Masterless execution mode with local state/pillar rendering for disconnected operations
+- Hierarchical relay/syndic topology for very large fleets and segmented networks
 - FIPS-compatible cryptography mode for regulated environments
 - Contributor-friendly local development environment
 - Local single-binary dev mode for control plane + worker + registry
