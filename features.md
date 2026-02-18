@@ -1,108 +1,95 @@
 # Features
 
-This document defines the target feature set for Masterchef and maps it to legacy tool capabilities.
-
-## Capability Categories
-
-1. Configuration model
-- Declarative, typed configuration (YAML + CUE constraints)
-- Resource graph with explicit dependency edges
-- Variable layering (global, environment, role, host, run-time)
-- Reusable modules and composition
-
-2. Planning and execution
-- Mandatory `plan` before `apply`
-- Deterministic run ordering from dependency DAG
-- Idempotent resource providers
-- Parallel execution with bounded concurrency controls
-- Check mode (dry-run) and diff previews
-- Partial apply and targeted resource scopes
-
-3. Transport modes
-- Agentless mode over SSH/WinRM
-- Agent mode with periodic converge loop
-- Hybrid mode by node/group policy
-
-4. Inventory and orchestration
-- Dynamic and static inventory
-- Grouping by labels, tags, roles, topology
-- Rolling updates with health gates
+- Declarative typed configuration with schema validation
+- Resource graph compiler with explicit dependencies
+- Deterministic `plan` output for identical inputs
+- Mandatory `plan` before every `apply`
+- Idempotent resource provider contract
+- Change diff previews for every resource action
+- Partial and targeted applies by host, group, tag, and resource
+- Parallel execution with configurable concurrency limits
+- Transaction checkpoints and resumable execution
+- Rollback support for reversible resources
+- Static inventory management
+- Dynamic inventory providers
+- Labels, tags, roles, and topology-based host grouping
+- Runtime host discovery and auto-enrollment
+- Agentless execution over SSH
+- Agentless execution over WinRM
+- Agent-based periodic converge loop
+- Hybrid push + pull mode per environment
+- Secure bootstrap flow from agentless to agent mode
+- Cross-platform support for Linux, macOS, and Windows nodes
+- Core resources for file, directory, template, package, service, user, group, command, cron, and sysctl
+- Advanced resources for firewall, kernel module, mount, certificate, registry, and scheduled tasks
+- Dependency-aware orchestration and ordered phases
+- Rolling updates with health checks
+- Blue/green and canary rollout strategies
 - Maintenance windows and disruption budgets
-
-5. State, drift, and reconciliation
-- Desired vs observed state tracking
-- Drift detection alerts
-- Auto-remediation rules (opt-in)
-- Safe rollback points per run
-
-6. Security and secrets
-- Native integration with major secret managers
-- Ephemeral credentials and short-lived execution tokens
-- Command/resource allowlists and deny policies
-- Signed module/provider packages
-
-7. Policy and compliance
-- Pre-apply policy validation
-- Continuous compliance scanning
-- CIS/STIG-style profile support
-- Compliance evidence export (JSON, SARIF, CSV)
-
-8. Extensibility
-- Provider SDK with strict idempotency contracts
-- Event hooks and webhooks
-- Versioned module registry
-- Backward-compatible provider protocol guarantees
-
-9. UX and operations
-- Unified CLI (`init`, `validate`, `plan`, `apply`, `observe`, `drift`, `policy`)
-- Web UI for run history, approvals, and compliance posture
-- REST/gRPC APIs for automation and ecosystem integration
+- Pre-flight checks before execution
+- Runtime assertions and post-change verification gates
+- Desired-state snapshot storage
+- Observed-state collection and normalization
+- Continuous drift detection
+- Drift alerting with severity levels
+- Policy-driven auto-remediation of approved drift
+- Safe mode to block high-risk automatic changes
+- Run history with full audit trail
+- Immutable event logs for every action
 - Structured logs, metrics, traces, and run replay
-
-## Feature Parity and Better-Than-Parity Goals
-
-1. Chef-like strengths to include
-- Rich resource model
-- Strong convergence semantics
-- Mature policy/compliance workflows
-
-2. Ansible-like strengths to include
-- Fast onboarding and agentless bootstrap
-- Human-readable run output
-- Flexible inventory-driven orchestration
-
-3. Puppet-like strengths to include
-- Continuous desired-state enforcement with agent mode
-- Clear model for drift remediation
-- Scalable environment and role separation
-
-4. Gaps to fix
-- Remove DSL lock-in by using open typed schemas.
-- Make plans deterministic and reviewable by default.
-- Enforce provider quality via conformance tests.
-- Provide a single control plane for both push and pull models.
-
-## MVP Feature Cut (v0.1)
-
-- Typed config + schema validation
-- Core resources: `file`, `package`, `service`, `user`, `group`, `command`
-- Static inventory + SSH agentless execution
-- Plan/apply with diff output
-- Run logs + local state tracking
-- Minimal policy checks (blocking unsafe resources/commands)
-
-## v1.0 Minimum Product Bar
-
-- Agent mode converge loop
-- PostgreSQL-backed control plane
-- RBAC and audit logs
+- Unified CLI with `init`, `validate`, `plan`, `apply`, `observe`, `drift`, `policy`, and `doctor`
+- Web UI for plans, runs, drift, compliance, and approvals
+- REST API and gRPC API for automation integration
+- GitOps workflow support with signed plan artifacts
+- Pull-request plan comments and approval gates
+- Multi-environment promotions with policy checks
 - Secrets manager integrations
-- Drift dashboard and alerting
-- Provider SDK and signed providers
-- HA controller deployment reference
-
-## Non-Goals (Initial)
-
-- Full cloud provisioning replacement for Terraform
-- Monolithic built-in CMDB
-- Hard dependency on a hosted SaaS control plane
+- Short-lived execution credentials
+- mTLS between all components
+- Signed module and provider packages
+- Provenance metadata for modules and providers
+- Policy engine for pre-apply and runtime guardrails
+- Command/resource allowlists and deny policies
+- RBAC with scoped permissions
+- SSO and enterprise identity integration
+- Break-glass workflow with audited approvals
+- Compliance profile engine (CIS, STIG, custom)
+- Continuous compliance scans
+- Compliance evidence exports (JSON, SARIF, CSV)
+- Compliance exceptions with expiration and approvals
+- Provider SDK with conformance testing
+- Versioned provider protocol with backward compatibility guarantees
+- Sandboxed third-party providers with least privilege isolation
+- Module registry with versioning and signatures
+- Private and public registry support
+- Module dependency resolution and lockfiles
+- Event hooks and webhooks
+- Notification integrations for ChatOps and incident systems
+- Remote execution API for one-off fleet commands
+- Ephemeral execution workers for burst orchestration
+- Control plane scheduler and distributed worker queues
+- HA control plane reference architecture
+- PostgreSQL-backed state and event storage
+- Pluggable object storage for artifacts and logs
+- Backup and disaster recovery workflows
+- Scale profile for fleets from 10 to 10,000+ nodes
+- Performance profiling and bottleneck diagnostics
+- Cost-aware scheduling and throttling controls
+- Workspace and multi-tenant isolation
+- Policy and config linting
+- Built-in test harness for modules and policies
+- Ephemeral test environment runner for integration checks
+- Golden-run baselines and regression detection
+- Migration tooling from Chef cookbooks
+- Migration tooling from Ansible playbooks
+- Migration tooling from Puppet manifests
+- Compatibility shims for common legacy patterns
+- Import/export tooling for existing inventories and variables
+- Offline and air-gapped operation mode
+- Signed offline bundle creation and verification
+- Contributor-friendly local development environment
+- Public plugin and module certification pipeline
+- Stability channels for control plane and agents (`stable`, `candidate`, `edge`)
+- Zero-downtime upgrade orchestration for agents and controllers
+- N-1 protocol compatibility policy
+- Release artifact signing and SBOM generation

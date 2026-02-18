@@ -2,6 +2,18 @@
 
 This document specifies the Masterchef agent architecture and operating model.
 
+## Codex Delivery Standards
+
+- All code generated for Masterchef must be production-grade by default.
+- Implementations must prioritize modular design with clear boundaries between components.
+- Every feature must be extensible through stable interfaces and plugin/provider contracts.
+- All core paths must be designed for horizontal scalability and high-concurrency operation.
+- Code must be testable by design with dependency injection and deterministic behavior.
+- Every implemented feature must include automated tests (unit and integration as applicable).
+- Every implemented feature must be verified locally before commit, including lint, tests, and run-path validation.
+- Failures in verification block merge-quality completion until fixed.
+- Changes are committed directly to `main` after verification unless explicitly instructed otherwise.
+
 ## Goals
 
 - Support both agentless and agent-based workflows in one platform
