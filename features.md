@@ -284,13 +284,29 @@
 - Delegated administration per tenant and environment
 - Per-tenant rate limits and noisy-neighbor protections
 - Policy and config linting
+- Built-in style and best-practice analyzers for policies, modules, and provider code
+- Breaking-change detector for module and provider interface updates
+- API contract testing with backward/forward compatibility reports
+- Strict schema evolution rules with migration plans required for state model changes
+- Deterministic formatting and canonicalization for configs and plans
 - Built-in test harness for modules and policies
+- Mutation testing support for critical provider logic
+- Property-based testing harness for idempotency and convergence invariants
+- Load and soak test suites for control plane, scheduler, and execution workers
+- Performance regression gates with latency/throughput/error budget thresholds
+- Memory and resource leak detection in long-running components
+- Flake detection and quarantine pipeline for unstable tests
+- Test impact analysis to run only relevant suites while preserving safety
 - End-to-end scenario test runner for fleet simulations
 - Ephemeral test environment runner for integration checks
 - Golden-run baselines and regression detection
 - Continuous conformance suite for built-in providers
 - Deterministic snapshot tests for plan output stability
 - Fault-injection and chaos testing for orchestrator resilience
+- Reproducible local build and test pipeline with pinned toolchains
+- Automated dependency update bot with compatibility and performance verification
+- Release readiness scorecard aggregating quality, reliability, and performance signals
+- Release blocker policy that enforces minimum craftsmanship thresholds
 - Migration tooling from Chef cookbooks
 - Migration tooling from Ansible playbooks
 - Migration tooling from Puppet manifests
@@ -311,7 +327,11 @@
 - Local single-binary dev mode for control plane + worker + registry
 - Public plugin and module certification pipeline
 - Security and quality gates for publication to public registry
+- Craftsmanship badge tiers (bronze/silver/gold) based on objective quality metrics
+- Maintainer health metrics for modules/providers (test pass rate, issue latency, release cadence)
 - Documentation generator for modules, providers, and policy APIs
+- Executable documentation examples verified in CI
+- API docs with version-diff views and deprecation timelines
 - Deprecation warnings and automated upgrade assistant for breaking changes
 - Stability channels for control plane and agents (`stable`, `candidate`, `edge`)
 - Zero-downtime upgrade orchestration for agents and controllers
@@ -320,3 +340,4 @@
 - Long-term support (LTS) release channel and support matrix
 - Release artifact signing and SBOM generation
 - Vulnerability scanning and CVE policy enforcement on releases
+- Release provenance attestations linked to source commit, test runs, and build environment
