@@ -1747,6 +1747,102 @@ resources:
 	}
 }
 
+func TestFleetNodesEndpointPaginationAndCompactMode(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-fleet.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	st := state.New(tmp)
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "run-fleet-1",
+		StartedAt: time.Now().UTC().Add(-5 * time.Minute),
+		EndedAt:   time.Now().UTC().Add(-4 * time.Minute),
+		Status:    state.RunFailed,
+		Results: []state.ResourceRun{
+			{ResourceID: "deploy", Type: "file", Host: "node-a", Changed: true},
+			{ResourceID: "deploy", Type: "file", Host: "node-b", Changed: true},
+		},
+	}); err != nil {
+		t.Fatalf("save run for fleet endpoint failed: %v", err)
+	}
+
+	for _, eventBody := range []string{
+		`{"type":"external.alert","message":"node-a alert","fields":{"host":"node-a","workload":"payments"}}`,
+		`{"type":"external.alert","message":"node-b alert","fields":{"host":"node-b","workload":"search"}}`,
+	} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(eventBody)))
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusAccepted {
+			t.Fatalf("event ingest for fleet endpoint failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/fleet/nodes?limit=1", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fleet nodes first page failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var page1 struct {
+		Count      int    `json:"count"`
+		NextCursor string `json:"next_cursor"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &page1); err != nil {
+		t.Fatalf("decode fleet nodes page1 failed: %v", err)
+	}
+	if page1.Count != 1 || page1.NextCursor == "" {
+		t.Fatalf("expected paginated fleet response with next cursor, got %+v", page1)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/fleet/nodes?limit=1&cursor="+page1.NextCursor+"&compact=true", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fleet nodes second page compact failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), `"workloads"`) {
+		t.Fatalf("expected compact fleet response to omit workloads field: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader([]byte(`{"entity":"fleet_nodes","mode":"human","query":"host=node-a","limit":10}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fleet nodes query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

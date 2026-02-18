@@ -170,6 +170,13 @@ func (s *Server) queryEntityRecords(entity, baseDir string) ([]any, error) {
 			out = append(out, view)
 		}
 		return out, nil
+	case "fleet_nodes":
+		nodes := s.computeFleetNodes(baseDir)
+		out := make([]any, 0, len(nodes))
+		for _, node := range nodes {
+			out = append(out, node)
+		}
+		return out, nil
 	case "solution_packs":
 		packs := s.solutionPacks.List()
 		out := make([]any, 0, len(packs))
