@@ -53,7 +53,7 @@ func Run(p *planner.Plan) Report {
 		cov.Total++
 
 		switch step.Host.Transport {
-		case "local":
+		case "local", "winrm":
 			switch r.Type {
 			case "file":
 				it.Simulatable = true

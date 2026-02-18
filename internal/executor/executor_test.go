@@ -320,3 +320,44 @@ func TestApply_CommandUntilContains(t *testing.T) {
 		t.Fatalf("expected until condition failure, got %s", run.Status)
 	}
 }
+
+func TestApply_WinRMTransportLocalhostShim(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "winrm-file.txt")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "winrm"},
+				Resource: config.Resource{
+					ID:      "f-winrm",
+					Type:    "file",
+					Host:    "localhost",
+					Path:    target,
+					Content: "winrm-localhost-shim\n",
+				},
+			},
+			{
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "winrm"},
+				Resource: config.Resource{
+					ID:      "c-winrm",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "echo winrm-command",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded {
+		t.Fatalf("expected winrm localhost shim run to succeed, got %s", run.Status)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("expected winrm file resource to materialize file: %v", err)
+	}
+}

@@ -79,3 +79,27 @@ func TestRun_FileDiffPatch(t *testing.T) {
 		t.Fatalf("expected patch diff in report: %+v", r)
 	}
 }
+
+func TestRun_WinRMSimulation(t *testing.T) {
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "winrm.txt")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "win-host", Transport: "winrm"},
+				Resource: config.Resource{
+					ID:      "file-winrm",
+					Type:    "file",
+					Host:    "win-host",
+					Path:    f,
+					Content: "hello",
+				},
+			},
+		},
+	}
+	r := Run(p)
+	if r.Simulatable != 1 || r.NonSimulatable != 0 {
+		t.Fatalf("expected winrm to be simulatable, got %+v", r)
+	}
+}
