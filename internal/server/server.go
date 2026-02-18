@@ -1321,6 +1321,123 @@ func (s *Server) handleRunAction(baseDir string) http.HandlerFunc {
 				"phase_breakdown": timelineSummary(items),
 				"count":           len(items),
 			})
+		case "retry":
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			run, err := state.New(baseDir).GetRun(runID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			type reqBody struct {
+				ConfigPath     string `json:"config_path"`
+				Priority       string `json:"priority"`
+				Force          bool   `json:"force"`
+				IdempotencyKey string `json:"idempotency_key"`
+			}
+			var req reqBody
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+			if run.Status == state.RunSucceeded && !req.Force {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "run succeeded; set force=true to retry anyway"})
+				return
+			}
+			configPath := strings.TrimSpace(req.ConfigPath)
+			if configPath == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "config_path is required for retry"})
+				return
+			}
+			if !filepath.IsAbs(configPath) {
+				configPath = filepath.Join(baseDir, configPath)
+			}
+			if _, err := os.Stat(configPath); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
+				return
+			}
+			key := strings.TrimSpace(req.IdempotencyKey)
+			if key == "" {
+				key = "retry-" + runID + "-" + time.Now().UTC().Format("20060102T150405")
+			}
+			job, err := s.queue.Enqueue(configPath, key, req.Force, req.Priority)
+			if err != nil {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusAccepted, map[string]any{
+				"action":        "retry",
+				"source_run_id": runID,
+				"job":           job,
+			})
+		case "rollback":
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			run, err := state.New(baseDir).GetRun(runID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			type reqBody struct {
+				RollbackConfigPath string `json:"rollback_config_path"`
+				Priority           string `json:"priority"`
+				Force              bool   `json:"force"`
+				Reason             string `json:"reason"`
+				IdempotencyKey     string `json:"idempotency_key"`
+			}
+			var req reqBody
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+			if run.Status == state.RunSucceeded && !req.Force {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "run succeeded; set force=true to allow rollback"})
+				return
+			}
+			configPath := strings.TrimSpace(req.RollbackConfigPath)
+			if configPath == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "rollback_config_path is required"})
+				return
+			}
+			if !filepath.IsAbs(configPath) {
+				configPath = filepath.Join(baseDir, configPath)
+			}
+			if _, err := os.Stat(configPath); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("rollback_config_path not found: %v", err)})
+				return
+			}
+			key := strings.TrimSpace(req.IdempotencyKey)
+			if key == "" {
+				key = "rollback-" + runID + "-" + time.Now().UTC().Format("20060102T150405")
+			}
+			priority := req.Priority
+			if strings.TrimSpace(priority) == "" {
+				priority = "high"
+			}
+			job, err := s.queue.Enqueue(configPath, key, req.Force, priority)
+			if err != nil {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+				return
+			}
+			s.recordEvent(control.Event{
+				Type:    "run.rollback.requested",
+				Message: "rollback requested from run context",
+				Fields: map[string]any{
+					"run_id":      runID,
+					"job_id":      job.ID,
+					"reason":      strings.TrimSpace(req.Reason),
+					"config_path": configPath,
+				},
+			}, true)
+			writeJSON(w, http.StatusAccepted, map[string]any{
+				"action":        "rollback",
+				"source_run_id": runID,
+				"job":           job,
+			})
 		case "export":
 			if r.Method != http.MethodPost {
 				w.WriteHeader(http.StatusMethodNotAllowed)
@@ -1622,6 +1739,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
 			"GET /v1/runs/{id}/timeline",
+			"POST /v1/runs/{id}/retry",
+			"POST /v1/runs/{id}/rollback",
 			"POST /v1/runs/{id}/export",
 			"POST /v1/runs/{id}/triage-bundle",
 			"GET /v1/jobs",
