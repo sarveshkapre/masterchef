@@ -43,6 +43,8 @@ type Queue struct {
 	emergencyStop   bool
 	emergencySince  time.Time
 	emergencyReason string
+	paused          bool
+	running         int
 }
 
 func NewQueue(buffer int) *Queue {
@@ -144,6 +146,14 @@ func (q *Queue) StartWorker(ctx context.Context, exec Executor) {
 	go func() {
 		defer close(q.workerShutdown)
 		for {
+			if q.IsPaused() {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(100 * time.Millisecond):
+					continue
+				}
+			}
 			select {
 			case <-ctx.Done():
 				return
@@ -167,6 +177,7 @@ func (q *Queue) runOne(id string, exec Executor) {
 	}
 	j.Status = JobRunning
 	j.StartedAt = time.Now().UTC()
+	q.running++
 	cp := *j
 	q.mu.Unlock()
 	q.publish(cp)
@@ -186,6 +197,9 @@ func (q *Queue) runOne(id string, exec Executor) {
 		j.Status = JobSucceeded
 	}
 	j.EndedAt = time.Now().UTC()
+	if q.running > 0 {
+		q.running--
+	}
 	cp = *j
 	q.mu.Unlock()
 	q.publish(cp)
@@ -242,6 +256,65 @@ func (q *Queue) EmergencyStatus() EmergencyStatus {
 		Active: q.emergencyStop,
 		Since:  q.emergencySince,
 		Reason: q.emergencyReason,
+	}
+}
+
+type QueueControlStatus struct {
+	Paused  bool `json:"paused"`
+	Running int  `json:"running"`
+	Pending int  `json:"pending"`
+}
+
+func (q *Queue) Pause() QueueControlStatus {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.paused = true
+	return QueueControlStatus{
+		Paused:  q.paused,
+		Running: q.running,
+		Pending: len(q.pending),
+	}
+}
+
+func (q *Queue) Resume() QueueControlStatus {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.paused = false
+	return QueueControlStatus{
+		Paused:  q.paused,
+		Running: q.running,
+		Pending: len(q.pending),
+	}
+}
+
+func (q *Queue) IsPaused() bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.paused
+}
+
+func (q *Queue) ControlStatus() QueueControlStatus {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return QueueControlStatus{
+		Paused:  q.paused,
+		Running: q.running,
+		Pending: len(q.pending),
+	}
+}
+
+func (q *Queue) SafeDrain(timeout time.Duration) (QueueControlStatus, error) {
+	q.Pause()
+	deadline := time.Now().Add(timeout)
+	for {
+		st := q.ControlStatus()
+		if st.Running == 0 {
+			return st, nil
+		}
+		if timeout > 0 && time.Now().After(deadline) {
+			return st, errors.New("safe-drain timeout waiting for running jobs to complete")
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 }
 

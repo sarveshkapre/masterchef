@@ -91,3 +91,26 @@ func TestQueue_EmergencyStopBlocksNewJobs(t *testing.T) {
 		t.Fatalf("expected forced enqueue to bypass emergency stop: %v", err)
 	}
 }
+
+func TestQueue_PauseResumeAndControlStatus(t *testing.T) {
+	q := NewQueue(8)
+	st := q.Pause()
+	if !st.Paused {
+		t.Fatalf("expected paused state")
+	}
+	st = q.Resume()
+	if st.Paused {
+		t.Fatalf("expected resumed state")
+	}
+}
+
+func TestQueue_SafeDrain_NoRunningJobs(t *testing.T) {
+	q := NewQueue(8)
+	st, err := q.SafeDrain(100 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("unexpected safe-drain error: %v", err)
+	}
+	if !st.Paused {
+		t.Fatalf("safe-drain should pause queue")
+	}
+}

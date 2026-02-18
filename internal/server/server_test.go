@@ -103,4 +103,19 @@ resources:
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected conflict when emergency stop enabled: got=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	body = []byte(`{"action":"pause"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/queue", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("queue pause status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/queue", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("queue status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

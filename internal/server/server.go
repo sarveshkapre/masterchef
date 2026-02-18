@@ -68,6 +68,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
+	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
@@ -367,6 +368,47 @@ func (s *Server) handleEmergencyStop(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		writeJSON(w, http.StatusOK, st)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleQueueControl(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Action         string `json:"action"` // pause|resume|drain
+		TimeoutSeconds int    `json:"timeout_seconds"`
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.queue.ControlStatus())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		switch req.Action {
+		case "pause":
+			writeJSON(w, http.StatusOK, s.queue.Pause())
+		case "resume":
+			writeJSON(w, http.StatusOK, s.queue.Resume())
+		case "drain":
+			if req.TimeoutSeconds <= 0 {
+				req.TimeoutSeconds = 30
+			}
+			st, err := s.queue.SafeDrain(time.Duration(req.TimeoutSeconds) * time.Second)
+			if err != nil {
+				writeJSON(w, http.StatusRequestTimeout, map[string]any{
+					"error":  err.Error(),
+					"status": st,
+				})
+				return
+			}
+			writeJSON(w, http.StatusOK, st)
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
+		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
