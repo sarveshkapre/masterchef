@@ -111,6 +111,7 @@ Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-resources`, `-tags`, and `-skip-tags`.
 Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, and `until_contains`.
 Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.
+Event bus integrations for webhook, Kafka, and NATS targets are available via `/v1/event-bus/targets`, `/v1/event-bus/publish`, and `/v1/event-bus/deliveries`.
 Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.

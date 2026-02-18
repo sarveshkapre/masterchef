@@ -53,6 +53,7 @@ type Server struct {
 	facts              *control.FactCache
 	varSources         *control.VariableSourceRegistry
 	plugins            *control.PluginExtensionStore
+	eventBus           *control.EventBus
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -103,6 +104,7 @@ func New(addr, baseDir string) *Server {
 	facts := control.NewFactCache(5 * time.Minute)
 	varSources := control.NewVariableSourceRegistry(baseDir)
 	plugins := control.NewPluginExtensionStore()
+	eventBus := control.NewEventBus()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -145,6 +147,7 @@ func New(addr, baseDir string) *Server {
 		facts:              facts,
 		varSources:         varSources,
 		plugins:            plugins,
+		eventBus:           eventBus,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -202,6 +205,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/vars/sources/resolve", s.handleVariableSourceResolve)
 	mux.HandleFunc("/v1/plugins/extensions", s.handlePluginExtensions)
 	mux.HandleFunc("/v1/plugins/extensions/", s.handlePluginExtensionAction)
+	mux.HandleFunc("/v1/event-bus/targets", s.handleEventBusTargets)
+	mux.HandleFunc("/v1/event-bus/targets/", s.handleEventBusTargetAction)
+	mux.HandleFunc("/v1/event-bus/deliveries", s.handleEventBusDeliveries)
+	mux.HandleFunc("/v1/event-bus/publish", s.handleEventBusPublish)
 	mux.HandleFunc("/v1/pillar/resolve", s.handlePillarResolve)
 	mux.HandleFunc("/v1/facts/cache", s.handleFactCache)
 	mux.HandleFunc("/v1/facts/cache/", s.handleFactCacheNode)
@@ -1819,6 +1826,12 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/plugins/extensions/{id}",
 			"POST /v1/plugins/extensions/{id}/enable",
 			"POST /v1/plugins/extensions/{id}/disable",
+			"GET /v1/event-bus/targets",
+			"POST /v1/event-bus/targets",
+			"POST /v1/event-bus/targets/{id}/enable",
+			"POST /v1/event-bus/targets/{id}/disable",
+			"GET /v1/event-bus/deliveries",
+			"POST /v1/event-bus/publish",
 			"POST /v1/pillar/resolve",
 			"GET /v1/facts/cache",
 			"POST /v1/facts/cache",
@@ -3337,6 +3350,9 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 
 func (s *Server) recordEvent(e control.Event, evaluateRules bool) {
 	s.events.Append(e)
+	if s.eventBus != nil {
+		_ = s.eventBus.Publish(e)
+	}
 	if s.alerts != nil {
 		if res, ok := s.alerts.IngestEvent(e); ok && s.notifications != nil {
 			_ = s.notifications.NotifyAlert(res.Item)
