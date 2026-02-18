@@ -255,17 +255,19 @@ resources:
 	}
 
 	rr = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/v1/activity", nil)
+	req = httptest.NewRequest(http.MethodGet, "/v1/activity?type_prefix=queue.&contains=saturation", nil)
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("activity fetch failed: %d body=%s", rr.Code, rr.Body.String())
 	}
-	var events []map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &events); err != nil {
+	var activity struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &activity); err != nil {
 		t.Fatalf("activity decode failed: %v", err)
 	}
 	found := false
-	for _, evt := range events {
+	for _, evt := range activity.Items {
 		if evt["type"] == "queue.saturation" {
 			found = true
 			break
@@ -273,6 +275,75 @@ resources:
 	}
 	if !found {
 		t.Fatalf("expected queue.saturation event in activity stream")
+	}
+}
+
+func TestActivityEndpointFiltering(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-activity.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(`{"type":"control.audit.user","message":"user approved rollout","fields":{"actor":"alice"}}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("audit event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(`{"type":"external.alert","message":"disk warning","fields":{"sev":"high"}}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("alert event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	since := time.Now().UTC().Add(-1 * time.Minute).Format(time.RFC3339)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/activity?since="+since+"&type_prefix=control.audit&contains=approved&limit=10&order=desc", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("activity query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Count int `json:"count"`
+		Items []struct {
+			Type string `json:"type"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("activity query decode failed: %v", err)
+	}
+	if resp.Count != 1 || len(resp.Items) != 1 || resp.Items[0].Type != "control.audit.user" {
+		t.Fatalf("unexpected filtered activity result: %+v body=%s", resp, rr.Body.String())
 	}
 }
 

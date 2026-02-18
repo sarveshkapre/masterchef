@@ -229,8 +229,50 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (s *Server) handleActivity(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.events.List())
+func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	limit := 200
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	var since time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("since")); raw != "" {
+		if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
+			since = parsed
+		}
+	}
+	var until time.Time
+	if raw := strings.TrimSpace(r.URL.Query().Get("until")); raw != "" {
+		if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
+			until = parsed
+		}
+	}
+	desc := true
+	if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("order")), "asc") {
+		desc = false
+	}
+	items := s.events.Query(control.EventQuery{
+		Since:      since,
+		Until:      until,
+		TypePrefix: r.URL.Query().Get("type_prefix"),
+		Contains:   r.URL.Query().Get("contains"),
+		Limit:      limit,
+		Desc:       desc,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":  items,
+		"count":  len(items),
+		"limit":  limit,
+		"order":  map[bool]string{true: "desc", false: "asc"}[desc],
+		"since":  since,
+		"until":  until,
+		"filter": map[string]any{"type_prefix": r.URL.Query().Get("type_prefix"), "contains": r.URL.Query().Get("contains")},
+	})
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {

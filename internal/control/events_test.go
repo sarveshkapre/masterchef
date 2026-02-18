@@ -1,6 +1,9 @@
 package control
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestEventStore_RespectsLimit(t *testing.T) {
 	s := NewEventStore(3)
@@ -28,5 +31,27 @@ func TestEventStore_Replace(t *testing.T) {
 	}
 	if out[0].Type != "new2" || out[1].Type != "new3" {
 		t.Fatalf("unexpected replaced events: %#v", out)
+	}
+}
+
+func TestEventStore_QueryFiltersAndOrdering(t *testing.T) {
+	s := NewEventStore(10)
+	base := time.Now().UTC().Add(-10 * time.Minute)
+	s.Append(Event{Time: base.Add(1 * time.Minute), Type: "control.audit", Message: "user updated freeze"})
+	s.Append(Event{Time: base.Add(2 * time.Minute), Type: "external.alert", Message: "disk pressure"})
+	s.Append(Event{Time: base.Add(3 * time.Minute), Type: "control.audit", Message: "user approved change"})
+
+	out := s.Query(EventQuery{
+		Since:      base.Add(90 * time.Second),
+		TypePrefix: "control.",
+		Contains:   "approved",
+		Limit:      5,
+		Desc:       true,
+	})
+	if len(out) != 1 {
+		t.Fatalf("expected one filtered event, got %d", len(out))
+	}
+	if out[0].Message != "user approved change" {
+		t.Fatalf("unexpected filtered event: %+v", out[0])
 	}
 }

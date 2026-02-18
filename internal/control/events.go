@@ -1,6 +1,7 @@
 package control
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -16,6 +17,15 @@ type EventStore struct {
 	mu     sync.RWMutex
 	events []Event
 	limit  int
+}
+
+type EventQuery struct {
+	Since      time.Time
+	Until      time.Time
+	TypePrefix string
+	Contains   string
+	Limit      int
+	Desc       bool
 }
 
 func NewEventStore(limit int) *EventStore {
@@ -63,4 +73,58 @@ func (s *EventStore) Replace(items []Event) {
 	out := make([]Event, len(items))
 	copy(out, items)
 	s.events = out
+}
+
+func (s *EventStore) Query(q EventQuery) []Event {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	typePrefix := strings.ToLower(strings.TrimSpace(q.TypePrefix))
+	contains := strings.ToLower(strings.TrimSpace(q.Contains))
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+
+	out := make([]Event, 0, minInt(limit, len(s.events)))
+	appendIfMatch := func(e Event) bool {
+		if !q.Since.IsZero() && e.Time.Before(q.Since) {
+			return false
+		}
+		if !q.Until.IsZero() && e.Time.After(q.Until) {
+			return false
+		}
+		if typePrefix != "" && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(e.Type)), typePrefix) {
+			return false
+		}
+		if contains != "" {
+			msg := strings.ToLower(e.Message)
+			typ := strings.ToLower(e.Type)
+			if !strings.Contains(msg, contains) && !strings.Contains(typ, contains) {
+				return false
+			}
+		}
+		out = append(out, e)
+		return len(out) >= limit
+	}
+	if q.Desc {
+		for i := len(s.events) - 1; i >= 0; i-- {
+			if appendIfMatch(s.events[i]) {
+				break
+			}
+		}
+		return out
+	}
+	for i := 0; i < len(s.events); i++ {
+		if appendIfMatch(s.events[i]) {
+			break
+		}
+	}
+	return out
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
