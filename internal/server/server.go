@@ -33,6 +33,7 @@ type Server struct {
 	rules       *control.RuleEngine
 	webhooks    *control.WebhookDispatcher
 	channels    *control.ChannelManager
+	schemaMigs  *control.SchemaMigrationManager
 	objectStore storage.ObjectStore
 	events      *control.EventStore
 	runCancel   context.CancelFunc
@@ -64,6 +65,7 @@ func New(addr, baseDir string) *Server {
 	rules := control.NewRuleEngine()
 	webhooks := control.NewWebhookDispatcher(5000)
 	channels := control.NewChannelManager()
+	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -87,6 +89,7 @@ func New(addr, baseDir string) *Server {
 		rules:       rules,
 		webhooks:    webhooks,
 		channels:    channels,
+		schemaMigs:  schemaMigs,
 		objectStore: objectStore,
 		events:      events,
 		metrics:     map[string]int64{},
@@ -147,6 +150,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
+	mux.HandleFunc("/v1/control/schema-migrations", s.handleSchemaMigrations)
 	mux.HandleFunc("/v1/control/preflight", s.handlePreflight)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
@@ -736,6 +740,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/canary-health",
 			"POST /v1/control/channels",
 			"GET /v1/control/channels",
+			"POST /v1/control/schema-migrations",
+			"GET /v1/control/schema-migrations",
 			"POST /v1/control/preflight",
 			"POST /v1/control/queue",
 			"GET /v1/control/queue",
@@ -1641,6 +1647,51 @@ func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, result)
 		case "support_matrix":
 			writeJSON(w, http.StatusOK, control.BuildSupportMatrix(req.ControlPlaneProtocol))
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
+		}
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleSchemaMigrations(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Action      string `json:"action"` // check|apply
+		FromVersion int    `json:"from_version"`
+		ToVersion   int    `json:"to_version"`
+		PlanRef     string `json:"plan_ref"`
+		Notes       string `json:"notes"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.schemaMigs.Status())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		switch req.Action {
+		case "check":
+			writeJSON(w, http.StatusOK, s.schemaMigs.Check(req.FromVersion, req.ToVersion))
+		case "apply":
+			rec, err := s.schemaMigs.Apply(req.FromVersion, req.ToVersion, strings.TrimSpace(req.PlanRef), strings.TrimSpace(req.Notes))
+			if err != nil {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+				return
+			}
+			s.events.Append(control.Event{
+				Type:    "control.schema_migration.applied",
+				Message: "schema migration applied",
+				Fields: map[string]any{
+					"migration_id": rec.ID,
+					"from":         rec.FromVersion,
+					"to":           rec.ToVersion,
+					"plan_ref":     rec.PlanRef,
+				},
+			})
+			writeJSON(w, http.StatusOK, rec)
 		default:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
 		}
