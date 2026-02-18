@@ -27,6 +27,7 @@ type Server struct {
 	workflows   *control.WorkflowStore
 	assocs      *control.AssociationStore
 	commands    *control.CommandIngestStore
+	canaries    *control.CanaryStore
 	objectStore storage.ObjectStore
 	events      *control.EventStore
 	runCancel   context.CancelFunc
@@ -54,6 +55,7 @@ func New(addr, baseDir string) *Server {
 	workflows := control.NewWorkflowStore(queue, templates)
 	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
+	canaries := control.NewCanaryStore(queue)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -72,6 +74,7 @@ func New(addr, baseDir string) *Server {
 		workflows:   workflows,
 		assocs:      assocs,
 		commands:    commands,
+		canaries:    canaries,
 		objectStore: objectStore,
 		events:      events,
 		metrics:     map[string]int64{},
@@ -118,6 +121,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/freeze", s.handleFreeze)
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
+	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
@@ -126,6 +130,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/workflows/", s.handleWorkflowAction)
 	mux.HandleFunc("/v1/workflow-runs", s.handleWorkflowRuns)
 	mux.HandleFunc("/v1/workflow-runs/", s.handleWorkflowRunByID)
+	mux.HandleFunc("/v1/canaries", s.handleCanaries(baseDir))
+	mux.HandleFunc("/v1/canaries/", s.handleCanaryAction)
 	mux.HandleFunc("/v1/associations", s.handleAssociations(baseDir))
 	mux.HandleFunc("/v1/associations/", s.handleAssociationAction)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
@@ -143,6 +149,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	if s.scheduler != nil {
 		s.scheduler.Shutdown()
+	}
+	if s.canaries != nil {
+		s.canaries.Shutdown()
 	}
 	if s.queue != nil {
 		s.queue.Wait()
@@ -1085,6 +1094,121 @@ func (s *Server) handleCapacity(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleCanaries(baseDir string) http.HandlerFunc {
+	type createReq struct {
+		Name             string `json:"name"`
+		ConfigPath       string `json:"config_path"`
+		Priority         string `json:"priority"`
+		IntervalSeconds  int    `json:"interval_seconds"`
+		JitterSeconds    int    `json:"jitter_seconds"`
+		FailureThreshold int    `json:"failure_threshold"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, s.canaries.List())
+		case http.MethodPost:
+			var req createReq
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+			if strings.TrimSpace(req.ConfigPath) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "config_path is required"})
+				return
+			}
+			if !filepath.IsAbs(req.ConfigPath) {
+				req.ConfigPath = filepath.Join(baseDir, req.ConfigPath)
+			}
+			if _, err := os.Stat(req.ConfigPath); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
+				return
+			}
+			if req.IntervalSeconds <= 0 {
+				req.IntervalSeconds = 60
+			}
+			canary, err := s.canaries.Create(control.CanaryCreate{
+				Name:             req.Name,
+				ConfigPath:       req.ConfigPath,
+				Priority:         req.Priority,
+				Interval:         time.Duration(req.IntervalSeconds) * time.Second,
+				Jitter:           time.Duration(req.JitterSeconds) * time.Second,
+				FailureThreshold: req.FailureThreshold,
+			})
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			s.events.Append(control.Event{
+				Type:    "canary.created",
+				Message: "synthetic canary created",
+				Fields: map[string]any{
+					"canary_id": canary.ID,
+					"name":      canary.Name,
+				},
+			})
+			writeJSON(w, http.StatusCreated, canary)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleCanaryAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/canaries/{id} or /v1/canaries/{id}/enable|disable
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 3 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid canary action path"})
+		return
+	}
+	id := parts[2]
+	if len(parts) == 3 {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		canary, err := s.canaries.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, canary)
+		return
+	}
+	action := parts[3]
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	switch action {
+	case "enable":
+		canary, err := s.canaries.SetEnabled(id, true)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, canary)
+	case "disable":
+		canary, err := s.canaries.SetEnabled(id, false)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, canary)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown canary action"})
+	}
+}
+
+func (s *Server) handleCanaryHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.canaries.HealthSummary())
 }
 
 func (s *Server) handleQueueControl(w http.ResponseWriter, r *http.Request) {
