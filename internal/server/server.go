@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -147,6 +148,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
 	mux.HandleFunc("/v1/control/freeze", s.handleFreeze)
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
+	mux.HandleFunc("/v1/control/handoff", s.handleHandoff)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
@@ -735,6 +737,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/freeze",
 			"POST /v1/control/maintenance",
 			"GET /v1/control/maintenance",
+			"GET /v1/control/handoff",
 			"POST /v1/control/capacity",
 			"GET /v1/control/capacity",
 			"GET /v1/control/canary-health",
@@ -1437,6 +1440,81 @@ func (s *Server) handleMaintenance(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleHandoff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	queueStatus := s.queue.ControlStatus()
+	emergency := s.queue.EmergencyStatus()
+	freeze := s.queue.FreezeStatus()
+	maintenance := s.scheduler.MaintenanceStatus()
+	canary := s.canaries.HealthSummary()
+	capacity := s.scheduler.CapacityStatus()
+
+	jobs := s.queue.List()
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+	})
+	activeRollouts := make([]control.Job, 0, len(jobs))
+	for _, job := range jobs {
+		if job.Status != control.JobPending && job.Status != control.JobRunning {
+			continue
+		}
+		activeRollouts = append(activeRollouts, job)
+		if len(activeRollouts) >= 25 {
+			break
+		}
+	}
+
+	risks := make([]string, 0)
+	blocked := make([]string, 0)
+	if emergency.Active {
+		risks = append(risks, "Emergency stop is active; all new applies are blocked.")
+		blocked = append(blocked, "new applies blocked by emergency stop")
+	}
+	if freeze.Active {
+		risks = append(risks, "Change freeze is active until "+freeze.Until.Format(time.RFC3339)+".")
+		blocked = append(blocked, "new applies blocked by change freeze")
+	}
+	if queueStatus.Paused {
+		risks = append(risks, "Queue is paused; dispatch will not progress until resumed.")
+		blocked = append(blocked, "queue dispatch paused")
+	}
+	if queueStatus.Pending >= capacity.MaxBacklog {
+		risks = append(risks, "Queue backlog at/above configured capacity threshold.")
+	}
+	if status, _ := canary["status"].(string); status == "degraded" {
+		risks = append(risks, "Synthetic canary health is degraded.")
+	}
+	activeMaintenance := make([]control.MaintenanceTarget, 0)
+	for _, mt := range maintenance {
+		if mt.Enabled {
+			activeMaintenance = append(activeMaintenance, mt)
+		}
+	}
+	if len(activeMaintenance) > 0 {
+		blocked = append(blocked, "scheduled dispatch suppressed by maintenance targets")
+	}
+	if len(risks) == 0 {
+		risks = append(risks, "No critical control-plane risks detected at handoff time.")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"generated_at":          time.Now().UTC(),
+		"queue":                 queueStatus,
+		"emergency_stop":        emergency,
+		"freeze":                freeze,
+		"maintenance":           maintenance,
+		"canary_health":         canary,
+		"active_rollouts":       activeRollouts,
+		"blocked_actions":       blocked,
+		"risks":                 risks,
+		"handoff_checklist":     []string{"review blocked actions", "review active rollouts", "acknowledge degraded canaries", "confirm queue mode before handoff"},
+		"next_operator_actions": []string{"clear stale freeze/emergency flags if no longer needed", "resume queue if paused intentionally", "triage unhealthy canaries before major rollout"},
+	})
 }
 
 func (s *Server) handleCapacity(w http.ResponseWriter, r *http.Request) {

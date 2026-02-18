@@ -79,6 +79,7 @@ Current control-plane DR surface includes backup, point-in-time restore, and aut
 API contract governance includes deprecation lifecycle checks plus an upgrade-assistant endpoint for migration guidance.
 Schema evolution controls enforce migration plans and stepwise compatibility for control-plane state model upgrades.
 Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to detect deterministic plan regressions.
+On-call handoff packages are available via `GET /v1/control/handoff` to summarize risks, active rollouts, and blocked actions.
 
 ## Release Tooling (Current CLI)
 
