@@ -357,6 +357,95 @@ resources:
 	}
 }
 
+func TestControlChecklistEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-checklist.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	createBody := []byte(`{"action":"create","name":"prod migration checklist","risk_level":"high","context":{"change_id":"cr-100"}}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/control/checklists", bytes.NewReader(createBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("checklist create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var created struct {
+		ID    string `json:"id"`
+		Items []struct {
+			ID       string `json:"id"`
+			Required bool   `json:"required"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+		t.Fatalf("checklist decode failed: %v", err)
+	}
+	if created.ID == "" || len(created.Items) == 0 {
+		t.Fatalf("expected checklist id/items")
+	}
+
+	firstRequired := ""
+	for _, item := range created.Items {
+		if item.Required {
+			firstRequired = item.ID
+			break
+		}
+	}
+	if firstRequired == "" {
+		t.Fatalf("expected required checklist item")
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/checklists/"+created.ID+"/complete", bytes.NewReader([]byte(`{"item_id":"`+firstRequired+`","notes":"validated"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("checklist complete failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/checklists/"+created.ID, nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("checklist get failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader([]byte(`{"entity":"checklists","mode":"human","query":"name~=migration","limit":10}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("checklists query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestTemplateLaunchSurveyValidation(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

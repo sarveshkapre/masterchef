@@ -86,6 +86,7 @@ Run failure triage bundles are exportable via `POST /v1/runs/{id}/triage-bundle`
 Notification integrations are managed via `/v1/notifications/targets` and `/v1/notifications/deliveries` for ChatOps/incident/ticket routing.
 Change records and approval workflows are exposed via `/v1/change-records` to tie execution to ticketed change control.
 Self-service runbook catalog with approval-gated launches is available via `/v1/runbooks`.
+Operator checklist mode for high-risk changes is available via `/v1/control/checklists`.
 
 ## Release Tooling (Current CLI)
 

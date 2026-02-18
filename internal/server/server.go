@@ -37,6 +37,7 @@ type Server struct {
 	alerts        *control.AlertInbox
 	notifications *control.NotificationRouter
 	changeRecords *control.ChangeRecordStore
+	checklists    *control.ChecklistStore
 	channels      *control.ChannelManager
 	schemaMigs    *control.SchemaMigrationManager
 	objectStore   storage.ObjectStore
@@ -73,6 +74,7 @@ func New(addr, baseDir string) *Server {
 	alerts := control.NewAlertInbox()
 	notifications := control.NewNotificationRouter(5000)
 	changeRecords := control.NewChangeRecordStore()
+	checklists := control.NewChecklistStore()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
@@ -101,6 +103,7 @@ func New(addr, baseDir string) *Server {
 		alerts:        alerts,
 		notifications: notifications,
 		changeRecords: changeRecords,
+		checklists:    checklists,
 		channels:      channels,
 		schemaMigs:    schemaMigs,
 		objectStore:   objectStore,
@@ -168,6 +171,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/freeze", s.handleFreeze)
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
 	mux.HandleFunc("/v1/control/handoff", s.handleHandoff)
+	mux.HandleFunc("/v1/control/checklists", s.handleChecklists)
+	mux.HandleFunc("/v1/control/checklists/", s.handleChecklistAction)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
@@ -1265,6 +1270,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/maintenance",
 			"GET /v1/control/maintenance",
 			"GET /v1/control/handoff",
+			"GET /v1/control/checklists",
+			"POST /v1/control/checklists",
+			"GET /v1/control/checklists/{id}",
+			"POST /v1/control/checklists/{id}/complete",
 			"POST /v1/control/capacity",
 			"GET /v1/control/capacity",
 			"GET /v1/control/canary-health",
@@ -2277,6 +2286,84 @@ func (s *Server) handleHandoff(w http.ResponseWriter, r *http.Request) {
 		"handoff_checklist":     []string{"review blocked actions", "review active rollouts", "acknowledge degraded canaries", "confirm queue mode before handoff"},
 		"next_operator_actions": []string{"clear stale freeze/emergency flags if no longer needed", "resume queue if paused intentionally", "triage unhealthy canaries before major rollout"},
 	})
+}
+
+func (s *Server) handleChecklists(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Action    string         `json:"action"` // create
+		Name      string         `json:"name"`
+		RiskLevel string         `json:"risk_level"`
+		Context   map[string]any `json:"context"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.checklists.List())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		if req.Action == "" {
+			req.Action = "create"
+		}
+		if req.Action != "create" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" {
+			req.Name = "operator checklist"
+		}
+		item, err := s.checklists.Create(req.Name, req.RiskLevel, req.Context)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusCreated, item)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleChecklistAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/control/checklists/{id} or /v1/control/checklists/{id}/complete
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 4 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid checklist action path"})
+		return
+	}
+	id := parts[3]
+	if len(parts) == 4 {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		item, err := s.checklists.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+		return
+	}
+	if len(parts) < 5 || parts[4] != "complete" || r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		ItemID string `json:"item_id"`
+		Notes  string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	item, err := s.checklists.CompleteItem(id, req.ItemID, req.Notes)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (s *Server) handleCapacity(w http.ResponseWriter, r *http.Request) {
