@@ -32,6 +32,7 @@ type Server struct {
 	canaries    *control.CanaryStore
 	rules       *control.RuleEngine
 	webhooks    *control.WebhookDispatcher
+	channels    *control.ChannelManager
 	objectStore storage.ObjectStore
 	events      *control.EventStore
 	runCancel   context.CancelFunc
@@ -62,6 +63,7 @@ func New(addr, baseDir string) *Server {
 	canaries := control.NewCanaryStore(queue)
 	rules := control.NewRuleEngine()
 	webhooks := control.NewWebhookDispatcher(5000)
+	channels := control.NewChannelManager()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -84,6 +86,7 @@ func New(addr, baseDir string) *Server {
 		canaries:    canaries,
 		rules:       rules,
 		webhooks:    webhooks,
+		channels:    channels,
 		objectStore: objectStore,
 		events:      events,
 		metrics:     map[string]int64{},
@@ -137,6 +140,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
+	mux.HandleFunc("/v1/control/channels", s.handleChannels)
 	mux.HandleFunc("/v1/control/preflight", s.handlePreflight)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
@@ -1436,6 +1440,49 @@ func (s *Server) handleCanaryHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.canaries.HealthSummary())
+}
+
+func (s *Server) handleChannels(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Action               string `json:"action"` // set_channel|check_compatibility
+		Component            string `json:"component"`
+		Channel              string `json:"channel"`
+		ControlPlaneProtocol int    `json:"control_plane_protocol"`
+		AgentProtocol        int    `json:"agent_protocol"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{
+			"channels": s.channels.List(),
+			"policy":   "n-1",
+		})
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		switch req.Action {
+		case "set_channel":
+			item, err := s.channels.SetChannel(req.Component, req.Channel)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, item)
+		case "check_compatibility":
+			result := control.CheckNMinusOneCompatibility(req.ControlPlaneProtocol, req.AgentProtocol)
+			if !result.Compatible {
+				writeJSON(w, http.StatusConflict, result)
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
+		}
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
