@@ -130,6 +130,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/backup", s.handleBackup(baseDir))
 	mux.HandleFunc("/v1/control/backups", s.handleBackups)
 	mux.HandleFunc("/v1/control/restore", s.handleRestore(baseDir))
+	mux.HandleFunc("/v1/control/drill", s.handleDRDrill(baseDir))
 	mux.HandleFunc("/v1/webhooks", s.handleWebhooks)
 	mux.HandleFunc("/v1/webhooks/", s.handleWebhookAction)
 	mux.HandleFunc("/v1/webhooks/deliveries", s.handleWebhookDeliveries)
@@ -683,6 +684,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/backup",
 			"GET /v1/control/backups",
 			"POST /v1/control/restore",
+			"POST /v1/control/drill",
 			"POST /v1/control/emergency-stop",
 			"GET /v1/control/emergency-stop",
 			"POST /v1/control/freeze",

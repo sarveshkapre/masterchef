@@ -75,6 +75,8 @@ See `FEATURES.md`, `agents.md`, and `ROADMAP.md` for detailed scope.
 
 Active implementation phase.
 
+Current control-plane DR surface includes backup, restore, and automated restore-verification drills.
+
 ## Release Tooling (Current CLI)
 
 - `masterchef release sbom -root . -files . -o sbom.json`

@@ -1411,6 +1411,16 @@ resources:
 	}
 
 	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/drill", bytes.NewReader([]byte(`{"include_runs":true,"include_events":true}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("drill failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"status":"verified"`) {
+		t.Fatalf("expected drill verification status, body=%s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/control/restore", bytes.NewReader([]byte(`{"key":"`+backupResp.Object.Key+`","verify_only":true}`)))
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
