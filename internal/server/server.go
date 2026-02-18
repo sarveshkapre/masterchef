@@ -24,6 +24,7 @@ type Server struct {
 	scheduler  *control.Scheduler
 	templates  *control.TemplateStore
 	workflows  *control.WorkflowStore
+	assocs     *control.AssociationStore
 	commands   *control.CommandIngestStore
 	events     *control.EventStore
 	runCancel  context.CancelFunc
@@ -49,6 +50,7 @@ func New(addr, baseDir string) *Server {
 	scheduler := control.NewScheduler(queue)
 	templates := control.NewTemplateStore()
 	workflows := control.NewWorkflowStore(queue, templates)
+	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
 	events := control.NewEventStore(20_000)
 
@@ -58,6 +60,7 @@ func New(addr, baseDir string) *Server {
 		scheduler: scheduler,
 		templates: templates,
 		workflows: workflows,
+		assocs:    assocs,
 		commands:  commands,
 		events:    events,
 		metrics:   map[string]int64{},
@@ -109,6 +112,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/workflows/", s.handleWorkflowAction)
 	mux.HandleFunc("/v1/workflow-runs", s.handleWorkflowRuns)
 	mux.HandleFunc("/v1/workflow-runs/", s.handleWorkflowRunByID)
+	mux.HandleFunc("/v1/associations", s.handleAssociations(baseDir))
+	mux.HandleFunc("/v1/associations/", s.handleAssociationAction)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
 	mux.HandleFunc("/v1/schedules/", s.handleScheduleAction)
 	return s
@@ -661,6 +666,127 @@ func (s *Server) handleWorkflowRunByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, run)
+}
+
+func (s *Server) handleAssociations(baseDir string) http.HandlerFunc {
+	type createReq struct {
+		ConfigPath      string `json:"config_path"`
+		TargetKind      string `json:"target_kind"`
+		TargetName      string `json:"target_name"`
+		Priority        string `json:"priority"`
+		IntervalSeconds int    `json:"interval_seconds"`
+		JitterSeconds   int    `json:"jitter_seconds"`
+		Enabled         bool   `json:"enabled"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, s.assocs.List())
+		case http.MethodPost:
+			var req createReq
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+			if strings.TrimSpace(req.ConfigPath) == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "config_path is required"})
+				return
+			}
+			if !filepath.IsAbs(req.ConfigPath) {
+				req.ConfigPath = filepath.Join(baseDir, req.ConfigPath)
+			}
+			if _, err := os.Stat(req.ConfigPath); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
+				return
+			}
+			if req.IntervalSeconds <= 0 {
+				req.IntervalSeconds = 60
+			}
+
+			assoc, err := s.assocs.Create(control.AssociationCreate{
+				ConfigPath: req.ConfigPath,
+				TargetKind: req.TargetKind,
+				TargetName: req.TargetName,
+				Priority:   req.Priority,
+				Interval:   time.Duration(req.IntervalSeconds) * time.Second,
+				Jitter:     time.Duration(req.JitterSeconds) * time.Second,
+				Enabled:    req.Enabled,
+			})
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			s.events.Append(control.Event{
+				Type:    "association.created",
+				Message: "policy association created",
+				Fields: map[string]any{
+					"association_id": assoc.ID,
+					"target_kind":    assoc.TargetKind,
+					"target_name":    assoc.TargetName,
+				},
+			})
+			writeJSON(w, http.StatusCreated, assoc)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleAssociationAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/associations/{id}/revisions|enable|disable|replay
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 4 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid association action path"})
+		return
+	}
+	id := parts[2]
+	action := parts[3]
+
+	switch action {
+	case "revisions":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		rev, err := s.assocs.Revisions(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rev)
+	case "enable", "disable":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		assoc, err := s.assocs.SetEnabled(id, action == "enable")
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, assoc)
+	case "replay":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		type replayReq struct {
+			Revision int `json:"revision"`
+		}
+		var req replayReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		assoc, err := s.assocs.Replay(id, req.Revision)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, assoc)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown association action"})
+	}
 }
 
 func (s *Server) handleEmergencyStop(w http.ResponseWriter, r *http.Request) {
