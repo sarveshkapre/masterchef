@@ -1386,6 +1386,104 @@ resources:
 	}
 }
 
+func TestChangeRecordEndpointsLifecycle(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-change-record.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	createBody := []byte(`{"summary":"db rollout","ticket_system":"jira","ticket_id":"OPS-123","ticket_url":"https://tickets.local/OPS-123","config_path":"c.yaml","requested_by":"sre-user"}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/change-records", bytes.NewReader(createBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("change record create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var rec struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &rec); err != nil {
+		t.Fatalf("change record decode failed: %v", err)
+	}
+	if rec.ID == "" {
+		t.Fatalf("expected change record id")
+	}
+
+	approveBody := []byte(`{"actor":"approver-1","comment":"approved for window"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/change-records/"+rec.ID+"/approve", bytes.NewReader(approveBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("change record approve failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	jobBody := []byte(`{"config_path":"c.yaml"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(jobBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("job enqueue failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var job struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &job); err != nil {
+		t.Fatalf("job decode failed: %v", err)
+	}
+
+	attachBody := []byte(`{"job_id":"` + job.ID + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/change-records/"+rec.ID+"/attach-job", bytes.NewReader(attachBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("change record attach-job failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/change-records/"+rec.ID+"/complete", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("change record complete failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	queryBody := []byte(`{"entity":"change_records","mode":"human","query":"ticket_id=OPS-123","limit":10}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader(queryBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("change records query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestReleaseReadinessEndpoint(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

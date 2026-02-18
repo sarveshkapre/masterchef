@@ -35,6 +35,7 @@ type Server struct {
 	webhooks      *control.WebhookDispatcher
 	alerts        *control.AlertInbox
 	notifications *control.NotificationRouter
+	changeRecords *control.ChangeRecordStore
 	channels      *control.ChannelManager
 	schemaMigs    *control.SchemaMigrationManager
 	objectStore   storage.ObjectStore
@@ -69,6 +70,7 @@ func New(addr, baseDir string) *Server {
 	webhooks := control.NewWebhookDispatcher(5000)
 	alerts := control.NewAlertInbox()
 	notifications := control.NewNotificationRouter(5000)
+	changeRecords := control.NewChangeRecordStore()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
@@ -95,6 +97,7 @@ func New(addr, baseDir string) *Server {
 		webhooks:      webhooks,
 		alerts:        alerts,
 		notifications: notifications,
+		changeRecords: changeRecords,
 		channels:      channels,
 		schemaMigs:    schemaMigs,
 		objectStore:   objectStore,
@@ -139,6 +142,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/notifications/targets", s.handleNotificationTargets)
 	mux.HandleFunc("/v1/notifications/targets/", s.handleNotificationTargetAction)
 	mux.HandleFunc("/v1/notifications/deliveries", s.handleNotificationDeliveries)
+	mux.HandleFunc("/v1/change-records", s.handleChangeRecords)
+	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
@@ -419,6 +424,132 @@ func (s *Server) handleNotificationDeliveries(w http.ResponseWriter, r *http.Req
 		}
 	}
 	writeJSON(w, http.StatusOK, s.notifications.Deliveries(limit))
+}
+
+func (s *Server) handleChangeRecords(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Summary      string `json:"summary"`
+		TicketSystem string `json:"ticket_system"`
+		TicketID     string `json:"ticket_id"`
+		TicketURL    string `json:"ticket_url"`
+		ConfigPath   string `json:"config_path"`
+		RequestedBy  string `json:"requested_by"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.changeRecords.List())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		rec, err := s.changeRecords.Create(control.ChangeRecord{
+			Summary:      req.Summary,
+			TicketSystem: req.TicketSystem,
+			TicketID:     req.TicketID,
+			TicketURL:    req.TicketURL,
+			ConfigPath:   req.ConfigPath,
+			RequestedBy:  req.RequestedBy,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusCreated, rec)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleChangeRecordAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/change-records/{id} or /v1/change-records/{id}/approve|reject|attach-job|complete|fail
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 3 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid change record action path"})
+		return
+	}
+	id := parts[2]
+	if len(parts) == 3 {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		rec, err := s.changeRecords.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rec)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	action := parts[3]
+	switch action {
+	case "approve", "reject":
+		var req struct {
+			Actor   string `json:"actor"`
+			Comment string `json:"comment"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		var (
+			rec control.ChangeRecord
+			err error
+		)
+		if action == "approve" {
+			rec, err = s.changeRecords.Approve(id, req.Actor, req.Comment)
+		} else {
+			rec, err = s.changeRecords.Reject(id, req.Actor, req.Comment)
+		}
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rec)
+	case "attach-job":
+		var req struct {
+			JobID string `json:"job_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		rec, err := s.changeRecords.AttachJob(id, req.JobID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rec)
+	case "complete":
+		rec, err := s.changeRecords.MarkCompleted(id)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rec)
+	case "fail":
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		rec, err := s.changeRecords.MarkFailed(id, req.Reason)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, rec)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown change record action"})
+	}
 }
 
 func (s *Server) handleCommandIngest(baseDir string) http.HandlerFunc {
@@ -1099,6 +1230,14 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/notifications/targets/{id}/enable",
 			"POST /v1/notifications/targets/{id}/disable",
 			"GET /v1/notifications/deliveries",
+			"GET /v1/change-records",
+			"POST /v1/change-records",
+			"GET /v1/change-records/{id}",
+			"POST /v1/change-records/{id}/approve",
+			"POST /v1/change-records/{id}/reject",
+			"POST /v1/change-records/{id}/attach-job",
+			"POST /v1/change-records/{id}/complete",
+			"POST /v1/change-records/{id}/fail",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
 			"GET /v1/release/api-contract",
