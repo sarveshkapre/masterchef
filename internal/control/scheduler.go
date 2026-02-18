@@ -116,7 +116,7 @@ func (s *Scheduler) startLocked(sc *Schedule) {
 				timer.Stop()
 				return
 			case <-timer.C:
-				s.queue.Enqueue(sc.ConfigPath, "")
+				_, _ = s.queue.Enqueue(sc.ConfigPath, "", false)
 				s.mu.Lock()
 				if cur, ok := s.schedules[scheduleID]; ok {
 					now := time.Now().UTC()

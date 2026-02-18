@@ -87,4 +87,20 @@ resources:
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("template create status code: got=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	body = []byte(`{"enabled":true,"reason":"incident"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/emergency-stop", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("emergency stop status code: got=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	body = []byte(`{"config_path":"c.yaml"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected conflict when emergency stop enabled: got=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

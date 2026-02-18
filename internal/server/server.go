@@ -67,6 +67,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
+	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
@@ -158,7 +159,12 @@ func (s *Server) handleJobs(baseDir string) http.HandlerFunc {
 				return
 			}
 			key := r.Header.Get("Idempotency-Key")
-			job := s.queue.Enqueue(req.ConfigPath, key)
+			force := strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
+			job, err := s.queue.Enqueue(req.ConfigPath, key, force)
+			if err != nil {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+				return
+			}
 			writeJSON(w, http.StatusAccepted, job)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -304,7 +310,12 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		key := r.Header.Get("Idempotency-Key")
-		job := s.queue.Enqueue(t.ConfigPath, key)
+		force := strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
+		job, err := s.queue.Enqueue(t.ConfigPath, key, force)
+		if err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
 		s.events.Append(control.Event{
 			Type:    "template.launched",
 			Message: "template launch enqueued",
@@ -329,6 +340,35 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown template action"})
+	}
+}
+
+func (s *Server) handleEmergencyStop(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Enabled bool   `json:"enabled"`
+		Reason  string `json:"reason"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.queue.EmergencyStatus())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		st := s.queue.SetEmergencyStop(req.Enabled, req.Reason)
+		s.events.Append(control.Event{
+			Type:    "control.emergency_stop",
+			Message: "emergency stop toggled",
+			Fields: map[string]any{
+				"active": st.Active,
+				"reason": st.Reason,
+			},
+		})
+		writeJSON(w, http.StatusOK, st)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 

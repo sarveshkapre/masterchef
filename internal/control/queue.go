@@ -33,13 +33,16 @@ type Executor interface {
 }
 
 type Queue struct {
-	mu             sync.RWMutex
-	nextID         int64
-	jobs           map[string]*Job
-	byIdempotency  map[string]string
-	pending        chan string
-	workerShutdown chan struct{}
-	subscribers    []func(Job)
+	mu              sync.RWMutex
+	nextID          int64
+	jobs            map[string]*Job
+	byIdempotency   map[string]string
+	pending         chan string
+	workerShutdown  chan struct{}
+	subscribers     []func(Job)
+	emergencyStop   bool
+	emergencySince  time.Time
+	emergencyReason string
 }
 
 func NewQueue(buffer int) *Queue {
@@ -63,15 +66,19 @@ func (q *Queue) Subscribe(fn func(Job)) {
 	q.subscribers = append(q.subscribers, fn)
 }
 
-func (q *Queue) Enqueue(configPath, key string) *Job {
+func (q *Queue) Enqueue(configPath, key string, force bool) (*Job, error) {
 	q.mu.Lock()
 
 	if key != "" {
 		if existingID, ok := q.byIdempotency[key]; ok {
 			cp := q.clone(q.jobs[existingID])
 			q.mu.Unlock()
-			return cp
+			return cp, nil
 		}
+	}
+	if q.emergencyStop && !force {
+		q.mu.Unlock()
+		return nil, errors.New("emergency stop active; new applies are halted")
 	}
 
 	q.nextID++
@@ -91,7 +98,7 @@ func (q *Queue) Enqueue(configPath, key string) *Job {
 	cp := q.clone(j)
 	q.mu.Unlock()
 	q.publish(*cp)
-	return cp
+	return cp, nil
 }
 
 func (q *Queue) Get(id string) (*Job, bool) {
@@ -199,6 +206,42 @@ func (q *Queue) publish(job Job) {
 	q.mu.RUnlock()
 	for _, fn := range subs {
 		fn(job)
+	}
+}
+
+type EmergencyStatus struct {
+	Active bool      `json:"active"`
+	Since  time.Time `json:"since,omitempty"`
+	Reason string    `json:"reason,omitempty"`
+}
+
+func (q *Queue) SetEmergencyStop(active bool, reason string) EmergencyStatus {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.emergencyStop = active
+	if active {
+		if q.emergencySince.IsZero() {
+			q.emergencySince = time.Now().UTC()
+		}
+		q.emergencyReason = reason
+	} else {
+		q.emergencySince = time.Time{}
+		q.emergencyReason = ""
+	}
+	return EmergencyStatus{
+		Active: q.emergencyStop,
+		Since:  q.emergencySince,
+		Reason: q.emergencyReason,
+	}
+}
+
+func (q *Queue) EmergencyStatus() EmergencyStatus {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return EmergencyStatus{
+		Active: q.emergencyStop,
+		Since:  q.emergencySince,
+		Reason: q.emergencyReason,
 	}
 }
 
