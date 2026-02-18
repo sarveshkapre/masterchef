@@ -1650,6 +1650,82 @@ resources:
 	}
 }
 
+func TestRunDigestEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-digest.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	st := state.New(tmp)
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "digest-success-1",
+		StartedAt: time.Now().UTC().Add(-5 * time.Minute),
+		EndedAt:   time.Now().UTC().Add(-4 * time.Minute),
+		Status:    state.RunSucceeded,
+		Results:   []state.ResourceRun{{ResourceID: "r1", Changed: true}},
+	}); err != nil {
+		t.Fatalf("save success run failed: %v", err)
+	}
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "digest-fail-1",
+		StartedAt: time.Now().UTC().Add(-3 * time.Minute),
+		EndedAt:   time.Now().UTC().Add(-2 * time.Minute),
+		Status:    state.RunFailed,
+		Results:   []state.ResourceRun{{ResourceID: "r2", Changed: true}},
+	}); err != nil {
+		t.Fatalf("save failed run failed: %v", err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/runs/digest?hours=1", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("run digest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"total_runs":2`) {
+		t.Fatalf("expected total_runs=2, body=%s", body)
+	}
+	if !strings.Contains(body, `"failed_runs":1`) {
+		t.Fatalf("expected failed_runs=1, body=%s", body)
+	}
+	if !strings.Contains(body, `"latent_risk_score"`) {
+		t.Fatalf("expected latent risk score in digest, body=%s", body)
+	}
+	if !strings.Contains(body, `digest-fail-1`) {
+		t.Fatalf("expected failed run id in digest output, body=%s", body)
+	}
+}
+
 func TestAPIContractEndpoint(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

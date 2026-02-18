@@ -142,6 +142,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/rules", s.handleRules)
 	mux.HandleFunc("/v1/rules/", s.handleRuleAction)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
+	mux.HandleFunc("/v1/runs/digest", s.handleRunDigest(baseDir))
 	mux.HandleFunc("/v1/runs/", s.handleRunAction(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
@@ -538,6 +539,124 @@ func (s *Server) handleRuns(baseDir string) http.HandlerFunc {
 	}
 }
 
+func (s *Server) handleRunDigest(baseDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		hours := 24
+		if raw := strings.TrimSpace(r.URL.Query().Get("hours")); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+				hours = n
+			}
+		}
+		if hours > 24*30 {
+			hours = 24 * 30
+		}
+		limit := 1000
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		now := time.Now().UTC()
+		windowStart := now.Add(-time.Duration(hours) * time.Hour)
+
+		runs, err := state.New(baseDir).ListRuns(limit)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		filtered := make([]state.RunRecord, 0, len(runs))
+		for _, run := range runs {
+			ref := run.StartedAt
+			if ref.IsZero() {
+				ref = run.EndedAt
+			}
+			if ref.IsZero() || ref.Before(windowStart) {
+				continue
+			}
+			filtered = append(filtered, run)
+		}
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].StartedAt.After(filtered[j].StartedAt)
+		})
+
+		total := len(filtered)
+		succeeded := 0
+		failed := 0
+		changedResources := 0
+		failedRunIDs := make([]string, 0)
+		for _, run := range filtered {
+			switch run.Status {
+			case state.RunSucceeded:
+				succeeded++
+			case state.RunFailed:
+				failed++
+				failedRunIDs = append(failedRunIDs, run.ID)
+			}
+			for _, res := range run.Results {
+				if res.Changed {
+					changedResources++
+				}
+			}
+		}
+		failRate := 0.0
+		if total > 0 {
+			failRate = float64(failed) / float64(total)
+		}
+
+		queueStatus := s.queue.ControlStatus()
+		emergency := s.queue.EmergencyStatus()
+		canary := s.canaries.HealthSummary()
+		riskScore := int(failRate * 70.0)
+		if queueStatus.Pending > 0 {
+			riskScore += 10
+		}
+		if queueStatus.Pending >= s.backlogThreshold {
+			riskScore += 10
+		}
+		if emergency.Active {
+			riskScore += 15
+		}
+		if status, _ := canary["status"].(string); status == "degraded" {
+			riskScore += 15
+		}
+		if riskScore > 100 {
+			riskScore = 100
+		}
+		riskLevel := "low"
+		if riskScore >= 60 {
+			riskLevel = "high"
+		} else if riskScore >= 30 {
+			riskLevel = "medium"
+		}
+		if len(failedRunIDs) > 5 {
+			failedRunIDs = failedRunIDs[:5]
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"window_hours":        hours,
+			"window_start":        windowStart,
+			"window_end":          now,
+			"total_runs":          total,
+			"succeeded_runs":      succeeded,
+			"failed_runs":         failed,
+			"fail_rate":           failRate,
+			"changed_resources":   changedResources,
+			"recent_failures":     failedRunIDs,
+			"latent_risk_score":   riskScore,
+			"latent_risk_level":   riskLevel,
+			"queue_status":        queueStatus,
+			"canary_health":       canary,
+			"emergency_stop":      emergency,
+			"summary_generated":   now,
+			"summary_explanation": "Risk score blends run failure rate with queue pressure, canary health, and emergency controls.",
+		})
+	}
+}
+
 func (s *Server) handleRunAction(baseDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// /v1/runs/{id}/export
@@ -750,6 +869,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/queue",
 			"POST /v1/control/recover-stuck",
 			"GET /v1/runs",
+			"GET /v1/runs/digest",
 			"POST /v1/runs/{id}/export",
 			"GET /v1/jobs",
 			"POST /v1/jobs",

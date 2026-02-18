@@ -80,6 +80,7 @@ API contract governance includes deprecation lifecycle checks plus an upgrade-as
 Schema evolution controls enforce migration plans and stepwise compatibility for control-plane state model upgrades.
 Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to detect deterministic plan regressions.
 On-call handoff packages are available via `GET /v1/control/handoff` to summarize risks, active rollouts, and blocked actions.
+Deployment-window change digests are available via `GET /v1/runs/digest` with latent-risk scoring.
 
 ## Release Tooling (Current CLI)
 
