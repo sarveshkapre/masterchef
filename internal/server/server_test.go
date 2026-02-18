@@ -601,6 +601,101 @@ resources:
 	}
 }
 
+func TestRunbookCatalogAndLaunch(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-runbook.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/runbooks", bytes.NewReader([]byte(`{
+		"name":"db emergency rollback",
+		"description":"rollback db changes safely",
+		"target_type":"config",
+		"config_path":"c.yaml",
+		"risk_level":"high",
+		"owner":"sre-dba",
+		"tags":["db","rollback"]
+	}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("runbook create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var rb struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &rb); err != nil {
+		t.Fatalf("runbook decode failed: %v", err)
+	}
+	if rb.ID == "" {
+		t.Fatalf("expected runbook id")
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runbooks/"+rb.ID+"/launch", bytes.NewReader([]byte(`{"priority":"high"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected draft runbook launch conflict, code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runbooks/"+rb.ID+"/approve", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("runbook approve failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runbooks/"+rb.ID+"/launch", bytes.NewReader([]byte(`{"priority":"high"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("approved runbook launch failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runbooks/"+rb.ID+"/deprecate", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("runbook deprecate failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader([]byte(`{"entity":"runbooks","mode":"human","query":"name~=rollback","limit":10}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("runbooks query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

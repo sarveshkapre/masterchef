@@ -28,6 +28,7 @@ type Server struct {
 	scheduler     *control.Scheduler
 	templates     *control.TemplateStore
 	workflows     *control.WorkflowStore
+	runbooks      *control.RunbookStore
 	assocs        *control.AssociationStore
 	commands      *control.CommandIngestStore
 	canaries      *control.CanaryStore
@@ -63,6 +64,7 @@ func New(addr, baseDir string) *Server {
 	scheduler := control.NewScheduler(queue)
 	templates := control.NewTemplateStore()
 	workflows := control.NewWorkflowStore(queue, templates)
+	runbooks := control.NewRunbookStore()
 	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
 	canaries := control.NewCanaryStore(queue)
@@ -90,6 +92,7 @@ func New(addr, baseDir string) *Server {
 		scheduler:     scheduler,
 		templates:     templates,
 		workflows:     workflows,
+		runbooks:      runbooks,
 		assocs:        assocs,
 		commands:      commands,
 		canaries:      canaries,
@@ -175,6 +178,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/workflows", s.handleWorkflows)
+	mux.HandleFunc("/v1/runbooks", s.handleRunbooks(baseDir))
+	mux.HandleFunc("/v1/runbooks/", s.handleRunbookAction(baseDir))
 	mux.HandleFunc("/v1/workflows/", s.handleWorkflowAction)
 	mux.HandleFunc("/v1/workflow-runs", s.handleWorkflowRuns)
 	mux.HandleFunc("/v1/workflow-runs/", s.handleWorkflowRunByID)
@@ -1283,6 +1288,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/templates",
 			"POST /v1/templates/{id}/launch",
 			"DELETE /v1/templates/{id}/delete",
+			"GET /v1/runbooks",
+			"POST /v1/runbooks",
+			"GET /v1/runbooks/{id}",
+			"POST /v1/runbooks/{id}/approve",
+			"POST /v1/runbooks/{id}/deprecate",
+			"POST /v1/runbooks/{id}/launch",
 			"GET /v1/workflows",
 			"POST /v1/workflows",
 			"POST /v1/workflows/{id}/launch",
@@ -1609,6 +1620,233 @@ func (s *Server) handleWorkflows(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, wf)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleRunbooks(baseDir string) http.HandlerFunc {
+	type createReq struct {
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		TargetType  string   `json:"target_type"` // template|workflow|config
+		TargetID    string   `json:"target_id"`
+		ConfigPath  string   `json:"config_path"`
+		RiskLevel   string   `json:"risk_level"` // low|medium|high
+		Owner       string   `json:"owner"`
+		Tags        []string `json:"tags"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			status := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+			items := s.runbooks.List()
+			if status == "" || status == "all" {
+				writeJSON(w, http.StatusOK, items)
+				return
+			}
+			filtered := make([]control.Runbook, 0, len(items))
+			for _, item := range items {
+				if string(item.Status) == status {
+					filtered = append(filtered, item)
+				}
+			}
+			writeJSON(w, http.StatusOK, filtered)
+		case http.MethodPost:
+			var req createReq
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+			targetType := strings.ToLower(strings.TrimSpace(req.TargetType))
+			if targetType == "config" {
+				if !filepath.IsAbs(req.ConfigPath) {
+					req.ConfigPath = filepath.Join(baseDir, req.ConfigPath)
+				}
+				if _, err := os.Stat(req.ConfigPath); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
+					return
+				}
+			} else if targetType == "template" {
+				if _, ok := s.templates.Get(req.TargetID); !ok {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target template not found"})
+					return
+				}
+			} else if targetType == "workflow" {
+				if _, ok := s.workflows.Get(req.TargetID); !ok {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target workflow not found"})
+					return
+				}
+			}
+			runbook, err := s.runbooks.Create(control.Runbook{
+				Name:        req.Name,
+				Description: req.Description,
+				TargetType:  control.RunbookTargetType(targetType),
+				TargetID:    req.TargetID,
+				ConfigPath:  req.ConfigPath,
+				RiskLevel:   req.RiskLevel,
+				Owner:       req.Owner,
+				Tags:        req.Tags,
+			})
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			s.events.Append(control.Event{
+				Type:    "runbook.created",
+				Message: "runbook created",
+				Fields: map[string]any{
+					"runbook_id":    runbook.ID,
+					"name":          runbook.Name,
+					"target_type":   runbook.TargetType,
+					"target_id":     runbook.TargetID,
+					"config_path":   runbook.ConfigPath,
+					"risk_level":    runbook.RiskLevel,
+					"catalog_state": runbook.Status,
+				},
+			})
+			writeJSON(w, http.StatusCreated, runbook)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}
+}
+
+func (s *Server) handleRunbookAction(baseDir string) http.HandlerFunc {
+	type launchReq struct {
+		Priority string            `json:"priority"`
+		Answers  map[string]string `json:"answers"`
+		Force    bool              `json:"force"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		// /v1/runbooks/{id} or /v1/runbooks/{id}/approve|deprecate|launch
+		parts := splitPath(r.URL.Path)
+		if len(parts) < 3 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid runbook action path"})
+			return
+		}
+		id := parts[2]
+		if len(parts) == 3 {
+			if r.Method != http.MethodGet {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			runbook, err := s.runbooks.Get(id)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, runbook)
+			return
+		}
+		action := parts[3]
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		switch action {
+		case "approve":
+			runbook, err := s.runbooks.Approve(id)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, runbook)
+		case "deprecate":
+			runbook, err := s.runbooks.Deprecate(id)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, runbook)
+		case "launch":
+			var req launchReq
+			if r.ContentLength > 0 {
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+					return
+				}
+			}
+			runbook, err := s.runbooks.Get(id)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			if runbook.Status != control.RunbookApproved {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "runbook must be approved before launch"})
+				return
+			}
+			force := req.Force || strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
+			priority := req.Priority
+			if priority == "" {
+				priority = r.Header.Get("X-Queue-Priority")
+			}
+			switch runbook.TargetType {
+			case control.RunbookTargetTemplate:
+				tpl, ok := s.templates.Get(runbook.TargetID)
+				if !ok {
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": "template target not found"})
+					return
+				}
+				if err := control.ValidateSurveyAnswers(tpl.Survey, req.Answers); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+					return
+				}
+				key := r.Header.Get("Idempotency-Key")
+				job, err := s.queue.Enqueue(tpl.ConfigPath, key, force, priority)
+				if err != nil {
+					writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusAccepted, map[string]any{
+					"runbook":  runbook,
+					"template": tpl,
+					"job":      job,
+					"answers":  req.Answers,
+				})
+			case control.RunbookTargetWorkflow:
+				run, err := s.workflows.Launch(runbook.TargetID, priority, force)
+				if err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusAccepted, map[string]any{
+					"runbook":      runbook,
+					"workflow_run": run,
+				})
+			case control.RunbookTargetConfig:
+				configPath := runbook.ConfigPath
+				if !filepath.IsAbs(configPath) {
+					configPath = filepath.Join(baseDir, configPath)
+				}
+				if _, err := os.Stat(configPath); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
+					return
+				}
+				key := r.Header.Get("Idempotency-Key")
+				job, err := s.queue.Enqueue(configPath, key, force, priority)
+				if err != nil {
+					writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusAccepted, map[string]any{
+					"runbook": runbook,
+					"job":     job,
+				})
+			default:
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported runbook target type"})
+				return
+			}
+			s.events.Append(control.Event{
+				Type:    "runbook.launched",
+				Message: "runbook launch triggered",
+				Fields: map[string]any{
+					"runbook_id":  runbook.ID,
+					"target_type": runbook.TargetType,
+					"risk_level":  runbook.RiskLevel,
+				},
+			})
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown runbook action"})
+		}
 	}
 }
 
