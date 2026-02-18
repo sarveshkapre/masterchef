@@ -106,6 +106,7 @@ Fact caching with TTL/invalidation and Salt Mine-style cross-node fact queries a
 Variable precedence resolution with source graph, conflict detection, hard-fail policy, and explain output is available via `POST /v1/vars/resolve` and `POST /v1/vars/explain`.
 External variable source plugins (`inline`, `env`, `file`, `http`) are available via `POST /v1/vars/sources/resolve`.
 Unified CLI now includes `observe` and `drift` commands for local run telemetry and drift trend inspection.
+Interactive CLI TUI inspection is available via `masterchef tui` with run browsing and per-step detail views.
 Ansible-compatible plugin extension points (`callback`, `lookup`, `filter`, `vars`, `strategy`) are available via `/v1/plugins/extensions`.
 Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds (`max_fail_percentage`, `any_errors_fatal`) are supported in config and executor runtime.
 Privilege escalation controls for command resources are supported via `become` and `become_user`, with explicit run-result audit markers.

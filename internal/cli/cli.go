@@ -7,11 +7,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -58,6 +60,8 @@ func Run(args []string) error {
 		return runObserve(args[1:])
 	case "drift":
 		return runDrift(args[1:])
+	case "tui":
+		return runTUI(args[1:])
 	case "serve":
 		return runServe(args[1:])
 	case "policy":
@@ -83,6 +87,7 @@ masterchef commands:
   apply [-f masterchef.yaml]
   observe [-base .] [-limit 100] [-format json|human]
   drift [-base .] [-hours 24] [-format json|human]
+  tui [-base .] [-limit 20]
   serve [-addr :8080] [-grpc-addr :9090]
   policy [keygen|sign|verify] ...
   features [matrix|summary|verify] [-f features.md]
@@ -651,6 +656,82 @@ func runDrift(args []string) error {
 		fmt.Printf("top_resource_type=%s count=%d\n", typeTrends[0].Key, typeTrends[0].Count)
 	}
 	return nil
+}
+
+func runTUI(args []string) error {
+	return runTUIWithIO(args, os.Stdin, os.Stdout)
+}
+
+func runTUIWithIO(args []string, in io.Reader, out io.Writer) error {
+	fs := flag.NewFlagSet("tui", flag.ContinueOnError)
+	baseDir := fs.String("base", ".", "base directory containing .masterchef state")
+	limit := fs.Int("limit", 20, "maximum runs to load in inspector")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *limit <= 0 {
+		*limit = 20
+	}
+
+	loadRuns := func() ([]state.RunRecord, error) {
+		return state.New(*baseDir).ListRuns(*limit)
+	}
+	runs, err := loadRuns()
+	if err != nil {
+		return err
+	}
+	if len(runs) == 0 {
+		_, _ = fmt.Fprintln(out, "tui: no runs found")
+		return nil
+	}
+
+	reader := bufio.NewReader(in)
+	for {
+		_, _ = fmt.Fprintln(out, "Masterchef Run Inspector")
+		for i, run := range runs {
+			_, _ = fmt.Fprintf(out, "%d) %s [%s] %s\n", i+1, run.ID, run.Status, run.StartedAt.Format(time.RFC3339))
+		}
+		_, _ = fmt.Fprint(out, "Select run number, r to refresh, q to quit: ")
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			return readErr
+		}
+		choice := strings.ToLower(strings.TrimSpace(line))
+		switch choice {
+		case "q", "quit", "exit":
+			return nil
+		case "r", "refresh":
+			runs, err = loadRuns()
+			if err != nil {
+				return err
+			}
+			if len(runs) == 0 {
+				_, _ = fmt.Fprintln(out, "tui: no runs found")
+				return nil
+			}
+			continue
+		}
+
+		index, parseErr := strconv.Atoi(choice)
+		if parseErr != nil || index < 1 || index > len(runs) {
+			_, _ = fmt.Fprintln(out, "invalid selection")
+			continue
+		}
+		run := runs[index-1]
+		_, _ = fmt.Fprintf(out, "\nRun %s (%s)\n", run.ID, run.Status)
+		_, _ = fmt.Fprintf(out, "Started: %s\n", run.StartedAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(out, "Ended: %s\n", run.EndedAt.Format(time.RFC3339))
+		for _, res := range run.Results {
+			_, _ = fmt.Fprintf(out, "- %s host=%s type=%s changed=%t skipped=%t\n", res.ResourceID, res.Host, res.Type, res.Changed, res.Skipped)
+			if strings.TrimSpace(res.Message) != "" {
+				_, _ = fmt.Fprintf(out, "  message: %s\n", strings.TrimSpace(res.Message))
+			}
+		}
+		_, _ = fmt.Fprintln(out)
+	}
 }
 
 func topCountKeys(m map[string]int, limit int) []string {
