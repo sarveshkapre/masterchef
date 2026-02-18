@@ -16,6 +16,7 @@ import (
 
 	"github.com/masterchef/masterchef/internal/checker"
 	"github.com/masterchef/masterchef/internal/config"
+	"github.com/masterchef/masterchef/internal/control"
 	"github.com/masterchef/masterchef/internal/executor"
 	"github.com/masterchef/masterchef/internal/features"
 	"github.com/masterchef/masterchef/internal/planner"
@@ -68,7 +69,7 @@ masterchef commands:
   fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
   doctor [-f masterchef.yaml] [-format json|human]
   test-impact [-changes file1,file2,...] [-format json|human]
-  release [sbom|sign|verify|cve-check|attest] ...
+  release [sbom|sign|verify|cve-check|attest|upgrade-assist] ...
   plan [-f masterchef.yaml] [-o plan.json]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -582,7 +583,7 @@ func runPolicy(args []string) error {
 
 func runRelease(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("release subcommand required: sbom|sign|verify|cve-check|attest")
+		return fmt.Errorf("release subcommand required: sbom|sign|verify|cve-check|attest|upgrade-assist")
 	}
 	switch args[0] {
 	case "sbom":
@@ -727,9 +728,69 @@ func runRelease(args []string) error {
 			return ExitError{Code: 7, Msg: "release attestation test command failed"}
 		}
 		return nil
+	case "upgrade-assist":
+		fs := flag.NewFlagSet("release upgrade-assist", flag.ContinueOnError)
+		baselinePath := fs.String("baseline", "", "baseline API spec json path")
+		currentPath := fs.String("current", "", "current API spec json path")
+		format := fs.String("format", "human", "output format: human|json")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*baselinePath) == "" || strings.TrimSpace(*currentPath) == "" {
+			return fmt.Errorf("both -baseline and -current are required")
+		}
+		baselineSpec, err := loadAPISpec(*baselinePath)
+		if err != nil {
+			return err
+		}
+		currentSpec, err := loadAPISpec(*currentPath)
+		if err != nil {
+			return err
+		}
+		report := control.DiffAPISpec(baselineSpec, currentSpec)
+		advice := control.GenerateUpgradeAdvice(report)
+		if strings.EqualFold(strings.TrimSpace(*format), "json") {
+			b, _ := json.MarshalIndent(map[string]any{
+				"report": report,
+				"advice": advice,
+			}, "", "  ")
+			fmt.Println(string(b))
+		} else {
+			fmt.Printf("baseline=%s current=%s backward_compatible=%t lifecycle_pass=%t\n",
+				report.BaselineVersion, report.CurrentVersion, report.BackwardCompatible, report.DeprecationLifecyclePass)
+			if len(advice) == 0 {
+				fmt.Println("no upgrade guidance generated")
+			}
+			for _, a := range advice {
+				if a.Endpoint != "" {
+					fmt.Printf("- [%s] %s: %s\n", a.Severity, a.Endpoint, a.Message)
+				} else {
+					fmt.Printf("- [%s] %s\n", a.Severity, a.Message)
+				}
+				if a.Action != "" {
+					fmt.Printf("  action: %s\n", a.Action)
+				}
+			}
+		}
+		if !report.DeprecationLifecyclePass {
+			return ExitError{Code: 8, Msg: "upgrade assistant detected deprecation lifecycle violations"}
+		}
+		return nil
 	default:
 		return fmt.Errorf("unknown release subcommand %q", args[0])
 	}
+}
+
+func loadAPISpec(path string) (control.APISpec, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return control.APISpec{}, err
+	}
+	var spec control.APISpec
+	if err := json.Unmarshal(b, &spec); err != nil {
+		return control.APISpec{}, err
+	}
+	return spec, nil
 }
 
 func splitCSV(raw string) []string {

@@ -85,6 +85,7 @@ API contract governance includes deprecation lifecycle checks plus an upgrade-as
 - `masterchef release verify -signed signed-sbom.json -pub policy-public.key`
 - `masterchef release cve-check -root . -advisories advisories.json -blocked-severities critical,high`
 - `masterchef release attest -root . -o attestation.json -test-cmd "go test ./..."`
+- `masterchef release upgrade-assist -baseline baseline-api.json -current current-api.json -format human`
 
 ## Repository Documents
 

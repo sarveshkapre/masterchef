@@ -124,6 +124,47 @@ func TestRunReleaseAttestFailsOnFailingTestCommand(t *testing.T) {
 	}
 }
 
+func TestRunReleaseUpgradeAssist(t *testing.T) {
+	tmp := t.TempDir()
+	baselinePath := filepath.Join(tmp, "baseline.json")
+	currentPath := filepath.Join(tmp, "current.json")
+	baseline := []byte(`{"version":"v1","endpoints":["GET /a","GET /legacy"],"deprecations":[{"endpoint":"GET /legacy","announced_version":"v1","remove_after_version":"v3"}]}`)
+	current := []byte(`{"version":"v2","endpoints":["GET /a"]}`)
+	if err := os.WriteFile(baselinePath, baseline, 0o644); err != nil {
+		t.Fatalf("write baseline failed: %v", err)
+	}
+	if err := os.WriteFile(currentPath, current, 0o644); err != nil {
+		t.Fatalf("write current failed: %v", err)
+	}
+
+	err := runRelease([]string{"upgrade-assist", "-baseline", baselinePath, "-current", currentPath, "-format", "json"})
+	if err == nil {
+		t.Fatalf("expected upgrade-assist to fail for lifecycle violations")
+	}
+	ec, ok := err.(ExitError)
+	if !ok || ec.Code != 8 {
+		t.Fatalf("expected ExitError code 8, got %v", err)
+	}
+}
+
+func TestRunReleaseUpgradeAssistPass(t *testing.T) {
+	tmp := t.TempDir()
+	baselinePath := filepath.Join(tmp, "baseline.json")
+	currentPath := filepath.Join(tmp, "current.json")
+	baseline := []byte(`{"version":"v1","endpoints":["GET /a","GET /legacy"],"deprecations":[{"endpoint":"GET /legacy","announced_version":"v1","remove_after_version":"v1"}]}`)
+	current := []byte(`{"version":"v1","endpoints":["GET /a"]}`)
+	if err := os.WriteFile(baselinePath, baseline, 0o644); err != nil {
+		t.Fatalf("write baseline failed: %v", err)
+	}
+	if err := os.WriteFile(currentPath, current, 0o644); err != nil {
+		t.Fatalf("write current failed: %v", err)
+	}
+
+	if err := runRelease([]string{"upgrade-assist", "-baseline", baselinePath, "-current", currentPath}); err != nil {
+		t.Fatalf("expected upgrade-assist pass, got %v", err)
+	}
+}
+
 func initGitRepo(t *testing.T, root string) {
 	t.Helper()
 	mustRun(t, root, "git", "init")
