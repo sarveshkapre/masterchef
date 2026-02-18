@@ -1922,6 +1922,62 @@ resources:
 	}
 }
 
+func TestBlastRadiusMapEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: prep
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "prep-blast.txt")+`
+    content: "prep\n"
+  - id: deploy
+    type: command
+    host: localhost
+    command: "echo deploy"
+    depends_on:
+      - prep
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	body := []byte(`{"config_path":"c.yaml","owners":{"localhost":"platform-team","deploy":"payments-team"}}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/control/blast-radius-map", bytes.NewReader(body))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("blast radius map failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"depends_on"`) {
+		t.Fatalf("expected dependency edges in blast radius map: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"estimated_scope"`) {
+		t.Fatalf("expected blast radius analysis in response: %s", rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
