@@ -87,6 +87,7 @@ Notification integrations are managed via `/v1/notifications/targets` and `/v1/n
 Change records and approval workflows are exposed via `/v1/change-records` to tie execution to ticketed change control.
 Self-service runbook catalog with approval-gated launches is available via `/v1/runbooks`.
 Operator checklist mode for high-risk changes is available via `/v1/control/checklists`.
+Saved views with share tokens and dashboard pinning are available via `/v1/views`.
 
 ## Release Tooling (Current CLI)
 

@@ -38,6 +38,7 @@ type Server struct {
 	notifications *control.NotificationRouter
 	changeRecords *control.ChangeRecordStore
 	checklists    *control.ChecklistStore
+	views         *control.SavedViewStore
 	channels      *control.ChannelManager
 	schemaMigs    *control.SchemaMigrationManager
 	objectStore   storage.ObjectStore
@@ -75,6 +76,7 @@ func New(addr, baseDir string) *Server {
 	notifications := control.NewNotificationRouter(5000)
 	changeRecords := control.NewChangeRecordStore()
 	checklists := control.NewChecklistStore()
+	views := control.NewSavedViewStore()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
@@ -104,6 +106,7 @@ func New(addr, baseDir string) *Server {
 		notifications: notifications,
 		changeRecords: changeRecords,
 		checklists:    checklists,
+		views:         views,
 		channels:      channels,
 		schemaMigs:    schemaMigs,
 		objectStore:   objectStore,
@@ -150,6 +153,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/notifications/deliveries", s.handleNotificationDeliveries)
 	mux.HandleFunc("/v1/change-records", s.handleChangeRecords)
 	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
+	mux.HandleFunc("/v1/views", s.handleViews)
+	mux.HandleFunc("/v1/views/", s.handleViewAction)
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
@@ -559,6 +564,104 @@ func (s *Server) handleChangeRecordAction(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusOK, rec)
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown change record action"})
+	}
+}
+
+func (s *Server) handleViews(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Name     string `json:"name"`
+		Entity   string `json:"entity"`
+		Mode     string `json:"mode"`
+		Query    string `json:"query"`
+		QueryAST string `json:"query_ast"`
+		Limit    int    `json:"limit"`
+		Pinned   bool   `json:"pinned"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.views.List())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		view, err := s.views.Create(control.SavedView{
+			Name:     req.Name,
+			Entity:   req.Entity,
+			Mode:     req.Mode,
+			Query:    req.Query,
+			QueryAST: req.QueryAST,
+			Limit:    req.Limit,
+			Pinned:   req.Pinned,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusCreated, view)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleViewAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/views/{id} or /v1/views/{id}/pin|share
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 3 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid view action path"})
+		return
+	}
+	id := parts[2]
+	if len(parts) == 3 {
+		switch r.Method {
+		case http.MethodGet:
+			view, err := s.views.Get(id)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, view)
+		case http.MethodDelete:
+			if err := s.views.Delete(id); err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	action := parts[3]
+	switch action {
+	case "pin":
+		var req struct {
+			Pinned bool `json:"pinned"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		view, err := s.views.SetPinned(id, req.Pinned)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, view)
+	case "share":
+		view, err := s.views.RegenerateShareToken(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, view)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown view action"})
 	}
 }
 
@@ -1248,6 +1351,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/change-records/{id}/attach-job",
 			"POST /v1/change-records/{id}/complete",
 			"POST /v1/change-records/{id}/fail",
+			"GET /v1/views",
+			"POST /v1/views",
+			"GET /v1/views/{id}",
+			"DELETE /v1/views/{id}",
+			"POST /v1/views/{id}/pin",
+			"POST /v1/views/{id}/share",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
 			"GET /v1/release/api-contract",
