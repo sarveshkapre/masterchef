@@ -151,6 +151,30 @@
 - Ad hoc command mode with guardrails and audit logging
 - CLI TUI mode for interactive run inspection
 - Web UI for plans, runs, drift, compliance, and approvals
+- Persona-based home views for SRE, platform, release, and service-owner workflows
+- Command palette with universal search across hosts, services, runs, policies, and modules
+- Keyboard-first navigation for all core workflows with no-mouse execution paths
+- Progressive disclosure UI that starts simple and reveals advanced controls on demand
+- Guided workflow wizards for bootstrap, rollout, rollback, and incident remediation
+- Topology-aware blast-radius map showing impacted services, dependencies, and owners
+- Explainability panel for every plan step: why this change exists, what triggered it, and expected outcome
+- Human-readable risk summaries with actionable mitigation suggestions before apply
+- One-click safe rollback and one-click retry from failure context
+- Bulk operations UX with preview, conflict detection, and staged confirmation
+- Saved views, shareable filters, and pin-to-dashboard widgets for team workflows
+- Workload-centric views that group by service/application instead of only host inventory
+- Time-travel run timeline to replay environment state before, during, and after a change
+- Cross-signal incident view combining run events, drift, health checks, and observability links
+- On-call handoff package generator with current risks, active rollouts, and blocked actions
+- Noise-reduction alert inbox with deduplication, suppression windows, and priority routing
+- Operator checklist mode for high-risk changes with explicit pre/post verification prompts
+- What-changed digest for each deployment window with success/failure and latent-risk scoring
+- Fleet-scale UI performance mode for 100k+ nodes with virtualized tables and incremental loading
+- Low-bandwidth UI mode optimized for remote operations and degraded network conditions
+- Built-in docs and inline examples at point of action, not separate documentation hunting
+- Workspace templates for common big-tech patterns (stateless services, stateful clusters, edge fleets)
+- Consistent object model and naming across CLI, UI, and API to reduce context switching
+- Accessibility-first UX (screen-reader support, full keyboard controls, high-contrast themes)
 - Activity stream API and UI timeline for identity/resource change auditing
 - Fleet health dashboards with SLO and error-budget views
 - Self-service catalog for approved runbooks
