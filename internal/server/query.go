@@ -169,6 +169,13 @@ func (s *Server) queryEntityRecords(entity, baseDir string) ([]any, error) {
 			out = append(out, tpl)
 		}
 		return out, nil
+	case "use_case_templates":
+		templates := s.useCaseTemplates.List()
+		out := make([]any, 0, len(templates))
+		for _, tpl := range templates {
+			out = append(out, tpl)
+		}
+		return out, nil
 	case "jobs":
 		jobs := s.queue.List()
 		out := make([]any, 0, len(jobs))

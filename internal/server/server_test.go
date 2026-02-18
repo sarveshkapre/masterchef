@@ -1083,6 +1083,91 @@ resources:
 	}
 }
 
+func TestUseCaseTemplateCatalogAndApply(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-use-case-template.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/use-case-templates?scenario=release-rollout", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("use-case templates list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `blue-green-release`) {
+		t.Fatalf("expected blue-green-release template in list: %s", rr.Body.String())
+	}
+
+	outDir := filepath.Join(tmp, "use-cases", "blue-green")
+	applyBody := []byte(`{"output_dir":"` + outDir + `","create_workflow":true,"create_runbook":true}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/use-case-templates/blue-green-release/apply", bytes.NewReader(applyBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("use-case template apply failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "configs", "apply.yaml")); err != nil {
+		t.Fatalf("expected generated use-case config file: %v", err)
+	}
+
+	type applyResp struct {
+		Workflow struct {
+			ID string `json:"id"`
+		} `json:"workflow"`
+	}
+	var created applyResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode use-case apply response failed: %v body=%s", err, rr.Body.String())
+	}
+	if created.Workflow.ID == "" {
+		t.Fatalf("expected generated workflow id in use-case apply response")
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader([]byte(`{"entity":"use_case_templates","mode":"human","query":"id=blue-green-release","limit":10}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("use-case templates query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/use-case-templates/blue-green-release/apply", bytes.NewReader([]byte(`{"output_dir":"`+outDir+`"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected conflict when output directory exists without overwrite: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

@@ -91,6 +91,7 @@ Saved views with share tokens and dashboard pinning are available via `/v1/views
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
 Solution pack catalog is available via `/v1/solution-packs` and workspace-template catalog/bootstrap flows are available via `/v1/workspace-templates`.
+Curated use-case templates for rollout/patching/DR/migration workflows are available via `/v1/use-case-templates`.
 
 ## Release Tooling (Current CLI)
 

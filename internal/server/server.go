@@ -41,6 +41,7 @@ type Server struct {
 	views              *control.SavedViewStore
 	migrations         *control.MigrationStore
 	solutionPacks      *control.SolutionPackCatalog
+	useCaseTemplates   *control.UseCaseTemplateCatalog
 	workspaceTemplates *control.WorkspaceTemplateCatalog
 	channels           *control.ChannelManager
 	schemaMigs         *control.SchemaMigrationManager
@@ -82,6 +83,7 @@ func New(addr, baseDir string) *Server {
 	views := control.NewSavedViewStore()
 	migrations := control.NewMigrationStore()
 	solutionPacks := control.NewSolutionPackCatalog()
+	useCaseTemplates := control.NewUseCaseTemplateCatalog()
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
@@ -115,6 +117,7 @@ func New(addr, baseDir string) *Server {
 		views:              views,
 		migrations:         migrations,
 		solutionPacks:      solutionPacks,
+		useCaseTemplates:   useCaseTemplates,
 		workspaceTemplates: workspaceTemplates,
 		channels:           channels,
 		schemaMigs:         schemaMigs,
@@ -167,6 +170,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
 	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
 	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
+	mux.HandleFunc("/v1/use-case-templates", s.handleUseCaseTemplates(baseDir))
+	mux.HandleFunc("/v1/use-case-templates/", s.handleUseCaseTemplateAction(baseDir))
 	mux.HandleFunc("/v1/solution-packs", s.handleSolutionPacks(baseDir))
 	mux.HandleFunc("/v1/solution-packs/", s.handleSolutionPackAction(baseDir))
 	mux.HandleFunc("/v1/workspace-templates", s.handleWorkspaceTemplates(baseDir))
@@ -1542,6 +1547,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/migrations/assess",
 			"GET /v1/migrations/reports",
 			"GET /v1/migrations/reports/{id}",
+			"GET /v1/use-case-templates",
+			"POST /v1/use-case-templates/{id}/apply",
 			"GET /v1/solution-packs",
 			"POST /v1/solution-packs/{id}/apply",
 			"GET /v1/workspace-templates",
