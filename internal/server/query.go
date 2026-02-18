@@ -148,6 +148,13 @@ func (s *Server) queryEntityRecords(entity, baseDir string) ([]any, error) {
 			out = append(out, view)
 		}
 		return out, nil
+	case "migration_reports":
+		reports := s.migrations.List()
+		out := make([]any, 0, len(reports))
+		for _, report := range reports {
+			out = append(out, report)
+		}
+		return out, nil
 	case "solution_packs":
 		packs := s.solutionPacks.List()
 		out := make([]any, 0, len(packs))

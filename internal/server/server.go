@@ -39,6 +39,7 @@ type Server struct {
 	changeRecords      *control.ChangeRecordStore
 	checklists         *control.ChecklistStore
 	views              *control.SavedViewStore
+	migrations         *control.MigrationStore
 	solutionPacks      *control.SolutionPackCatalog
 	workspaceTemplates *control.WorkspaceTemplateCatalog
 	channels           *control.ChannelManager
@@ -79,6 +80,7 @@ func New(addr, baseDir string) *Server {
 	changeRecords := control.NewChangeRecordStore()
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
+	migrations := control.NewMigrationStore()
 	solutionPacks := control.NewSolutionPackCatalog()
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
@@ -111,6 +113,7 @@ func New(addr, baseDir string) *Server {
 		changeRecords:      changeRecords,
 		checklists:         checklists,
 		views:              views,
+		migrations:         migrations,
 		solutionPacks:      solutionPacks,
 		workspaceTemplates: workspaceTemplates,
 		channels:           channels,
@@ -161,6 +164,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
 	mux.HandleFunc("/v1/views", s.handleViews)
 	mux.HandleFunc("/v1/views/", s.handleViewAction)
+	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
+	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
+	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
 	mux.HandleFunc("/v1/solution-packs", s.handleSolutionPacks(baseDir))
 	mux.HandleFunc("/v1/solution-packs/", s.handleSolutionPackAction(baseDir))
 	mux.HandleFunc("/v1/workspace-templates", s.handleWorkspaceTemplates(baseDir))
@@ -1533,6 +1539,9 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/views/{id}",
 			"POST /v1/views/{id}/pin",
 			"POST /v1/views/{id}/share",
+			"POST /v1/migrations/assess",
+			"GET /v1/migrations/reports",
+			"GET /v1/migrations/reports/{id}",
 			"GET /v1/solution-packs",
 			"POST /v1/solution-packs/{id}/apply",
 			"GET /v1/workspace-templates",

@@ -993,6 +993,96 @@ resources:
 	}
 }
 
+func TestMigrationAssessmentEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-migration.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	assessBody := []byte(`{
+  "source_platform":"chef",
+  "workload":"payments",
+  "used_features":["recipes","data bags","ruby block"],
+  "semantic_checks":[{"name":"idempotency","expected":"no-op","translated":"changes each run"}],
+  "deprecations":[{"name":"legacy-chef-handler","severity":"high","eol_date":"2026-03-01","replacement":"event hooks"}]
+}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/migrations/assess", bytes.NewReader(assessBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("migration assess failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	type assessResp struct {
+		ID          string `json:"id"`
+		ParityScore int    `json:"parity_score"`
+		RiskScore   int    `json:"risk_score"`
+	}
+	var created assessResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode assess response failed: %v body=%s", err, rr.Body.String())
+	}
+	if created.ID == "" {
+		t.Fatalf("expected migration report id in assess response")
+	}
+	if created.ParityScore <= 0 || created.RiskScore <= 0 {
+		t.Fatalf("unexpected scores in assess response: %+v", created)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/migrations/reports", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("migration reports list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), created.ID) {
+		t.Fatalf("expected created migration report in list: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/migrations/reports/"+created.ID, nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("migration report by id failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader([]byte(`{"entity":"migration_reports","mode":"human","query":"source_platform=chef","limit":10}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("migration reports query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
