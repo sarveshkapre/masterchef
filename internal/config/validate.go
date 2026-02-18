@@ -1,0 +1,72 @@
+package config
+
+import (
+	"fmt"
+	"strings"
+)
+
+func Validate(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if strings.TrimSpace(cfg.Version) == "" {
+		return fmt.Errorf("version is required")
+	}
+
+	hostSet := map[string]struct{}{}
+	for i, h := range cfg.Inventory.Hosts {
+		if strings.TrimSpace(h.Name) == "" {
+			return fmt.Errorf("inventory.hosts[%d].name is required", i)
+		}
+		if _, ok := hostSet[h.Name]; ok {
+			return fmt.Errorf("duplicate host name %q", h.Name)
+		}
+		hostSet[h.Name] = struct{}{}
+
+		if h.Transport == "" {
+			cfg.Inventory.Hosts[i].Transport = "local"
+		}
+		switch cfg.Inventory.Hosts[i].Transport {
+		case "local", "ssh", "winrm":
+		default:
+			return fmt.Errorf("host %q has unsupported transport %q", h.Name, h.Transport)
+		}
+	}
+
+	resSet := map[string]struct{}{}
+	for i := range cfg.Resources {
+		r := &cfg.Resources[i]
+		if strings.TrimSpace(r.ID) == "" {
+			return fmt.Errorf("resources[%d].id is required", i)
+		}
+		if _, ok := resSet[r.ID]; ok {
+			return fmt.Errorf("duplicate resource id %q", r.ID)
+		}
+		resSet[r.ID] = struct{}{}
+
+		if _, ok := hostSet[r.Host]; !ok {
+			return fmt.Errorf("resource %q references unknown host %q", r.ID, r.Host)
+		}
+		switch r.Type {
+		case "file":
+			if strings.TrimSpace(r.Path) == "" {
+				return fmt.Errorf("resource %q file.path is required", r.ID)
+			}
+		case "command":
+			if strings.TrimSpace(r.Command) == "" {
+				return fmt.Errorf("resource %q command.command is required", r.ID)
+			}
+		default:
+			return fmt.Errorf("resource %q has unsupported type %q", r.ID, r.Type)
+		}
+	}
+
+	for _, r := range cfg.Resources {
+		for _, dep := range r.DependsOn {
+			if _, ok := resSet[dep]; !ok {
+				return fmt.Errorf("resource %q depends on unknown resource %q", r.ID, dep)
+			}
+		}
+	}
+	return nil
+}
