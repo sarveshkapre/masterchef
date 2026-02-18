@@ -141,6 +141,9 @@
 - Real-time run streaming and event subscriptions
 - Structured logs, metrics, traces, and run replay
 - OpenTelemetry-native export for logs, metrics, and traces
+- Correlation IDs linking each run step to external observability systems
+- Run failure triage bundle export (logs, facts, diffs, provider output, host metadata)
+- Cross-run diff analysis to compare failed and successful executions
 - Unified CLI with `init`, `validate`, `plan`, `apply`, `observe`, `drift`, `policy`, and `doctor`
 - Interactive approval prompts and non-interactive CI-safe modes
 - Rich diff output formats (human, JSON, machine-readable patch)
@@ -216,12 +219,25 @@
 - Report processor plugins for custom post-run processing
 - Remote execution API for one-off fleet commands
 - Ephemeral execution workers for burst orchestration
+- Global emergency stop to halt new applies across selected environments
+- In-flight run pause, resume, cancel, and safe-drain controls
+- Idempotent run request keys with duplicate suppression
+- Stuck-run detector with automatic lease recovery and operator handoff
 - Control plane scheduler and distributed worker queues
 - Multi-queue priority classes and fair scheduling
+- Scheduler-aware maintenance mode for hosts, clusters, and environments
+- Capacity-aware scheduling using host health, backlog pressure, and execution cost
+- Queue backlog SLO tracking with predictive saturation alerts
 - Workflow engine for multi-step orchestration pipelines
 - HA control plane reference architecture
+- Production deployment blueprints for Kubernetes, VMs, and bare metal
+- Preflight deployment validator for network, DNS, storage, database, and queue dependencies
+- One-command bootstrap for single-region HA control plane
+- Control plane synthetic canary jobs for continuous health verification
+- Control plane canary upgrade workflow with automatic rollback on regression
 - Multi-region control plane federation
 - Regional failover and active-active operation mode
+- Automated regional failover drills with recovery time scorecards
 - Edge relay mode for intermittently connected sites
 - PostgreSQL-backed state and event storage
 - Pluggable queue backends for scale and resiliency
@@ -235,6 +251,8 @@
 - Scale profile for fleets from 10 to 10,000+ nodes
 - Fleet sharding and tenancy-aware scheduler partitioning
 - Performance profiling and bottleneck diagnostics
+- Topology-aware run placement by region, zone, cluster, and failure domain
+- Adaptive worker autoscaling based on queue depth and execution latency
 - Cost-aware scheduling and throttling controls
 - Bandwidth-aware artifact distribution and caching
 - Workspace and multi-tenant isolation
@@ -260,6 +278,7 @@
 - Import/export tooling for existing inventories and variables
 - Bulk import from CMDB and asset inventory systems
 - Import assistants for existing secrets, facts, and role/group hierarchies
+- Brownfield bootstrap from existing host state into managed desired-state baselines
 - Offline and air-gapped operation mode
 - Signed offline bundle creation and verification
 - Offline registry mirroring and synchronization tooling
