@@ -31,6 +31,7 @@ func Build(cfg *config.Config) (*Plan, error) {
 	}
 	hostByName := map[string]config.Host{}
 	for _, h := range cfg.Inventory.Hosts {
+		h = resolveHostTransport(h)
 		hostByName[h.Name] = h
 	}
 
@@ -86,4 +87,64 @@ func Build(cfg *config.Config) (*Plan, error) {
 		Execution: cfg.Execution,
 		Steps:     steps,
 	}, nil
+}
+
+func resolveHostTransport(h config.Host) config.Host {
+	transport := strings.ToLower(strings.TrimSpace(h.Transport))
+	if transport == "" {
+		transport = "local"
+	}
+	if transport != "auto" {
+		h.Transport = transport
+		return h
+	}
+	h.Transport = discoverHostTransport(h)
+	return h
+}
+
+func discoverHostTransport(h config.Host) string {
+	capabilities := map[string]struct{}{}
+	for _, cap := range h.Capabilities {
+		cap = strings.ToLower(strings.TrimSpace(cap))
+		if cap == "" {
+			continue
+		}
+		capabilities[cap] = struct{}{}
+	}
+	if _, ok := capabilities["local"]; ok && isLocalEndpoint(h) {
+		return "local"
+	}
+	if _, ok := capabilities["winrm"]; ok {
+		return "winrm"
+	}
+	if _, ok := capabilities["ssh"]; ok {
+		return "ssh"
+	}
+
+	if isLocalEndpoint(h) {
+		return "local"
+	}
+	if h.Port == 5985 || h.Port == 5986 {
+		return "winrm"
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(h.Labels["os"])), "windows") {
+		return "winrm"
+	}
+	if strings.TrimSpace(h.User) != "" || strings.TrimSpace(h.JumpAddress) != "" || strings.TrimSpace(h.ProxyCommand) != "" {
+		return "ssh"
+	}
+	return "ssh"
+}
+
+func isLocalEndpoint(h config.Host) bool {
+	target := strings.ToLower(strings.TrimSpace(h.Address))
+	if target == "" {
+		target = strings.ToLower(strings.TrimSpace(h.Name))
+	}
+	switch target {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
 }

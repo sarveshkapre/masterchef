@@ -262,3 +262,35 @@ func TestValidate_AllowsPluginTransports(t *testing.T) {
 		t.Fatalf("expected plugin transport to be allowed, got %v", err)
 	}
 }
+
+func TestValidate_AutoTransportCapabilities(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{
+				{
+					Name:         "node-1",
+					Transport:    "AUTO",
+					Capabilities: []string{"ssh", " winrm ", "ssh"},
+				},
+			},
+		},
+		Resources: []Resource{
+			{ID: "c1", Type: "command", Host: "node-1", Command: "echo ok"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected auto transport and capabilities to validate, got %v", err)
+	}
+	if cfg.Inventory.Hosts[0].Transport != "auto" {
+		t.Fatalf("expected normalized auto transport, got %q", cfg.Inventory.Hosts[0].Transport)
+	}
+	if len(cfg.Inventory.Hosts[0].Capabilities) != 2 || cfg.Inventory.Hosts[0].Capabilities[0] != "ssh" || cfg.Inventory.Hosts[0].Capabilities[1] != "winrm" {
+		t.Fatalf("expected normalized capabilities, got %#v", cfg.Inventory.Hosts[0].Capabilities)
+	}
+
+	cfg.Inventory.Hosts[0].Capabilities = []string{"ssh", "unknown"}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected unsupported capability validation error")
+	}
+}

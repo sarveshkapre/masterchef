@@ -39,8 +39,9 @@ func Validate(cfg *Config) error {
 		if h.Transport == "" {
 			cfg.Inventory.Hosts[i].Transport = "local"
 		}
+		cfg.Inventory.Hosts[i].Transport = strings.ToLower(strings.TrimSpace(cfg.Inventory.Hosts[i].Transport))
 		switch cfg.Inventory.Hosts[i].Transport {
-		case "local", "ssh", "winrm":
+		case "local", "ssh", "winrm", "auto":
 		default:
 			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(cfg.Inventory.Hosts[i].Transport)), "plugin/") {
 				break
@@ -57,6 +58,28 @@ func Validate(cfg *Config) error {
 		}
 		if cfg.Inventory.Hosts[i].JumpPort < 0 || cfg.Inventory.Hosts[i].JumpPort > 65535 {
 			return fmt.Errorf("host %q has invalid jump_port %d", h.Name, cfg.Inventory.Hosts[i].JumpPort)
+		}
+		if len(cfg.Inventory.Hosts[i].Capabilities) > 0 {
+			seen := map[string]struct{}{}
+			caps := make([]string, 0, len(cfg.Inventory.Hosts[i].Capabilities))
+			for _, cap := range cfg.Inventory.Hosts[i].Capabilities {
+				cap = strings.ToLower(strings.TrimSpace(cap))
+				if cap == "" {
+					continue
+				}
+				switch cap {
+				case "local", "ssh", "winrm":
+				default:
+					return fmt.Errorf("host %q has unsupported capability %q", h.Name, cap)
+				}
+				if _, ok := seen[cap]; ok {
+					continue
+				}
+				seen[cap] = struct{}{}
+				caps = append(caps, cap)
+			}
+			sort.Strings(caps)
+			cfg.Inventory.Hosts[i].Capabilities = caps
 		}
 		if len(cfg.Inventory.Hosts[i].Roles) > 0 {
 			seen := map[string]struct{}{}

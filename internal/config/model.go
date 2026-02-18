@@ -22,6 +22,7 @@ type Host struct {
 	JumpUser     string            `json:"jump_user,omitempty" yaml:"jump_user,omitempty"`
 	JumpPort     int               `json:"jump_port,omitempty" yaml:"jump_port,omitempty"`
 	ProxyCommand string            `json:"proxy_command,omitempty" yaml:"proxy_command,omitempty"`
+	Capabilities []string          `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
 	Labels       map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	Roles        []string          `json:"roles,omitempty" yaml:"roles,omitempty"`
 	Topology     map[string]string `json:"topology,omitempty" yaml:"topology,omitempty"`

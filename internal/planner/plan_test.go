@@ -82,3 +82,38 @@ func TestBuild_DelegateToOverridesExecutionHost(t *testing.T) {
 		t.Fatalf("expected resource host target to remain unchanged, got %s", p.Steps[0].Resource.Host)
 	}
 }
+
+func TestBuild_AutoTransportDiscovery(t *testing.T) {
+	cfg := &config.Config{
+		Version: "v0",
+		Inventory: config.Inventory{
+			Hosts: []config.Host{
+				{Name: "localhost", Transport: "auto"},
+				{Name: "windows-1", Transport: "auto", Labels: map[string]string{"os": "windows-server-2022"}},
+				{Name: "linux-1", Transport: "auto", Capabilities: []string{"ssh"}},
+			},
+		},
+		Resources: []config.Resource{
+			{ID: "c-local", Type: "command", Host: "localhost", Command: "echo local"},
+			{ID: "c-win", Type: "command", Host: "windows-1", Command: "Write-Output win"},
+			{ID: "c-linux", Type: "command", Host: "linux-1", Command: "echo linux"},
+		},
+	}
+	p, err := Build(cfg)
+	if err != nil {
+		t.Fatalf("build failed: %v", err)
+	}
+	got := map[string]string{}
+	for _, step := range p.Steps {
+		got[step.Resource.ID] = step.Host.Transport
+	}
+	if got["c-local"] != "local" {
+		t.Fatalf("expected local auto transport, got %q", got["c-local"])
+	}
+	if got["c-win"] != "winrm" {
+		t.Fatalf("expected winrm auto transport, got %q", got["c-win"])
+	}
+	if got["c-linux"] != "ssh" {
+		t.Fatalf("expected ssh auto transport, got %q", got["c-linux"])
+	}
+}
