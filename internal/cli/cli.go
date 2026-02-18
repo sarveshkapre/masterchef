@@ -20,6 +20,7 @@ import (
 	"github.com/masterchef/masterchef/internal/features"
 	"github.com/masterchef/masterchef/internal/planner"
 	"github.com/masterchef/masterchef/internal/policy"
+	"github.com/masterchef/masterchef/internal/release"
 	"github.com/masterchef/masterchef/internal/server"
 	"github.com/masterchef/masterchef/internal/state"
 	"github.com/masterchef/masterchef/internal/testimpact"
@@ -40,6 +41,8 @@ func Run(args []string) error {
 		return runDoctor(args[1:])
 	case "test-impact":
 		return runTestImpact(args[1:])
+	case "release":
+		return runRelease(args[1:])
 	case "plan":
 		return runPlan(args[1:])
 	case "check":
@@ -65,6 +68,7 @@ masterchef commands:
   fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
   doctor [-f masterchef.yaml] [-format json|human]
   test-impact [-changes file1,file2,...] [-format json|human]
+  release [sbom|sign|verify] ...
   plan [-f masterchef.yaml] [-o plan.json]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -573,5 +577,94 @@ func runPolicy(args []string) error {
 		return nil
 	default:
 		return fmt.Errorf("unknown policy subcommand %q", args[0])
+	}
+}
+
+func runRelease(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("release subcommand required: sbom|sign|verify")
+	}
+	switch args[0] {
+	case "sbom":
+		fs := flag.NewFlagSet("release sbom", flag.ContinueOnError)
+		root := fs.String("root", ".", "root directory for relative artifact paths")
+		filesCSV := fs.String("files", ".", "comma-separated files/directories")
+		out := fs.String("o", "sbom.json", "output sbom json path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		files := make([]string, 0)
+		for _, f := range strings.Split(*filesCSV, ",") {
+			f = strings.TrimSpace(f)
+			if f != "" {
+				files = append(files, f)
+			}
+		}
+		sbom, err := release.GenerateSBOM(*root, files)
+		if err != nil {
+			return err
+		}
+		if err := release.SaveSBOM(*out, sbom); err != nil {
+			return err
+		}
+		fmt.Printf("sbom generated: %s (%d artifacts)\n", *out, len(sbom.Artifacts))
+		return nil
+
+	case "sign":
+		fs := flag.NewFlagSet("release sign", flag.ContinueOnError)
+		sbomPath := fs.String("sbom", "sbom.json", "sbom path")
+		keyPath := fs.String("key", "policy-private.key", "private key path")
+		out := fs.String("o", "signed-sbom.json", "signed sbom output path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		sbom, err := release.LoadSBOM(*sbomPath)
+		if err != nil {
+			return err
+		}
+		priv, err := policy.LoadPrivateKey(*keyPath)
+		if err != nil {
+			return err
+		}
+		signed, err := release.SignSBOM(sbom, priv)
+		if err != nil {
+			return err
+		}
+		b, err := json.MarshalIndent(signed, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(*out, b, 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("signed sbom written: %s\n", *out)
+		return nil
+
+	case "verify":
+		fs := flag.NewFlagSet("release verify", flag.ContinueOnError)
+		signedPath := fs.String("signed", "signed-sbom.json", "signed sbom path")
+		pubPath := fs.String("pub", "policy-public.key", "public key path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		b, err := os.ReadFile(*signedPath)
+		if err != nil {
+			return err
+		}
+		var signed release.SignedSBOM
+		if err := json.Unmarshal(b, &signed); err != nil {
+			return err
+		}
+		pub, err := policy.LoadPublicKey(*pubPath)
+		if err != nil {
+			return err
+		}
+		if err := release.VerifySignedSBOM(signed, pub); err != nil {
+			return err
+		}
+		fmt.Printf("signed sbom verified: %s\n", *signedPath)
+		return nil
+	default:
+		return fmt.Errorf("unknown release subcommand %q", args[0])
 	}
 }
