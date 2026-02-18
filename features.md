@@ -1,95 +1,174 @@
 # Features
 
 - Declarative typed configuration with schema validation
+- Open schema model using YAML + CUE + JSON Schema
+- Configuration composition via includes, imports, and overlays
+- Role/profile/environment inheritance model
+- Node classification rules based on facts, labels, and policy
+- Variable precedence model with explicit conflict resolution
+- `explain` command to show final merged variable values
+- Built-in templating engine with safe function library
+- Conditionals, loops, and matrix expansion in configuration
+- Handler/notification model for event-triggered resource actions
+- Resource graph compiler with cycle detection and diagnostics
 - Resource graph compiler with explicit dependencies
+- Resource graph query API for impact and dependency analysis
 - Deterministic `plan` output for identical inputs
+- Plan reproducibility checks across different runners
 - Mandatory `plan` before every `apply`
+- Change freeze enforcement and emergency override workflow
 - Idempotent resource provider contract
+- Provider side-effect declaration and purity metadata
 - Change diff previews for every resource action
+- Blast-radius estimation before apply
 - Partial and targeted applies by host, group, tag, and resource
+- Scoped rollback by host, resource, and execution stage
 - Parallel execution with configurable concurrency limits
+- Distributed execution locks to avoid conflicting runs
 - Transaction checkpoints and resumable execution
+- Automatic retry policies with jitter and backoff controls
 - Rollback support for reversible resources
+- Execution graph visualization in CLI and UI
 - Static inventory management
 - Dynamic inventory providers
+- Cloud inventory sync for AWS, Azure, GCP, and vSphere
+- Inventory drift detection and reconciliation
 - Labels, tags, roles, and topology-based host grouping
 - Runtime host discovery and auto-enrollment
+- Lifecycle workflows for node bootstrap, quarantine, and decommission
+- Fact collection engine (system, custom, and external facts)
+- Fact caching with TTL and invalidation controls
 - Agentless execution over SSH
 - Agentless execution over WinRM
+- Connection plugin architecture for custom transports
+- Network device transport support (NETCONF, RESTCONF, API-driven)
 - Agent-based periodic converge loop
 - Hybrid push + pull mode per environment
 - Secure bootstrap flow from agentless to agent mode
+- Policy pull from control plane or signed Git sources
 - Cross-platform support for Linux, macOS, and Windows nodes
+- Windows-specific resources for DSC, PowerShell, services, and registry
+- Package manager abstraction for apt, yum/dnf, zypper, brew, winget, and chocolatey
 - Core resources for file, directory, template, package, service, user, group, command, cron, and sysctl
 - Advanced resources for firewall, kernel module, mount, certificate, registry, and scheduled tasks
+- Container and Kubernetes resource providers
+- Cloud service resource providers for common infrastructure operations
+- Image baking and golden-image pipeline hooks
 - Dependency-aware orchestration and ordered phases
 - Rolling updates with health checks
 - Blue/green and canary rollout strategies
+- Serial, batch, and percentage rollout controls
+- Failure domain aware orchestration by rack, zone, and region
 - Maintenance windows and disruption budgets
 - Pre-flight checks before execution
 - Runtime assertions and post-change verification gates
+- Health probe integrations to gate promotion and rollback
 - Desired-state snapshot storage
 - Observed-state collection and normalization
 - Continuous drift detection
 - Drift alerting with severity levels
 - Policy-driven auto-remediation of approved drift
 - Safe mode to block high-risk automatic changes
+- Drift root-cause hints and remediation recommendations
+- Desired-vs-observed diff history with trend analytics
 - Run history with full audit trail
 - Immutable event logs for every action
+- Real-time run streaming and event subscriptions
 - Structured logs, metrics, traces, and run replay
+- OpenTelemetry-native export for logs, metrics, and traces
 - Unified CLI with `init`, `validate`, `plan`, `apply`, `observe`, `drift`, `policy`, and `doctor`
+- Ad hoc command mode with guardrails and audit logging
+- CLI TUI mode for interactive run inspection
 - Web UI for plans, runs, drift, compliance, and approvals
+- Fleet health dashboards with SLO and error-budget views
+- Self-service catalog for approved runbooks
 - REST API and gRPC API for automation integration
+- Event bus integrations (Kafka, NATS, webhooks)
 - GitOps workflow support with signed plan artifacts
 - Pull-request plan comments and approval gates
 - Multi-environment promotions with policy checks
+- Promotion pipelines with immutable artifact pinning
 - Secrets manager integrations
+- Built-in encrypted secrets store with envelope encryption
+- Secret rotation workflows and expiry enforcement
+- Secret usage tracing and redaction-by-default logs
 - Short-lived execution credentials
 - mTLS between all components
+- OIDC workload identity support
 - Signed module and provider packages
 - Provenance metadata for modules and providers
+- Sigstore/Cosign signature verification support
 - Policy engine for pre-apply and runtime guardrails
+- Policy simulation mode before enforcement
 - Command/resource allowlists and deny policies
+- ABAC and context-aware policy conditions
 - RBAC with scoped permissions
 - SSO and enterprise identity integration
+- SCIM provisioning for teams and roles
 - Break-glass workflow with audited approvals
+- Multi-stage approvals with quorum rules
 - Compliance profile engine (CIS, STIG, custom)
 - Continuous compliance scans
 - Compliance evidence exports (JSON, SARIF, CSV)
 - Compliance exceptions with expiration and approvals
+- Compliance scorecards by team, environment, and service
 - Provider SDK with conformance testing
+- Provider test fixtures and contract test harness
 - Versioned provider protocol with backward compatibility guarantees
 - Sandboxed third-party providers with least privilege isolation
+- WASI runtime support for untrusted provider plugins
 - Module registry with versioning and signatures
 - Private and public registry support
 - Module dependency resolution and lockfiles
+- Module scaffolding generator and best-practice templates
+- Module quality scoring and trust badges
 - Event hooks and webhooks
 - Notification integrations for ChatOps and incident systems
+- Ticketing system integrations for change records and approvals
 - Remote execution API for one-off fleet commands
 - Ephemeral execution workers for burst orchestration
 - Control plane scheduler and distributed worker queues
+- Multi-queue priority classes and fair scheduling
+- Workflow engine for multi-step orchestration pipelines
 - HA control plane reference architecture
+- Multi-region control plane federation
+- Regional failover and active-active operation mode
 - PostgreSQL-backed state and event storage
+- Pluggable queue backends for scale and resiliency
 - Pluggable object storage for artifacts and logs
 - Backup and disaster recovery workflows
+- Point-in-time restore for state and audit data
 - Scale profile for fleets from 10 to 10,000+ nodes
+- Fleet sharding and tenancy-aware scheduler partitioning
 - Performance profiling and bottleneck diagnostics
 - Cost-aware scheduling and throttling controls
+- Bandwidth-aware artifact distribution and caching
 - Workspace and multi-tenant isolation
+- Hard tenant boundaries with per-tenant crypto keys
+- Delegated administration per tenant and environment
 - Policy and config linting
 - Built-in test harness for modules and policies
+- End-to-end scenario test runner for fleet simulations
 - Ephemeral test environment runner for integration checks
 - Golden-run baselines and regression detection
+- Continuous conformance suite for built-in providers
 - Migration tooling from Chef cookbooks
 - Migration tooling from Ansible playbooks
 - Migration tooling from Puppet manifests
 - Compatibility shims for common legacy patterns
+- Migration assessment report with parity and risk scoring
 - Import/export tooling for existing inventories and variables
+- Bulk import from CMDB and asset inventory systems
 - Offline and air-gapped operation mode
 - Signed offline bundle creation and verification
+- Offline registry mirroring and synchronization tooling
 - Contributor-friendly local development environment
+- Local single-binary dev mode for control plane + worker + registry
 - Public plugin and module certification pipeline
+- Security and quality gates for publication to public registry
 - Stability channels for control plane and agents (`stable`, `candidate`, `edge`)
 - Zero-downtime upgrade orchestration for agents and controllers
 - N-1 protocol compatibility policy
+- Long-term support (LTS) release channel and support matrix
 - Release artifact signing and SBOM generation
+- Vulnerability scanning and CVE policy enforcement on releases
