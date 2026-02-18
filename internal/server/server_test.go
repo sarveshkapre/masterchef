@@ -1393,7 +1393,8 @@ resources:
 	}
 	var backupResp struct {
 		Object struct {
-			Key string `json:"key"`
+			Key       string    `json:"key"`
+			CreatedAt time.Time `json:"created_at"`
 		} `json:"object"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &backupResp); err != nil {
@@ -1401,6 +1402,9 @@ resources:
 	}
 	if backupResp.Object.Key == "" {
 		t.Fatalf("expected backup object key")
+	}
+	if backupResp.Object.CreatedAt.IsZero() {
+		t.Fatalf("expected backup object created_at")
 	}
 
 	rr = httptest.NewRecorder()
@@ -1420,6 +1424,33 @@ resources:
 		t.Fatalf("expected drill verification status, body=%s", rr.Body.String())
 	}
 
+	if err := st.SaveRun(state.RunRecord{
+		ID:        "backup-run-2",
+		StartedAt: time.Now().UTC().Add(-500 * time.Millisecond),
+		EndedAt:   time.Now().UTC(),
+		Status:    state.RunSucceeded,
+	}); err != nil {
+		t.Fatalf("save second run failed: %v", err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/backup", bytes.NewReader([]byte(`{"include_runs":true,"include_events":true}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("second backup failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+	var backupResp2 struct {
+		Object struct {
+			Key string `json:"key"`
+		} `json:"object"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &backupResp2); err != nil {
+		t.Fatalf("second backup decode failed: %v", err)
+	}
+	if backupResp2.Object.Key == "" {
+		t.Fatalf("expected second backup key")
+	}
+
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/control/restore", bytes.NewReader([]byte(`{"key":"`+backupResp.Object.Key+`","verify_only":true}`)))
 	s.httpServer.Handler.ServeHTTP(rr, req)
@@ -1432,10 +1463,11 @@ resources:
 	}
 
 	rr = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/v1/control/restore", bytes.NewReader([]byte(`{"key":"`+backupResp.Object.Key+`"}`)))
+	restoreAt := backupResp.Object.CreatedAt.Format(time.RFC3339Nano)
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/restore", bytes.NewReader([]byte(`{"prefix":"backups","at_or_before":"`+restoreAt+`"}`)))
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("restore failed: %d body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("point-in-time restore failed: %d body=%s", rr.Code, rr.Body.String())
 	}
 
 	runs, err := st.ListRuns(10)
@@ -1443,7 +1475,24 @@ resources:
 		t.Fatalf("list runs after restore failed: %v", err)
 	}
 	if len(runs) != 1 || runs[0].ID != "backup-run-1" {
-		t.Fatalf("expected restored run record, got %+v", runs)
+		t.Fatalf("expected point-in-time restore to recover first backup state, got %+v", runs)
+	}
+
+	if err := st.ReplaceRuns([]state.RunRecord{}); err != nil {
+		t.Fatalf("clear runs failed: %v", err)
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/restore", bytes.NewReader([]byte(`{"key":"`+backupResp2.Object.Key+`"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("restore by key failed: %d body=%s", rr.Code, rr.Body.String())
+	}
+	runs, err = st.ListRuns(10)
+	if err != nil {
+		t.Fatalf("list runs after restore-by-key failed: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("expected latest restore-by-key to recover two runs, got %+v", runs)
 	}
 }
 

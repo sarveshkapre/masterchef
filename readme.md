@@ -75,7 +75,7 @@ See `FEATURES.md`, `agents.md`, and `ROADMAP.md` for detailed scope.
 
 Active implementation phase.
 
-Current control-plane DR surface includes backup, restore, and automated restore-verification drills.
+Current control-plane DR surface includes backup, point-in-time restore, and automated restore-verification drills.
 
 ## Release Tooling (Current CLI)
 

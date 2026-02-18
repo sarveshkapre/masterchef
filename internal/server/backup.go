@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -207,6 +208,8 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRestore(baseDir string) http.HandlerFunc {
 	type reqBody struct {
 		Key        string `json:"key"`
+		Prefix     string `json:"prefix"`
+		AtOrBefore string `json:"at_or_before"`
 		VerifyOnly bool   `json:"verify_only"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -223,11 +226,12 @@ func (s *Server) handleRestore(baseDir string) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
 			return
 		}
-		if strings.TrimSpace(req.Key) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "key is required"})
+		key, err := s.resolveRestoreKey(req.Key, req.Prefix, req.AtOrBefore)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		snap, obj, err := s.getBackupSnapshot(req.Key)
+		snap, obj, err := s.getBackupSnapshot(key)
 		if err != nil {
 			if errors.Is(err, errInvalidBackupSnapshotPayload) {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -240,6 +244,7 @@ func (s *Server) handleRestore(baseDir string) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"status":  "verified",
 				"object":  obj,
+				"key":     key,
 				"runs":    len(snap.Runs),
 				"events":  len(snap.Events),
 				"version": snap.Version,
@@ -254,8 +259,45 @@ func (s *Server) handleRestore(baseDir string) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":          "restored",
 			"object":          obj,
+			"key":             key,
 			"restored_runs":   len(snap.Runs),
 			"restored_events": len(snap.Events),
 		})
 	}
+}
+
+func (s *Server) resolveRestoreKey(explicitKey, prefix, atOrBefore string) (string, error) {
+	explicitKey = strings.TrimSpace(explicitKey)
+	if explicitKey != "" {
+		return explicitKey, nil
+	}
+	atOrBefore = strings.TrimSpace(atOrBefore)
+	if atOrBefore == "" {
+		return "", errors.New("key is required (or specify at_or_before for point-in-time restore)")
+	}
+	target, err := time.Parse(time.RFC3339Nano, atOrBefore)
+	if err != nil {
+		return "", errors.New("at_or_before must be RFC3339 timestamp")
+	}
+	if strings.TrimSpace(prefix) == "" {
+		prefix = "backups"
+	}
+	items, err := s.objectStore.List(prefix, 10000)
+	if err != nil {
+		return "", err
+	}
+	candidates := make([]storage.ObjectInfo, 0, len(items))
+	for _, item := range items {
+		if item.CreatedAt.After(target) {
+			continue
+		}
+		candidates = append(candidates, item)
+	}
+	if len(candidates) == 0 {
+		return "", errors.New("no backup snapshot found at_or_before requested timestamp")
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].CreatedAt.After(candidates[j].CreatedAt)
+	})
+	return candidates[0].Key, nil
 }
