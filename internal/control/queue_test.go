@@ -25,11 +25,11 @@ func (f *fakeExecutor) ApplyPath(path string) error {
 
 func TestQueue_IdempotencyKeyReturnsSameJob(t *testing.T) {
 	q := NewQueue(16)
-	j1, err := q.Enqueue("a.yaml", "k1", false)
+	j1, err := q.Enqueue("a.yaml", "k1", false, "")
 	if err != nil {
 		t.Fatalf("unexpected enqueue error: %v", err)
 	}
-	j2, err := q.Enqueue("b.yaml", "k1", false)
+	j2, err := q.Enqueue("b.yaml", "k1", false, "")
 	if err != nil {
 		t.Fatalf("unexpected enqueue error: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestQueue_WorkerExecutesPendingJobs(t *testing.T) {
 	exec := &fakeExecutor{}
 	q.StartWorker(ctx, exec)
 
-	job, err := q.Enqueue("ok.yaml", "", false)
+	job, err := q.Enqueue("ok.yaml", "", false, "")
 	if err != nil {
 		t.Fatalf("unexpected enqueue error: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestQueue_WorkerExecutesPendingJobs(t *testing.T) {
 
 func TestQueue_CancelPendingJob(t *testing.T) {
 	q := NewQueue(16)
-	j, err := q.Enqueue("x.yaml", "", false)
+	j, err := q.Enqueue("x.yaml", "", false, "")
 	if err != nil {
 		t.Fatalf("unexpected enqueue error: %v", err)
 	}
@@ -84,10 +84,10 @@ func TestQueue_EmergencyStopBlocksNewJobs(t *testing.T) {
 	if !st.Active {
 		t.Fatalf("expected emergency stop active")
 	}
-	if _, err := q.Enqueue("blocked.yaml", "", false); err == nil {
+	if _, err := q.Enqueue("blocked.yaml", "", false, ""); err == nil {
 		t.Fatalf("expected enqueue error during emergency stop")
 	}
-	if _, err := q.Enqueue("forced.yaml", "", true); err != nil {
+	if _, err := q.Enqueue("forced.yaml", "", true, ""); err != nil {
 		t.Fatalf("expected forced enqueue to bypass emergency stop: %v", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestQueue_SafeDrain_NoRunningJobs(t *testing.T) {
 
 func TestQueue_RecoverStuckJobs(t *testing.T) {
 	q := NewQueue(8)
-	j, err := q.Enqueue("x.yaml", "", false)
+	j, err := q.Enqueue("x.yaml", "", false, "")
 	if err != nil {
 		t.Fatalf("unexpected enqueue error: %v", err)
 	}
@@ -135,5 +135,28 @@ func TestQueue_RecoverStuckJobs(t *testing.T) {
 	cur, _ := q.Get(j.ID)
 	if cur.Status != JobFailed {
 		t.Fatalf("expected recovered job to be failed, got %s", cur.Status)
+	}
+}
+
+func TestQueue_PriorityNormalizationAndStatusBreakdown(t *testing.T) {
+	q := NewQueue(8)
+	j1, err := q.Enqueue("a.yaml", "", false, "HIGH")
+	if err != nil {
+		t.Fatalf("unexpected enqueue error: %v", err)
+	}
+	j2, err := q.Enqueue("b.yaml", "", false, "low")
+	if err != nil {
+		t.Fatalf("unexpected enqueue error: %v", err)
+	}
+	j3, err := q.Enqueue("c.yaml", "", false, "unknown")
+	if err != nil {
+		t.Fatalf("unexpected enqueue error: %v", err)
+	}
+	if j1.Priority != "high" || j2.Priority != "low" || j3.Priority != "normal" {
+		t.Fatalf("priority normalization mismatch: %s %s %s", j1.Priority, j2.Priority, j3.Priority)
+	}
+	st := q.ControlStatus()
+	if st.PendingHigh != 1 || st.PendingNormal != 1 || st.PendingLow != 1 || st.Pending != 3 {
+		t.Fatalf("unexpected pending breakdown: %+v", st)
 	}
 }

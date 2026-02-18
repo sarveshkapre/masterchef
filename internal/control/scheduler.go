@@ -10,6 +10,7 @@ import (
 type Schedule struct {
 	ID         string        `json:"id"`
 	ConfigPath string        `json:"config_path"`
+	Priority   string        `json:"priority"`
 	Interval   time.Duration `json:"interval"`
 	Jitter     time.Duration `json:"jitter"`
 	Enabled    bool          `json:"enabled"`
@@ -35,6 +36,10 @@ func NewScheduler(q *Queue) *Scheduler {
 }
 
 func (s *Scheduler) Create(configPath string, interval, jitter time.Duration) *Schedule {
+	return s.CreateWithPriority(configPath, interval, jitter, "normal")
+}
+
+func (s *Scheduler) CreateWithPriority(configPath string, interval, jitter time.Duration, priority string) *Schedule {
 	if interval <= 0 {
 		interval = time.Minute
 	}
@@ -49,6 +54,7 @@ func (s *Scheduler) Create(configPath string, interval, jitter time.Duration) *S
 	sc := &Schedule{
 		ID:         id,
 		ConfigPath: configPath,
+		Priority:   normalizePriority(priority),
 		Interval:   interval,
 		Jitter:     jitter,
 		Enabled:    true,
@@ -116,7 +122,7 @@ func (s *Scheduler) startLocked(sc *Schedule) {
 				timer.Stop()
 				return
 			case <-timer.C:
-				_, _ = s.queue.Enqueue(sc.ConfigPath, "", false)
+				_, _ = s.queue.Enqueue(sc.ConfigPath, "", false, sc.Priority)
 				s.mu.Lock()
 				if cur, ok := s.schedules[scheduleID]; ok {
 					now := time.Now().UTC()

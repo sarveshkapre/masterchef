@@ -21,11 +21,15 @@ func TestScheduler_CreateAndList(t *testing.T) {
 func TestScheduler_EnqueueOnInterval(t *testing.T) {
 	q := NewQueue(32)
 	s := NewScheduler(q)
-	sc := s.Create("x.yaml", 30*time.Millisecond, 0)
+	sc := s.CreateWithPriority("x.yaml", 30*time.Millisecond, 0, "high")
 
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for {
-		if len(q.List()) > 0 {
+		jobs := q.List()
+		if len(jobs) > 0 {
+			if jobs[0].Priority != "high" {
+				t.Fatalf("expected scheduled job priority high, got %s", jobs[0].Priority)
+			}
 			break
 		}
 		if time.Now().After(deadline) {

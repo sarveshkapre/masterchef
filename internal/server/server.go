@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,16 @@ type Server struct {
 	events     *control.EventStore
 	metricsMu  sync.Mutex
 	metrics    map[string]int64
+
+	backlogThreshold  int
+	backlogSamples    []backlogSample
+	backlogWarnActive bool
+	backlogSatActive  bool
+}
+
+type backlogSample struct {
+	at      time.Time
+	pending int
 }
 
 func New(addr, baseDir string) *Server {
@@ -42,6 +53,10 @@ func New(addr, baseDir string) *Server {
 		templates: templates,
 		events:    events,
 		metrics:   map[string]int64{},
+		backlogThreshold: readIntEnv(
+			"MC_QUEUE_BACKLOG_SLO_THRESHOLD",
+			100,
+		),
 	}
 	s.httpServer = &http.Server{
 		Addr:              addr,
@@ -54,11 +69,14 @@ func New(addr, baseDir string) *Server {
 			Type:    "job." + string(job.Status),
 			Message: "job state updated",
 			Fields: map[string]any{
-				"job_id": job.ID,
-				"status": job.Status,
+				"job_id":   job.ID,
+				"status":   job.Status,
+				"priority": job.Priority,
 			},
 		})
+		s.observeQueueBacklog()
 	})
+	s.observeQueueBacklog()
 
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
@@ -169,6 +187,7 @@ func (s *Server) handleFeatureSummary(baseDir string) http.HandlerFunc {
 func (s *Server) handleJobs(baseDir string) http.HandlerFunc {
 	type createReq struct {
 		ConfigPath string `json:"config_path"`
+		Priority   string `json:"priority"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -193,7 +212,11 @@ func (s *Server) handleJobs(baseDir string) http.HandlerFunc {
 			}
 			key := r.Header.Get("Idempotency-Key")
 			force := strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
-			job, err := s.queue.Enqueue(req.ConfigPath, key, force)
+			priority := req.Priority
+			if priority == "" {
+				priority = r.Header.Get("X-Queue-Priority")
+			}
+			job, err := s.queue.Enqueue(req.ConfigPath, key, force, priority)
 			if err != nil {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 				return
@@ -235,6 +258,7 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 		ConfigPath      string `json:"config_path"`
 		IntervalSeconds int    `json:"interval_seconds"`
 		JitterSeconds   int    `json:"jitter_seconds"`
+		Priority        string `json:"priority"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -260,10 +284,11 @@ func (s *Server) handleSchedules(baseDir string) http.HandlerFunc {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("config_path not found: %v", err)})
 				return
 			}
-			sc := s.scheduler.Create(
+			sc := s.scheduler.CreateWithPriority(
 				req.ConfigPath,
 				time.Duration(req.IntervalSeconds)*time.Second,
 				time.Duration(req.JitterSeconds)*time.Second,
+				req.Priority,
 			)
 			writeJSON(w, http.StatusCreated, sc)
 		default:
@@ -337,6 +362,16 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		type launchReq struct {
+			Priority string `json:"priority"`
+		}
+		var launch launchReq
+		if r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&launch); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+		}
 		t, ok := s.templates.Get(id)
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "template not found"})
@@ -344,7 +379,11 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 		}
 		key := r.Header.Get("Idempotency-Key")
 		force := strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
-		job, err := s.queue.Enqueue(t.ConfigPath, key, force)
+		priority := launch.Priority
+		if priority == "" {
+			priority = r.Header.Get("X-Queue-Priority")
+		}
+		job, err := s.queue.Enqueue(t.ConfigPath, key, force, priority)
 		if err != nil {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 			return
@@ -558,4 +597,117 @@ func (s *Server) wrapHTTP(next http.Handler) http.Handler {
 
 func randomID() string {
 	return fmt.Sprintf("req-%d-%d", time.Now().UTC().UnixNano(), rand.Int63())
+}
+
+func (s *Server) observeQueueBacklog() {
+	st := s.queue.ControlStatus()
+	now := time.Now().UTC()
+
+	var emit *control.Event
+
+	s.metricsMu.Lock()
+	s.metrics["queue.pending.total"] = int64(st.Pending)
+	s.metrics["queue.pending.high"] = int64(st.PendingHigh)
+	s.metrics["queue.pending.normal"] = int64(st.PendingNormal)
+	s.metrics["queue.pending.low"] = int64(st.PendingLow)
+	s.metrics["queue.running"] = int64(st.Running)
+
+	s.backlogSamples = append(s.backlogSamples, backlogSample{
+		at:      now,
+		pending: st.Pending,
+	})
+	cutoff := now.Add(-2 * time.Minute)
+	first := 0
+	for first < len(s.backlogSamples) && s.backlogSamples[first].at.Before(cutoff) {
+		first++
+	}
+	if first > 0 {
+		s.backlogSamples = append([]backlogSample{}, s.backlogSamples[first:]...)
+	}
+
+	threshold := s.backlogThreshold
+	if threshold <= 0 {
+		threshold = 100
+	}
+
+	growthMilli := int64(0)
+	predictive := false
+	if len(s.backlogSamples) >= 2 {
+		oldest := s.backlogSamples[0]
+		latest := s.backlogSamples[len(s.backlogSamples)-1]
+		dt := latest.at.Sub(oldest.at).Seconds()
+		if dt > 0 && latest.pending > oldest.pending {
+			growth := float64(latest.pending-oldest.pending) / dt
+			growthMilli = int64(growth * 1000.0)
+			projectedFiveMinutes := float64(latest.pending) + (growth * 300.0)
+			predictive = projectedFiveMinutes >= float64(threshold)
+		}
+	}
+	s.metrics["queue.backlog_growth_per_sec_milli"] = growthMilli
+
+	prevSat := s.backlogSatActive
+	prevWarn := s.backlogWarnActive
+	s.backlogSatActive = st.Pending >= threshold
+	s.backlogWarnActive = !s.backlogSatActive && predictive && st.Pending >= int(float64(threshold)*0.70)
+	recovered := st.Pending <= threshold/2 && (prevSat || prevWarn) && !s.backlogSatActive && !s.backlogWarnActive
+
+	if s.backlogSatActive && !prevSat {
+		emit = &control.Event{
+			Type:    "queue.saturation",
+			Message: "queue backlog exceeded saturation SLO threshold",
+			Fields: map[string]any{
+				"pending":        st.Pending,
+				"threshold":      threshold,
+				"pending_high":   st.PendingHigh,
+				"pending_normal": st.PendingNormal,
+				"pending_low":    st.PendingLow,
+			},
+		}
+	} else if s.backlogWarnActive && !prevWarn {
+		emit = &control.Event{
+			Type:    "queue.saturation.predicted",
+			Message: "predictive queue backlog alert",
+			Fields: map[string]any{
+				"pending":                      st.Pending,
+				"threshold":                    threshold,
+				"backlog_growth_per_sec_milli": growthMilli,
+			},
+		}
+	} else if recovered {
+		emit = &control.Event{
+			Type:    "queue.saturation.recovered",
+			Message: "queue backlog recovered below recovery threshold",
+			Fields: map[string]any{
+				"pending":         st.Pending,
+				"recovery_target": threshold / 2,
+			},
+		}
+	}
+
+	s.metrics["queue.saturation.active"] = boolToInt64(s.backlogSatActive)
+	s.metrics["queue.saturation.warning"] = boolToInt64(s.backlogWarnActive)
+	s.metricsMu.Unlock()
+
+	if emit != nil {
+		s.events.Append(*emit)
+	}
+}
+
+func readIntEnv(name string, defaultValue int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return defaultValue
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return defaultValue
+	}
+	return n
+}
+
+func boolToInt64(v bool) int64 {
+	if v {
+		return 1
+	}
+	return 0
 }

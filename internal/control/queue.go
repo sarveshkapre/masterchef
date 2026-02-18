@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -21,6 +22,7 @@ type Job struct {
 	ID             string    `json:"id"`
 	IdempotencyKey string    `json:"idempotency_key,omitempty"`
 	ConfigPath     string    `json:"config_path"`
+	Priority       string    `json:"priority"` // high, normal, low
 	Status         JobStatus `json:"status"`
 	Error          string    `json:"error,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -37,7 +39,9 @@ type Queue struct {
 	nextID          int64
 	jobs            map[string]*Job
 	byIdempotency   map[string]string
-	pending         chan string
+	pendingHigh     chan string
+	pendingNormal   chan string
+	pendingLow      chan string
 	workerShutdown  chan struct{}
 	subscribers     []func(Job)
 	emergencyStop   bool
@@ -45,6 +49,7 @@ type Queue struct {
 	emergencyReason string
 	paused          bool
 	running         int
+	rrIndex         int
 }
 
 func NewQueue(buffer int) *Queue {
@@ -54,7 +59,9 @@ func NewQueue(buffer int) *Queue {
 	return &Queue{
 		jobs:           map[string]*Job{},
 		byIdempotency:  map[string]string{},
-		pending:        make(chan string, buffer),
+		pendingHigh:    make(chan string, buffer),
+		pendingNormal:  make(chan string, buffer),
+		pendingLow:     make(chan string, buffer),
 		workerShutdown: make(chan struct{}),
 	}
 }
@@ -68,9 +75,8 @@ func (q *Queue) Subscribe(fn func(Job)) {
 	q.subscribers = append(q.subscribers, fn)
 }
 
-func (q *Queue) Enqueue(configPath, key string, force bool) (*Job, error) {
+func (q *Queue) Enqueue(configPath, key string, force bool, priority string) (*Job, error) {
 	q.mu.Lock()
-
 	if key != "" {
 		if existingID, ok := q.byIdempotency[key]; ok {
 			cp := q.clone(q.jobs[existingID])
@@ -83,12 +89,14 @@ func (q *Queue) Enqueue(configPath, key string, force bool) (*Job, error) {
 		return nil, errors.New("emergency stop active; new applies are halted")
 	}
 
+	p := normalizePriority(priority)
 	q.nextID++
 	id := "job-" + time.Now().UTC().Format("20060102T150405") + "-" + itoa(q.nextID)
 	j := &Job{
 		ID:             id,
 		IdempotencyKey: key,
 		ConfigPath:     configPath,
+		Priority:       p,
 		Status:         JobPending,
 		CreatedAt:      time.Now().UTC(),
 	}
@@ -96,7 +104,12 @@ func (q *Queue) Enqueue(configPath, key string, force bool) (*Job, error) {
 	if key != "" {
 		q.byIdempotency[key] = id
 	}
-	q.pending <- id
+	if err := q.pushPending(id, p); err != nil {
+		delete(q.jobs, id)
+		delete(q.byIdempotency, key)
+		q.mu.Unlock()
+		return nil, err
+	}
 	cp := q.clone(j)
 	q.mu.Unlock()
 	q.publish(*cp)
@@ -154,12 +167,11 @@ func (q *Queue) StartWorker(ctx context.Context, exec Executor) {
 					continue
 				}
 			}
-			select {
-			case <-ctx.Done():
+			id, ok := q.nextPending(ctx)
+			if !ok {
 				return
-			case id := <-q.pending:
-				q.runOne(id, exec)
 			}
+			q.runOne(id, exec)
 		}
 	}()
 }
@@ -187,6 +199,9 @@ func (q *Queue) runOne(id string, exec Executor) {
 	q.mu.Lock()
 	j = q.jobs[id]
 	if j.Status == JobCanceled {
+		if q.running > 0 {
+			q.running--
+		}
 		q.mu.Unlock()
 		return
 	}
@@ -203,6 +218,68 @@ func (q *Queue) runOne(id string, exec Executor) {
 	cp = *j
 	q.mu.Unlock()
 	q.publish(cp)
+}
+
+func (q *Queue) pushPending(id, priority string) error {
+	class := normalizePriority(priority)
+	var ch chan string
+	switch class {
+	case "high":
+		ch = q.pendingHigh
+	case "low":
+		ch = q.pendingLow
+	default:
+		ch = q.pendingNormal
+	}
+	select {
+	case ch <- id:
+		return nil
+	default:
+		return errors.New("pending queue full for priority class: " + class)
+	}
+}
+
+func (q *Queue) nextPending(ctx context.Context) (string, bool) {
+	classes := []string{"high", "normal", "low"}
+
+	// Fair polling by rotating start index across priority classes.
+	for i := 0; i < len(classes); i++ {
+		idx := (q.rrIndex + i) % len(classes)
+		switch classes[idx] {
+		case "high":
+			select {
+			case id := <-q.pendingHigh:
+				q.rrIndex = (idx + 1) % len(classes)
+				return id, true
+			default:
+			}
+		case "normal":
+			select {
+			case id := <-q.pendingNormal:
+				q.rrIndex = (idx + 1) % len(classes)
+				return id, true
+			default:
+			}
+		case "low":
+			select {
+			case id := <-q.pendingLow:
+				q.rrIndex = (idx + 1) % len(classes)
+				return id, true
+			default:
+			}
+		}
+	}
+
+	select {
+	case <-ctx.Done():
+		return "", false
+	case id := <-q.pendingHigh:
+		return id, true
+	case id := <-q.pendingNormal:
+		return id, true
+	case id := <-q.pendingLow:
+		return id, true
+	}
 }
 
 func (q *Queue) clone(j *Job) *Job {
@@ -260,31 +337,26 @@ func (q *Queue) EmergencyStatus() EmergencyStatus {
 }
 
 type QueueControlStatus struct {
-	Paused  bool `json:"paused"`
-	Running int  `json:"running"`
-	Pending int  `json:"pending"`
+	Paused        bool `json:"paused"`
+	Running       int  `json:"running"`
+	Pending       int  `json:"pending"`
+	PendingHigh   int  `json:"pending_high"`
+	PendingNormal int  `json:"pending_normal"`
+	PendingLow    int  `json:"pending_low"`
 }
 
 func (q *Queue) Pause() QueueControlStatus {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.paused = true
-	return QueueControlStatus{
-		Paused:  q.paused,
-		Running: q.running,
-		Pending: len(q.pending),
-	}
+	return q.controlStatusLocked()
 }
 
 func (q *Queue) Resume() QueueControlStatus {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.paused = false
-	return QueueControlStatus{
-		Paused:  q.paused,
-		Running: q.running,
-		Pending: len(q.pending),
-	}
+	return q.controlStatusLocked()
 }
 
 func (q *Queue) IsPaused() bool {
@@ -296,10 +368,20 @@ func (q *Queue) IsPaused() bool {
 func (q *Queue) ControlStatus() QueueControlStatus {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
+	return q.controlStatusLocked()
+}
+
+func (q *Queue) controlStatusLocked() QueueControlStatus {
+	high := len(q.pendingHigh)
+	normal := len(q.pendingNormal)
+	low := len(q.pendingLow)
 	return QueueControlStatus{
-		Paused:  q.paused,
-		Running: q.running,
-		Pending: len(q.pending),
+		Paused:        q.paused,
+		Running:       q.running,
+		Pending:       high + normal + low,
+		PendingHigh:   high,
+		PendingNormal: normal,
+		PendingLow:    low,
 	}
 }
 
@@ -328,10 +410,7 @@ func (q *Queue) RecoverStuckJobs(maxAge time.Duration) []Job {
 
 	recovered := make([]Job, 0)
 	for _, j := range q.jobs {
-		if j.Status != JobRunning {
-			continue
-		}
-		if j.StartedAt.IsZero() {
+		if j.Status != JobRunning || j.StartedAt.IsZero() {
 			continue
 		}
 		if now.Sub(j.StartedAt) < maxAge {
@@ -351,6 +430,17 @@ func (q *Queue) RecoverStuckJobs(maxAge time.Duration) []Job {
 		}
 	}(append([]Job{}, recovered...))
 	return recovered
+}
+
+func normalizePriority(p string) string {
+	switch strings.ToLower(strings.TrimSpace(p)) {
+	case "high":
+		return "high"
+	case "low":
+		return "low"
+	default:
+		return "normal"
+	}
 }
 
 func itoa(n int64) string {
