@@ -17,6 +17,7 @@ import (
 	"github.com/masterchef/masterchef/internal/executor"
 	"github.com/masterchef/masterchef/internal/features"
 	"github.com/masterchef/masterchef/internal/planner"
+	"github.com/masterchef/masterchef/internal/policy"
 	"github.com/masterchef/masterchef/internal/server"
 	"github.com/masterchef/masterchef/internal/state"
 )
@@ -36,6 +37,8 @@ func Run(args []string) error {
 		return runApply(args[1:])
 	case "serve":
 		return runServe(args[1:])
+	case "policy":
+		return runPolicy(args[1:])
 	case "features":
 		return runFeatures(args[1:])
 	default:
@@ -51,6 +54,7 @@ masterchef commands:
   plan [-f masterchef.yaml] [-o plan.json]
   apply [-f masterchef.yaml]
   serve [-addr :8080]
+  policy [keygen|sign|verify] ...
   features [matrix|summary|verify] [-f features.md]
 `))
 	return errors.New("invalid command")
@@ -231,5 +235,80 @@ func runServe(args []string) error {
 		return s.Shutdown(ctx)
 	case err := <-errCh:
 		return err
+	}
+}
+
+func runPolicy(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("policy subcommand required: keygen|sign|verify")
+	}
+	switch args[0] {
+	case "keygen":
+		fs := flag.NewFlagSet("policy keygen", flag.ContinueOnError)
+		privPath := fs.String("out", "policy-private.key", "private key output path")
+		pubPath := fs.String("pub", "policy-public.key", "public key output path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		pub, priv, err := policy.GenerateKeypair()
+		if err != nil {
+			return err
+		}
+		if err := policy.SavePrivateKey(*privPath, priv); err != nil {
+			return err
+		}
+		if err := policy.SavePublicKey(*pubPath, pub); err != nil {
+			return err
+		}
+		fmt.Printf("keys written: private=%s public=%s\n", *privPath, *pubPath)
+		return nil
+
+	case "sign":
+		fs := flag.NewFlagSet("policy sign", flag.ContinueOnError)
+		cfgPath := fs.String("f", "masterchef.yaml", "config path")
+		keyPath := fs.String("key", "policy-private.key", "private key path")
+		out := fs.String("o", "policy-bundle.json", "bundle output path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		priv, err := policy.LoadPrivateKey(*keyPath)
+		if err != nil {
+			return err
+		}
+		bundle, err := policy.Build(*cfgPath)
+		if err != nil {
+			return err
+		}
+		if err := bundle.Sign(priv); err != nil {
+			return err
+		}
+		if err := policy.SaveBundle(*out, bundle); err != nil {
+			return err
+		}
+		fmt.Printf("bundle signed: %s\n", *out)
+		return nil
+
+	case "verify":
+		fs := flag.NewFlagSet("policy verify", flag.ContinueOnError)
+		bundlePath := fs.String("bundle", "policy-bundle.json", "bundle path")
+		pubPath := fs.String("pub", "policy-public.key", "public key path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		pub, err := policy.LoadPublicKey(*pubPath)
+		if err != nil {
+			return err
+		}
+		bundle, err := policy.LoadBundle(*bundlePath)
+		if err != nil {
+			return err
+		}
+		if err := bundle.Verify(pub); err != nil {
+			return err
+		}
+		fmt.Printf("bundle verified: %s\n", *bundlePath)
+		return nil
+	default:
+		return fmt.Errorf("unknown policy subcommand %q", args[0])
 	}
 }
