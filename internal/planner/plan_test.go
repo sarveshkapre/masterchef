@@ -48,3 +48,37 @@ func TestBuild_CycleFails(t *testing.T) {
 		t.Fatalf("expected cycle detection error")
 	}
 }
+
+func TestBuild_DelegateToOverridesExecutionHost(t *testing.T) {
+	cfg := &config.Config{
+		Version: "v0",
+		Inventory: config.Inventory{
+			Hosts: []config.Host{
+				{Name: "target", Transport: "local"},
+				{Name: "delegate", Transport: "local"},
+			},
+		},
+		Resources: []config.Resource{
+			{
+				ID:         "c1",
+				Type:       "command",
+				Host:       "target",
+				DelegateTo: "delegate",
+				Command:    "echo delegated",
+			},
+		},
+	}
+	p, err := Build(cfg)
+	if err != nil {
+		t.Fatalf("build failed: %v", err)
+	}
+	if len(p.Steps) != 1 {
+		t.Fatalf("expected one step, got %d", len(p.Steps))
+	}
+	if p.Steps[0].Host.Name != "delegate" {
+		t.Fatalf("expected execution host delegate, got %s", p.Steps[0].Host.Name)
+	}
+	if p.Steps[0].Resource.Host != "target" {
+		t.Fatalf("expected resource host target to remain unchanged, got %s", p.Steps[0].Resource.Host)
+	}
+}

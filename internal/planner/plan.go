@@ -3,6 +3,7 @@ package planner
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/masterchef/masterchef/internal/config"
 )
@@ -71,9 +72,13 @@ func Build(cfg *config.Config) (*Plan, error) {
 
 	steps := make([]Step, 0, len(ordered))
 	for i, id := range ordered {
+		execHost := idToRes[id].Host
+		if strings.TrimSpace(idToRes[id].DelegateTo) != "" {
+			execHost = idToRes[id].DelegateTo
+		}
 		steps = append(steps, Step{
 			Order:    i + 1,
-			Host:     hostByName[idToRes[id].Host],
+			Host:     hostByName[execHost],
 			Resource: idToRes[id],
 		})
 	}

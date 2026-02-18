@@ -23,11 +23,12 @@ type Host struct {
 // Resource is a compact typed resource model for v0.
 // Type-specific fields are optional and validated by Validate.
 type Resource struct {
-	ID        string   `json:"id" yaml:"id"`
-	Type      string   `json:"type" yaml:"type"` // file, command
-	Host      string   `json:"host" yaml:"host"`
-	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	Tags      []string `json:"tags,omitempty" yaml:"tags,omitempty"`
+	ID         string   `json:"id" yaml:"id"`
+	Type       string   `json:"type" yaml:"type"` // file, command
+	Host       string   `json:"host" yaml:"host"`
+	DelegateTo string   `json:"delegate_to,omitempty" yaml:"delegate_to,omitempty"`
+	DependsOn  []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	Tags       []string `json:"tags,omitempty" yaml:"tags,omitempty"`
 
 	// file
 	Path    string `json:"path,omitempty" yaml:"path,omitempty"`

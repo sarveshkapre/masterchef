@@ -110,6 +110,7 @@ Ansible-compatible plugin extension points (`callback`, `lookup`, `filter`, `var
 Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds (`max_fail_percentage`, `any_errors_fatal`) are supported in config and executor runtime.
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-resources`, `-tags`, and `-skip-tags`.
 Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, and `until_contains`.
+Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.
 Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.

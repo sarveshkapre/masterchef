@@ -60,6 +60,11 @@ func Validate(cfg *Config) error {
 		if _, ok := hostSet[r.Host]; !ok {
 			return fmt.Errorf("resource %q references unknown host %q", r.ID, r.Host)
 		}
+		if strings.TrimSpace(r.DelegateTo) != "" {
+			if _, ok := hostSet[r.DelegateTo]; !ok {
+				return fmt.Errorf("resource %q delegate_to references unknown host %q", r.ID, r.DelegateTo)
+			}
+		}
 		switch r.Type {
 		case "file":
 			if strings.TrimSpace(r.Path) == "" {

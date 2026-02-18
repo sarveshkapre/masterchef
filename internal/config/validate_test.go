@@ -110,3 +110,25 @@ func TestValidate_CommandRetryPolicy(t *testing.T) {
 		t.Fatalf("expected retry delay validation error")
 	}
 }
+
+func TestValidate_DelegateToHost(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{
+				{Name: "target", Transport: "local"},
+				{Name: "delegate", Transport: "local"},
+			},
+		},
+		Resources: []Resource{
+			{ID: "c1", Type: "command", Host: "target", DelegateTo: "delegate", Command: "echo ok"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected valid delegate_to host, got %v", err)
+	}
+	cfg.Resources[0].DelegateTo = "missing"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected delegate_to validation error")
+	}
+}
