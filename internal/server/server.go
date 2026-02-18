@@ -167,6 +167,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
 	mux.HandleFunc("/v1/views", s.handleViews)
 	mux.HandleFunc("/v1/views/", s.handleViewAction)
+	mux.HandleFunc("/v1/views/workloads", s.handleWorkloadViews)
 	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
 	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
 	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
@@ -1544,6 +1545,7 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/views/{id}",
 			"POST /v1/views/{id}/pin",
 			"POST /v1/views/{id}/share",
+			"GET /v1/views/workloads",
 			"POST /v1/migrations/assess",
 			"GET /v1/migrations/reports",
 			"GET /v1/migrations/reports/{id}",

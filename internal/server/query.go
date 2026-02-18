@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/masterchef/masterchef/internal/state"
 )
@@ -153,6 +154,13 @@ func (s *Server) queryEntityRecords(entity, baseDir string) ([]any, error) {
 		out := make([]any, 0, len(reports))
 		for _, report := range reports {
 			out = append(out, report)
+		}
+		return out, nil
+	case "workload_views":
+		views := s.computeWorkloadViews(1000, time.Time{})
+		out := make([]any, 0, len(views))
+		for _, view := range views {
+			out = append(out, view)
 		}
 		return out, nil
 	case "solution_packs":

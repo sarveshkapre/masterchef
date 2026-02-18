@@ -1168,6 +1168,90 @@ resources:
 	}
 }
 
+func TestWorkloadCentricViewsEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-workload-views.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	for _, payload := range []string{
+		`{"type":"external.alert","message":"latency high","fields":{"workload":"payments","service":"payments-api","host":"pay-01"}}`,
+		`{"type":"external.alert","message":"error rate","fields":{"workload":"payments","service":"payments-api","host":"pay-02"}}`,
+		`{"type":"external.alert","message":"search warning","fields":{"application":"search","host":"search-01"}}`,
+	} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(payload)))
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusAccepted {
+			t.Fatalf("event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/views/workloads?limit=10", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("workload views endpoint failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	type workloadResp struct {
+		Items []struct {
+			Workload   string `json:"workload"`
+			AlertCount int    `json:"alert_count"`
+			RiskScore  int    `json:"risk_score"`
+		} `json:"items"`
+	}
+	var payload workloadResp
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode workload views response failed: %v body=%s", err, rr.Body.String())
+	}
+	if len(payload.Items) < 2 {
+		t.Fatalf("expected at least two workload entries, got %d", len(payload.Items))
+	}
+	if payload.Items[0].Workload != "payments" {
+		t.Fatalf("expected highest-risk workload to be payments, got %s", payload.Items[0].Workload)
+	}
+	if payload.Items[0].AlertCount != 2 {
+		t.Fatalf("expected payments alert count 2, got %d", payload.Items[0].AlertCount)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/query", bytes.NewReader([]byte(`{"entity":"workload_views","mode":"human","query":"workload=payments","limit":10}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("workload views query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
