@@ -69,6 +69,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
+	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/schedules", s.handleSchedules(baseDir))
@@ -412,6 +413,29 @@ func (s *Server) handleQueueControl(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleRecoverStuck(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		MaxAgeSeconds int `json:"max_age_seconds"`
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req reqBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	if req.MaxAgeSeconds <= 0 {
+		req.MaxAgeSeconds = 300
+	}
+	recovered := s.queue.RecoverStuckJobs(time.Duration(req.MaxAgeSeconds) * time.Second)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"recovered_count": len(recovered),
+		"jobs":            recovered,
+	})
 }
 
 func (s *Server) handleScheduleAction(w http.ResponseWriter, r *http.Request) {

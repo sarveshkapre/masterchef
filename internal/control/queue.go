@@ -318,6 +318,41 @@ func (q *Queue) SafeDrain(timeout time.Duration) (QueueControlStatus, error) {
 	}
 }
 
+func (q *Queue) RecoverStuckJobs(maxAge time.Duration) []Job {
+	if maxAge <= 0 {
+		maxAge = 5 * time.Minute
+	}
+	now := time.Now().UTC()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	recovered := make([]Job, 0)
+	for _, j := range q.jobs {
+		if j.Status != JobRunning {
+			continue
+		}
+		if j.StartedAt.IsZero() {
+			continue
+		}
+		if now.Sub(j.StartedAt) < maxAge {
+			continue
+		}
+		j.Status = JobFailed
+		j.Error = "stale run lease recovered by control plane"
+		j.EndedAt = now
+		if q.running > 0 {
+			q.running--
+		}
+		recovered = append(recovered, *q.clone(j))
+	}
+	go func(items []Job) {
+		for _, j := range items {
+			q.publish(j)
+		}
+	}(append([]Job{}, recovered...))
+	return recovered
+}
+
 func itoa(n int64) string {
 	if n == 0 {
 		return "0"

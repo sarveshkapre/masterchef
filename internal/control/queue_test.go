@@ -114,3 +114,26 @@ func TestQueue_SafeDrain_NoRunningJobs(t *testing.T) {
 		t.Fatalf("safe-drain should pause queue")
 	}
 }
+
+func TestQueue_RecoverStuckJobs(t *testing.T) {
+	q := NewQueue(8)
+	j, err := q.Enqueue("x.yaml", "", false)
+	if err != nil {
+		t.Fatalf("unexpected enqueue error: %v", err)
+	}
+
+	q.mu.Lock()
+	q.jobs[j.ID].Status = JobRunning
+	q.jobs[j.ID].StartedAt = time.Now().UTC().Add(-10 * time.Minute)
+	q.running = 1
+	q.mu.Unlock()
+
+	recovered := q.RecoverStuckJobs(30 * time.Second)
+	if len(recovered) != 1 {
+		t.Fatalf("expected one recovered job, got %d", len(recovered))
+	}
+	cur, _ := q.Get(j.ID)
+	if cur.Status != JobFailed {
+		t.Fatalf("expected recovered job to be failed, got %s", cur.Status)
+	}
+}
