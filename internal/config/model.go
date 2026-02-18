@@ -4,6 +4,7 @@ package config
 type Config struct {
 	Version   string     `json:"version" yaml:"version"`
 	Inventory Inventory  `json:"inventory" yaml:"inventory"`
+	Execution Execution  `json:"execution,omitempty" yaml:"execution,omitempty"`
 	Resources []Resource `json:"resources" yaml:"resources"`
 }
 
@@ -36,4 +37,11 @@ type Resource struct {
 	Command string `json:"command,omitempty" yaml:"command,omitempty"`
 	Creates string `json:"creates,omitempty" yaml:"creates,omitempty"`
 	Unless  string `json:"unless,omitempty" yaml:"unless,omitempty"`
+}
+
+type Execution struct {
+	Strategy          string `json:"strategy,omitempty" yaml:"strategy,omitempty"` // linear|free|serial
+	Serial            int    `json:"serial,omitempty" yaml:"serial,omitempty"`     // host batch size for serial strategy
+	MaxFailPercentage int    `json:"max_fail_percentage,omitempty" yaml:"max_fail_percentage,omitempty"`
+	AnyErrorsFatal    bool   `json:"any_errors_fatal,omitempty" yaml:"any_errors_fatal,omitempty"`
 }

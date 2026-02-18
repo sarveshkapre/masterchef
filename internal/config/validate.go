@@ -12,6 +12,18 @@ func Validate(cfg *Config) error {
 	if strings.TrimSpace(cfg.Version) == "" {
 		return fmt.Errorf("version is required")
 	}
+	strategy := strings.ToLower(strings.TrimSpace(cfg.Execution.Strategy))
+	switch strategy {
+	case "", "linear", "free", "serial":
+	default:
+		return fmt.Errorf("execution.strategy must be one of linear, free, serial")
+	}
+	if cfg.Execution.Serial < 0 {
+		return fmt.Errorf("execution.serial must be >= 0")
+	}
+	if cfg.Execution.MaxFailPercentage < 0 || cfg.Execution.MaxFailPercentage > 100 {
+		return fmt.Errorf("execution.max_fail_percentage must be between 0 and 100")
+	}
 
 	hostSet := map[string]struct{}{}
 	for i, h := range cfg.Inventory.Hosts {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -48,58 +49,48 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 		Results:   make([]state.ResourceRun, 0, len(p.Steps)),
 	}
 
-	for _, step := range p.Steps {
-		r := step.Resource
-		if step.Host.Transport != "local" && step.Host.Transport != "ssh" {
-			run.Status = state.RunFailed
-			run.Results = append(run.Results, state.ResourceRun{
-				ResourceID: r.ID,
-				Type:       r.Type,
-				Host:       r.Host,
-				Message:    "unsupported transport: " + step.Host.Transport,
-			})
-			break
-		}
+	policy := p.Execution
+	strategy := strings.ToLower(strings.TrimSpace(policy.Strategy))
+	if strategy == "" {
+		strategy = "linear"
+	}
+	steps := p.Steps
+	switch strategy {
+	case "serial":
+		steps = serialOrderedSteps(p.Steps, policy.Serial)
+	}
 
-		res := state.ResourceRun{
-			ResourceID: r.ID,
-			Type:       r.Type,
-			Host:       r.Host,
+	failedSteps := 0
+	executedSteps := 0
+	shouldStop := func() bool {
+		if failedSteps == 0 {
+			return false
 		}
-
-		if step.Host.Transport == "ssh" {
-			changed, skipped, msg, err := e.applyOverSSH(step, r)
-			res.Changed = changed
-			res.Skipped = skipped
-			res.Message = msg
-			if err != nil {
-				run.Status = state.RunFailed
-				res.Message = err.Error()
+		if policy.AnyErrorsFatal {
+			return true
+		}
+		if strategy == "linear" || strategy == "serial" {
+			return true
+		}
+		if policy.MaxFailPercentage > 0 && executedSteps > 0 {
+			failPct := (failedSteps * 100) / executedSteps
+			if failPct > policy.MaxFailPercentage {
+				return true
 			}
-		} else {
-			h, ok := e.registry.Lookup(r.Type)
-			if !ok {
-				run.Status = state.RunFailed
-				res.Message = fmt.Sprintf("no provider registered for type %q", r.Type)
-				run.Results = append(run.Results, res)
+		}
+		return false
+	}
+
+	for _, step := range steps {
+		res, failed := e.executeStep(step)
+		run.Results = append(run.Results, res)
+		executedSteps++
+		if failed {
+			failedSteps++
+			run.Status = state.RunFailed
+			if shouldStop() {
 				break
 			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), e.stepTimeout)
-			pRes, err := h.Apply(ctx, r)
-			cancel()
-			res.Changed = pRes.Changed
-			res.Skipped = pRes.Skipped
-			res.Message = pRes.Message
-			if err != nil {
-				run.Status = state.RunFailed
-				res.Message = err.Error()
-			}
-		}
-
-		run.Results = append(run.Results, res)
-		if run.Status == state.RunFailed {
-			break
 		}
 	}
 
@@ -108,6 +99,102 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 		run.Status = state.RunSucceeded
 	}
 	return run, nil
+}
+
+func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
+	r := step.Resource
+	if step.Host.Transport != "local" && step.Host.Transport != "ssh" {
+		return state.ResourceRun{
+			ResourceID: r.ID,
+			Type:       r.Type,
+			Host:       r.Host,
+			Message:    "unsupported transport: " + step.Host.Transport,
+		}, true
+	}
+
+	res := state.ResourceRun{
+		ResourceID: r.ID,
+		Type:       r.Type,
+		Host:       r.Host,
+	}
+
+	if step.Host.Transport == "ssh" {
+		changed, skipped, msg, err := e.applyOverSSH(step, r)
+		res.Changed = changed
+		res.Skipped = skipped
+		res.Message = msg
+		if err != nil {
+			res.Message = err.Error()
+			return res, true
+		}
+		return res, false
+	}
+
+	h, ok := e.registry.Lookup(r.Type)
+	if !ok {
+		res.Message = fmt.Sprintf("no provider registered for type %q", r.Type)
+		return res, true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), e.stepTimeout)
+	pRes, err := h.Apply(ctx, r)
+	cancel()
+	res.Changed = pRes.Changed
+	res.Skipped = pRes.Skipped
+	res.Message = pRes.Message
+	if err != nil {
+		res.Message = err.Error()
+		return res, true
+	}
+	return res, false
+}
+
+func serialOrderedSteps(in []planner.Step, serial int) []planner.Step {
+	if serial <= 0 {
+		serial = 1
+	}
+	hostSeen := map[string]struct{}{}
+	hostOrder := make([]string, 0)
+	for _, step := range in {
+		host := strings.TrimSpace(step.Host.Name)
+		if host == "" {
+			host = strings.TrimSpace(step.Resource.Host)
+		}
+		if host == "" {
+			host = "unknown-host"
+		}
+		if _, ok := hostSeen[host]; ok {
+			continue
+		}
+		hostSeen[host] = struct{}{}
+		hostOrder = append(hostOrder, host)
+	}
+	sort.Strings(hostOrder)
+
+	out := make([]planner.Step, 0, len(in))
+	for i := 0; i < len(hostOrder); i += serial {
+		end := i + serial
+		if end > len(hostOrder) {
+			end = len(hostOrder)
+		}
+		batchHosts := map[string]struct{}{}
+		for _, host := range hostOrder[i:end] {
+			batchHosts[host] = struct{}{}
+		}
+		for _, step := range in {
+			host := strings.TrimSpace(step.Host.Name)
+			if host == "" {
+				host = strings.TrimSpace(step.Resource.Host)
+			}
+			if host == "" {
+				host = "unknown-host"
+			}
+			if _, ok := batchHosts[host]; ok {
+				out = append(out, step)
+			}
+		}
+	}
+	return out
 }
 
 func (e *Executor) applyOverSSH(step planner.Step, r config.Resource) (bool, bool, string, error) {

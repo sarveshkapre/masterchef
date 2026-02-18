@@ -95,3 +95,135 @@ func TestApply_CommandCreatesSkipsSecondRun(t *testing.T) {
 		t.Fatalf("expected second run to be skipped")
 	}
 }
+
+func TestApply_FreeStrategyContinuesAfterFailure(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "after-failure.txt")
+	p := &planner.Plan{
+		Execution: config.Execution{
+			Strategy: "free",
+		},
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "fail-step",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "exit 1",
+				},
+			},
+			{
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "after-step",
+					Type:    "file",
+					Host:    "localhost",
+					Path:    target,
+					Content: "ok\n",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunFailed {
+		t.Fatalf("expected failed run due first step, got %s", run.Status)
+	}
+	if len(run.Results) != 2 {
+		t.Fatalf("expected free strategy to continue, got %d results", len(run.Results))
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("expected second step to execute and create file: %v", err)
+	}
+}
+
+func TestApply_AnyErrorsFatalStopsFreeStrategy(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "should-not-exist.txt")
+	p := &planner.Plan{
+		Execution: config.Execution{
+			Strategy:       "free",
+			AnyErrorsFatal: true,
+		},
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "fail-step",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "exit 1",
+				},
+			},
+			{
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "after-step",
+					Type:    "file",
+					Host:    "localhost",
+					Path:    target,
+					Content: "ok\n",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if len(run.Results) != 1 {
+		t.Fatalf("expected any_errors_fatal to stop run, got %d", len(run.Results))
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("expected second step not to run, stat err=%v", err)
+	}
+}
+
+func TestApply_MaxFailPercentageStopsFreeStrategy(t *testing.T) {
+	tmp := t.TempDir()
+	p := &planner.Plan{
+		Execution: config.Execution{
+			Strategy:          "free",
+			MaxFailPercentage: 10,
+		},
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "fail-step",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "exit 1",
+				},
+			},
+			{
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "next-step",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "echo should-not-run",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if len(run.Results) != 1 {
+		t.Fatalf("expected failure percentage policy to stop run, got %d", len(run.Results))
+	}
+}

@@ -32,3 +32,31 @@ func TestValidate_CycleRefFailsUnknownDependency(t *testing.T) {
 		t.Fatalf("expected validation error for missing dependency")
 	}
 }
+
+func TestValidate_ExecutionPolicy(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Execution: Execution{
+			Strategy:          "free",
+			MaxFailPercentage: 25,
+		},
+		Resources: []Resource{
+			{ID: "f1", Type: "file", Host: "localhost", Path: "/tmp/x"},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected valid execution policy, got %v", err)
+	}
+	cfg.Execution.Strategy = "invalid"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected invalid strategy error")
+	}
+	cfg.Execution.Strategy = "linear"
+	cfg.Execution.MaxFailPercentage = 200
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected max_fail_percentage validation error")
+	}
+}

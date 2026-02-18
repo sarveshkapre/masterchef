@@ -8,7 +8,8 @@ import (
 )
 
 type Plan struct {
-	Steps []Step `json:"steps"`
+	Execution config.Execution `json:"execution,omitempty"`
+	Steps     []Step           `json:"steps"`
 }
 
 type Step struct {
@@ -76,5 +77,8 @@ func Build(cfg *config.Config) (*Plan, error) {
 			Resource: idToRes[id],
 		})
 	}
-	return &Plan{Steps: steps}, nil
+	return &Plan{
+		Execution: cfg.Execution,
+		Steps:     steps,
+	}, nil
 }
