@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -469,5 +470,64 @@ func TestPrepareResourceForExecution_WinRMBecomeUnsupported(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatalf("expected winrm become to fail")
+	}
+}
+
+func TestApply_PrivilegedRemoteSessionRecording(t *testing.T) {
+	tmp := t.TempDir()
+	ex := New(tmp)
+	if err := ex.RegisterTransport("ssh", func(step planner.Step, r config.Resource) (bool, bool, string, error) {
+		if !strings.Contains(r.Command, "sudo sh -lc ") {
+			t.Fatalf("expected sudo wrapping for ssh become command, got %q", r.Command)
+		}
+		return true, false, "applied", nil
+	}); err != nil {
+		t.Fatalf("register ssh transport override failed: %v", err)
+	}
+
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "edge-1", Transport: "ssh"},
+				Resource: config.Resource{
+					ID:      "priv-remote",
+					Type:    "command",
+					Host:    "edge-1",
+					Command: "echo secure",
+					Become:  true,
+				},
+			},
+		},
+	}
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded || len(run.Results) != 1 {
+		t.Fatalf("unexpected run result %#v", run)
+	}
+	if !strings.Contains(run.Results[0].Message, "session record: ") {
+		t.Fatalf("expected session record path in message, got %q", run.Results[0].Message)
+	}
+
+	sessionDir := filepath.Join(tmp, ".masterchef", "sessions")
+	entries, err := os.ReadDir(sessionDir)
+	if err != nil {
+		t.Fatalf("read session dir failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one session record, got %d", len(entries))
+	}
+	body, err := os.ReadFile(filepath.Join(sessionDir, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("read session file failed: %v", err)
+	}
+	var rec sessionRecord
+	if err := json.Unmarshal(body, &rec); err != nil {
+		t.Fatalf("decode session record failed: %v", err)
+	}
+	if rec.Resource != "priv-remote" || rec.Transport != "ssh" || !rec.Become {
+		t.Fatalf("unexpected session record %+v", rec)
 	}
 }

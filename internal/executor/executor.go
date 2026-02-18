@@ -2,7 +2,9 @@ package executor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -18,15 +20,17 @@ import (
 
 type Executor struct {
 	stepTimeout       time.Duration
+	baseDir           string
 	registry          *provider.Registry
 	transportHandlers map[string]transportApplyFunc
 }
 
 type transportApplyFunc func(step planner.Step, r config.Resource) (bool, bool, string, error)
 
-func New(_ string) *Executor {
+func New(baseDir string) *Executor {
 	e := &Executor{
 		stepTimeout: 30 * time.Second,
+		baseDir:     baseDir,
 		registry:    provider.NewBuiltinRegistry(),
 	}
 	e.registerBuiltinTransports()
@@ -172,6 +176,12 @@ func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool
 	res.Changed = changed
 	res.Skipped = skipped
 	res.Message = appendAuditMessage(msg, audit)
+	recordPath, recordErr := e.maybeRecordSession(step, preparedResource, msg, err)
+	if recordErr != nil {
+		res.Message = appendAuditMessage(res.Message, "session record error: "+recordErr.Error())
+	} else if recordPath != "" {
+		res.Message = appendAuditMessage(res.Message, "session record: "+recordPath)
+	}
 	if err != nil {
 		if strings.TrimSpace(res.Message) == "" {
 			res.Message = err.Error()
@@ -224,6 +234,82 @@ func appendAuditMessage(message, audit string) string {
 		return audit
 	}
 	return message + "; " + audit
+}
+
+type sessionRecord struct {
+	Timestamp  time.Time `json:"timestamp"`
+	Host       string    `json:"host"`
+	Transport  string    `json:"transport"`
+	Resource   string    `json:"resource_id"`
+	Command    string    `json:"command,omitempty"`
+	Become     bool      `json:"become"`
+	BecomeUser string    `json:"become_user,omitempty"`
+	Output     string    `json:"output,omitempty"`
+	Error      string    `json:"error,omitempty"`
+}
+
+func (e *Executor) maybeRecordSession(step planner.Step, resource config.Resource, output string, execErr error) (string, error) {
+	if !shouldRecordSession(step.Host, resource) {
+		return "", nil
+	}
+	if strings.TrimSpace(e.baseDir) == "" {
+		return "", nil
+	}
+	dir := filepath.Join(e.baseDir, ".masterchef", "sessions")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create session dir: %w", err)
+	}
+	name := sanitizeSessionToken(step.Resource.ID) + "-" + time.Now().UTC().Format("20060102T150405.000000000") + ".json"
+	path := filepath.Join(dir, name)
+	record := sessionRecord{
+		Timestamp:  time.Now().UTC(),
+		Host:       step.Host.Name,
+		Transport:  strings.ToLower(strings.TrimSpace(step.Host.Transport)),
+		Resource:   step.Resource.ID,
+		Command:    resource.Command,
+		Become:     resource.Become,
+		BecomeUser: resource.BecomeUser,
+		Output:     strings.TrimSpace(output),
+	}
+	if execErr != nil {
+		record.Error = execErr.Error()
+	}
+	body, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal session record: %w", err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		return "", fmt.Errorf("write session record: %w", err)
+	}
+	return path, nil
+}
+
+func shouldRecordSession(host config.Host, resource config.Resource) bool {
+	if resource.Type != "command" || !resource.Become {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(host.Transport)) {
+	case "ssh", "winrm":
+		return true
+	default:
+		return false
+	}
+}
+
+func sanitizeSessionToken(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "resource"
+	}
+	var b strings.Builder
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteRune('_')
+	}
+	return b.String()
 }
 
 func (e *Executor) registerBuiltinTransports() {
