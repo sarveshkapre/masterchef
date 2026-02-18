@@ -24,6 +24,7 @@ type Server struct {
 	scheduler  *control.Scheduler
 	templates  *control.TemplateStore
 	workflows  *control.WorkflowStore
+	commands   *control.CommandIngestStore
 	events     *control.EventStore
 	runCancel  context.CancelFunc
 	metricsMu  sync.Mutex
@@ -48,6 +49,7 @@ func New(addr, baseDir string) *Server {
 	scheduler := control.NewScheduler(queue)
 	templates := control.NewTemplateStore()
 	workflows := control.NewWorkflowStore(queue, templates)
+	commands := control.NewCommandIngestStore(5000)
 	events := control.NewEventStore(20_000)
 
 	mux := http.NewServeMux()
@@ -56,6 +58,7 @@ func New(addr, baseDir string) *Server {
 		scheduler: scheduler,
 		templates: templates,
 		workflows: workflows,
+		commands:  commands,
 		events:    events,
 		metrics:   map[string]int64{},
 		runCancel: runCancel,
@@ -89,6 +92,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
+	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
+	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
@@ -175,6 +180,100 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 		Fields:  req.Fields,
 	})
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "ingested"})
+}
+
+func (s *Server) handleCommandIngest(baseDir string) http.HandlerFunc {
+	type reqBody struct {
+		Action         string `json:"action"`
+		ConfigPath     string `json:"config_path"`
+		Priority       string `json:"priority"`
+		IdempotencyKey string `json:"idempotency_key"`
+		Checksum       string `json:"checksum"`
+		Force          bool   `json:"force"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+
+		env := control.CommandEnvelope{
+			Action:         req.Action,
+			ConfigPath:     req.ConfigPath,
+			Priority:       req.Priority,
+			IdempotencyKey: req.IdempotencyKey,
+			Checksum:       req.Checksum,
+		}
+
+		if strings.TrimSpace(req.Checksum) == "" {
+			dlq := s.commands.RecordDeadLetter(env, "checksum is required")
+			writeJSON(w, http.StatusUnprocessableEntity, dlq)
+			return
+		}
+
+		expected := control.ComputeCommandChecksum(req.Action, req.ConfigPath, req.Priority, req.IdempotencyKey)
+		if !strings.EqualFold(strings.TrimSpace(req.Checksum), expected) {
+			dlq := s.commands.RecordDeadLetter(env, "checksum mismatch")
+			writeJSON(w, http.StatusUnprocessableEntity, dlq)
+			return
+		}
+		if strings.ToLower(strings.TrimSpace(req.Action)) != "apply" {
+			dlq := s.commands.RecordDeadLetter(env, "unsupported action")
+			writeJSON(w, http.StatusBadRequest, dlq)
+			return
+		}
+		if strings.TrimSpace(req.ConfigPath) == "" {
+			dlq := s.commands.RecordDeadLetter(env, "config_path is required")
+			writeJSON(w, http.StatusBadRequest, dlq)
+			return
+		}
+
+		configPath := req.ConfigPath
+		if !filepath.IsAbs(configPath) {
+			configPath = filepath.Join(baseDir, configPath)
+		}
+		if _, err := os.Stat(configPath); err != nil {
+			dlq := s.commands.RecordDeadLetter(env, "config_path not found")
+			writeJSON(w, http.StatusBadRequest, dlq)
+			return
+		}
+
+		accepted := s.commands.RecordAccepted(env)
+		force := req.Force || strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
+		job, err := s.queue.Enqueue(configPath, req.IdempotencyKey, force, req.Priority)
+		if err != nil {
+			dlq := s.commands.RecordDeadLetter(env, err.Error())
+			writeJSON(w, http.StatusConflict, dlq)
+			return
+		}
+		s.events.Append(control.Event{
+			Type:    "command.ingested",
+			Message: "asynchronous command ingested",
+			Fields: map[string]any{
+				"command_id": accepted.ID,
+				"action":     accepted.Action,
+				"job_id":     job.ID,
+			},
+		})
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"command": accepted,
+			"job":     job,
+		})
+	}
+}
+
+func (s *Server) handleCommandDeadLetters(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.commands.DeadLetters())
 }
 
 func (s *Server) handleRuns(baseDir string) http.HandlerFunc {

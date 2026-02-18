@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/masterchef/masterchef/internal/control"
 )
 
 func TestSplitPath(t *testing.T) {
@@ -511,5 +513,72 @@ resources:
 			t.Fatalf("timed out waiting for workflow run completion")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x6.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	badBody := []byte(`{"action":"apply","config_path":"c.yaml","priority":"high","checksum":"bad"}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/commands/ingest", bytes.NewReader(badBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected checksum mismatch dead letter: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	checksum := control.ComputeCommandChecksum("apply", "c.yaml", "high", "cmd-1")
+	goodBody := []byte(`{"action":"apply","config_path":"c.yaml","priority":"high","idempotency_key":"cmd-1","checksum":"` + checksum + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/commands/ingest", bytes.NewReader(goodBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected accepted command ingest: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/commands/dead-letters", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected dead-letter listing success: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var dead []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &dead); err != nil {
+		t.Fatalf("dead-letter decode failed: %v", err)
+	}
+	if len(dead) == 0 {
+		t.Fatalf("expected at least one dead letter")
 	}
 }
