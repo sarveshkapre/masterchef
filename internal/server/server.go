@@ -171,6 +171,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
+	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
@@ -1683,6 +1684,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/search",
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
+			"GET /v1/drift/insights",
 			"GET /v1/metrics",
 			"GET /v1/features/summary",
 			"GET /v1/docs/actions",

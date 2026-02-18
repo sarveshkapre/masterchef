@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -2571,6 +2572,67 @@ resources:
 	}
 	if !strings.Contains(rr.Body.String(), `changed flag differs`) {
 		t.Fatalf("expected changed flag diff in response: %s", rr.Body.String())
+	}
+}
+
+func TestDriftInsightsEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-drift.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	st := state.New(tmp)
+	for i := 0; i < 3; i++ {
+		if err := st.SaveRun(state.RunRecord{
+			ID:        "run-drift-" + strconv.Itoa(i),
+			StartedAt: time.Now().UTC().Add(-time.Duration(10-i) * time.Minute),
+			EndedAt:   time.Now().UTC().Add(-time.Duration(9-i) * time.Minute),
+			Status:    state.RunFailed,
+			Results: []state.ResourceRun{
+				{ResourceID: "cmd", Type: "command", Host: "node-a", Changed: true, Message: "changed"},
+			},
+		}); err != nil {
+			t.Fatalf("save drift run %d failed: %v", i, err)
+		}
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/drift/insights?hours=24", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("drift insights failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"root_cause_hints"`) || !strings.Contains(rr.Body.String(), `"remediations"`) {
+		t.Fatalf("expected root-cause hints and remediations in drift insights: %s", rr.Body.String())
 	}
 }
 
