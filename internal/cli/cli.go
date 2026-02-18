@@ -35,6 +35,8 @@ func Run(args []string) error {
 		return runValidate(args[1:])
 	case "fmt":
 		return runFmt(args[1:])
+	case "doctor":
+		return runDoctor(args[1:])
 	case "plan":
 		return runPlan(args[1:])
 	case "check":
@@ -58,6 +60,7 @@ masterchef commands:
   init [-f masterchef.yaml]
   validate [-f masterchef.yaml]
   fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
+  doctor [-f masterchef.yaml] [-format json|human]
   plan [-f masterchef.yaml] [-o plan.json]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -170,6 +173,39 @@ func runFmt(args []string) error {
 		return err
 	}
 	fmt.Printf("formatted config written: %s\n", target)
+	return nil
+}
+
+func runDoctor(args []string) error {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	path := fs.String("f", "masterchef.yaml", "config path")
+	format := fs.String("format", "human", "output format: human|json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := config.Load(*path)
+	if err != nil {
+		return err
+	}
+	diags := config.Analyze(cfg)
+	switch strings.ToLower(strings.TrimSpace(*format)) {
+	case "json":
+		b, _ := json.MarshalIndent(diags, "", "  ")
+		fmt.Println(string(b))
+	default:
+		if len(diags) == 0 {
+			fmt.Println("doctor: no issues found")
+			return nil
+		}
+		for _, d := range diags {
+			fmt.Printf("- [%s] %s: %s\n", d.Severity, d.Code, d.Message)
+		}
+	}
+	for _, d := range diags {
+		if d.Severity == config.SeverityError {
+			return ExitError{Code: 4, Msg: "doctor found blocking errors"}
+		}
+	}
 	return nil
 }
 
