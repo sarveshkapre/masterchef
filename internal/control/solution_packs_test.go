@@ -15,4 +15,7 @@ func TestSolutionPackCatalog(t *testing.T) {
 	if p.StarterConfigYAML == "" {
 		t.Fatalf("expected starter config content")
 	}
+	if _, err := c.Get("search-analytics-cluster"); err != nil {
+		t.Fatalf("expected search-analytics-cluster pack: %v", err)
+	}
 }
