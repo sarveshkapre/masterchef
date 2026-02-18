@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/masterchef/masterchef/internal/checker"
 	"github.com/masterchef/masterchef/internal/config"
 	"github.com/masterchef/masterchef/internal/executor"
 	"github.com/masterchef/masterchef/internal/features"
@@ -33,6 +34,8 @@ func Run(args []string) error {
 		return runValidate(args[1:])
 	case "plan":
 		return runPlan(args[1:])
+	case "check":
+		return runCheck(args[1:])
 	case "apply":
 		return runApply(args[1:])
 	case "serve":
@@ -52,12 +55,26 @@ masterchef commands:
   init [-f masterchef.yaml]
   validate [-f masterchef.yaml]
   plan [-f masterchef.yaml] [-o plan.json]
+  check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
   serve [-addr :8080]
   policy [keygen|sign|verify] ...
   features [matrix|summary|verify] [-f features.md]
 `))
 	return errors.New("invalid command")
+}
+
+type ExitError struct {
+	Code int
+	Msg  string
+}
+
+func (e ExitError) Error() string {
+	return e.Msg
+}
+
+func (e ExitError) ExitCode() int {
+	return e.Code
 }
 
 func runInit(args []string) error {
@@ -137,6 +154,45 @@ func runPlan(args []string) error {
 		return err
 	}
 	fmt.Printf("plan written: %s\n", *out)
+	return nil
+}
+
+func runCheck(args []string) error {
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	path := fs.String("f", "masterchef.yaml", "config path")
+	minConfidence := fs.Float64("min-confidence", 1.0, "minimum required simulation confidence [0.0-1.0]")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *minConfidence < 0 || *minConfidence > 1 {
+		return fmt.Errorf("min-confidence must be between 0.0 and 1.0")
+	}
+
+	cfg, err := config.Load(*path)
+	if err != nil {
+		return err
+	}
+	p, err := planner.Build(cfg)
+	if err != nil {
+		return err
+	}
+
+	report := checker.Run(p)
+	b, _ := json.MarshalIndent(report, "", "  ")
+	fmt.Println(string(b))
+
+	if report.Confidence < *minConfidence {
+		return ExitError{
+			Code: 3,
+			Msg:  fmt.Sprintf("simulation confidence %.3f below required %.3f", report.Confidence, *minConfidence),
+		}
+	}
+	if report.ChangesNeeded > 0 {
+		return ExitError{
+			Code: 2,
+			Msg:  fmt.Sprintf("changes required: %d resources would change", report.ChangesNeeded),
+		}
+	}
 	return nil
 }
 
