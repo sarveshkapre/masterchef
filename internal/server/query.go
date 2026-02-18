@@ -155,6 +155,13 @@ func (s *Server) queryEntityRecords(entity, baseDir string) ([]any, error) {
 			out = append(out, p)
 		}
 		return out, nil
+	case "workspace_templates":
+		templates := s.workspaceTemplates.List()
+		out := make([]any, 0, len(templates))
+		for _, tpl := range templates {
+			out = append(out, tpl)
+		}
+		return out, nil
 	case "jobs":
 		jobs := s.queue.List()
 		out := make([]any, 0, len(jobs))

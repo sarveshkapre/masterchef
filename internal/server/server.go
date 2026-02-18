@@ -22,31 +22,32 @@ import (
 )
 
 type Server struct {
-	httpServer    *http.Server
-	baseDir       string
-	queue         *control.Queue
-	scheduler     *control.Scheduler
-	templates     *control.TemplateStore
-	workflows     *control.WorkflowStore
-	runbooks      *control.RunbookStore
-	assocs        *control.AssociationStore
-	commands      *control.CommandIngestStore
-	canaries      *control.CanaryStore
-	rules         *control.RuleEngine
-	webhooks      *control.WebhookDispatcher
-	alerts        *control.AlertInbox
-	notifications *control.NotificationRouter
-	changeRecords *control.ChangeRecordStore
-	checklists    *control.ChecklistStore
-	views         *control.SavedViewStore
-	solutionPacks *control.SolutionPackCatalog
-	channels      *control.ChannelManager
-	schemaMigs    *control.SchemaMigrationManager
-	objectStore   storage.ObjectStore
-	events        *control.EventStore
-	runCancel     context.CancelFunc
-	metricsMu     sync.Mutex
-	metrics       map[string]int64
+	httpServer         *http.Server
+	baseDir            string
+	queue              *control.Queue
+	scheduler          *control.Scheduler
+	templates          *control.TemplateStore
+	workflows          *control.WorkflowStore
+	runbooks           *control.RunbookStore
+	assocs             *control.AssociationStore
+	commands           *control.CommandIngestStore
+	canaries           *control.CanaryStore
+	rules              *control.RuleEngine
+	webhooks           *control.WebhookDispatcher
+	alerts             *control.AlertInbox
+	notifications      *control.NotificationRouter
+	changeRecords      *control.ChangeRecordStore
+	checklists         *control.ChecklistStore
+	views              *control.SavedViewStore
+	solutionPacks      *control.SolutionPackCatalog
+	workspaceTemplates *control.WorkspaceTemplateCatalog
+	channels           *control.ChannelManager
+	schemaMigs         *control.SchemaMigrationManager
+	objectStore        storage.ObjectStore
+	events             *control.EventStore
+	runCancel          context.CancelFunc
+	metricsMu          sync.Mutex
+	metrics            map[string]int64
 
 	backlogThreshold  int
 	backlogSamples    []backlogSample
@@ -79,6 +80,7 @@ func New(addr, baseDir string) *Server {
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
 	solutionPacks := control.NewSolutionPackCatalog()
+	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
@@ -93,29 +95,30 @@ func New(addr, baseDir string) *Server {
 
 	mux := http.NewServeMux()
 	s := &Server{
-		baseDir:       baseDir,
-		queue:         queue,
-		scheduler:     scheduler,
-		templates:     templates,
-		workflows:     workflows,
-		runbooks:      runbooks,
-		assocs:        assocs,
-		commands:      commands,
-		canaries:      canaries,
-		rules:         rules,
-		webhooks:      webhooks,
-		alerts:        alerts,
-		notifications: notifications,
-		changeRecords: changeRecords,
-		checklists:    checklists,
-		views:         views,
-		solutionPacks: solutionPacks,
-		channels:      channels,
-		schemaMigs:    schemaMigs,
-		objectStore:   objectStore,
-		events:        events,
-		metrics:       map[string]int64{},
-		runCancel:     runCancel,
+		baseDir:            baseDir,
+		queue:              queue,
+		scheduler:          scheduler,
+		templates:          templates,
+		workflows:          workflows,
+		runbooks:           runbooks,
+		assocs:             assocs,
+		commands:           commands,
+		canaries:           canaries,
+		rules:              rules,
+		webhooks:           webhooks,
+		alerts:             alerts,
+		notifications:      notifications,
+		changeRecords:      changeRecords,
+		checklists:         checklists,
+		views:              views,
+		solutionPacks:      solutionPacks,
+		workspaceTemplates: workspaceTemplates,
+		channels:           channels,
+		schemaMigs:         schemaMigs,
+		objectStore:        objectStore,
+		events:             events,
+		metrics:            map[string]int64{},
+		runCancel:          runCancel,
 		backlogThreshold: readIntEnv(
 			"MC_QUEUE_BACKLOG_SLO_THRESHOLD",
 			100,
@@ -160,6 +163,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/views/", s.handleViewAction)
 	mux.HandleFunc("/v1/solution-packs", s.handleSolutionPacks(baseDir))
 	mux.HandleFunc("/v1/solution-packs/", s.handleSolutionPackAction(baseDir))
+	mux.HandleFunc("/v1/workspace-templates", s.handleWorkspaceTemplates(baseDir))
+	mux.HandleFunc("/v1/workspace-templates/", s.handleWorkspaceTemplateAction(baseDir))
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
@@ -1530,6 +1535,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/views/{id}/share",
 			"GET /v1/solution-packs",
 			"POST /v1/solution-packs/{id}/apply",
+			"GET /v1/workspace-templates",
+			"POST /v1/workspace-templates/{id}/bootstrap",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
 			"GET /v1/release/api-contract",
