@@ -43,7 +43,7 @@ masterchef commands:
   validate [-f masterchef.yaml]
   plan [-f masterchef.yaml] [-o plan.json]
   apply [-f masterchef.yaml]
-  features [matrix|summary] [-f features.md]
+  features [matrix|summary|verify] [-f features.md]
 `))
 	return errors.New("invalid command")
 }
@@ -188,6 +188,11 @@ func runFeatures(args []string) error {
 	case "matrix":
 		b, _ := json.MarshalIndent(doc.Matrix, "", "  ")
 		fmt.Println(string(b))
+	case "verify":
+		report := features.Verify(doc)
+		b, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(b))
+		return report.Error()
 	default:
 		return fmt.Errorf("unknown features subcommand %q", sub)
 	}
