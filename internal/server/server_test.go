@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1091,5 +1092,102 @@ resources:
 			t.Fatalf("timed out waiting for rule-triggered high-priority job")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestWebhookEndpointsAndDeliveries(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x13.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer receiver.Close()
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	webhookBody := []byte(`{"name":"alerts","url":"` + receiver.URL + `","event_prefix":"external.alert","enabled":true}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/webhooks", bytes.NewReader(webhookBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("webhook create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var webhook struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &webhook); err != nil {
+		t.Fatalf("webhook decode failed: %v", err)
+	}
+
+	eventBody := []byte(`{"type":"external.alert.disk","message":"disk alert","fields":{"sev":"high"}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(eventBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if atomic.LoadInt32(&calls) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for webhook delivery")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/webhooks/deliveries?limit=10", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("webhook deliveries failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var deliveries []map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &deliveries); err != nil {
+		t.Fatalf("deliveries decode failed: %v", err)
+	}
+	if len(deliveries) < 1 {
+		t.Fatalf("expected at least one delivery record")
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/webhooks/"+webhook.ID+"/disable", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("webhook disable failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }

@@ -31,6 +31,7 @@ type Server struct {
 	commands    *control.CommandIngestStore
 	canaries    *control.CanaryStore
 	rules       *control.RuleEngine
+	webhooks    *control.WebhookDispatcher
 	objectStore storage.ObjectStore
 	events      *control.EventStore
 	runCancel   context.CancelFunc
@@ -60,6 +61,7 @@ func New(addr, baseDir string) *Server {
 	commands := control.NewCommandIngestStore(5000)
 	canaries := control.NewCanaryStore(queue)
 	rules := control.NewRuleEngine()
+	webhooks := control.NewWebhookDispatcher(5000)
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -81,6 +83,7 @@ func New(addr, baseDir string) *Server {
 		commands:    commands,
 		canaries:    canaries,
 		rules:       rules,
+		webhooks:    webhooks,
 		objectStore: objectStore,
 		events:      events,
 		metrics:     map[string]int64{},
@@ -119,6 +122,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
+	mux.HandleFunc("/v1/webhooks", s.handleWebhooks)
+	mux.HandleFunc("/v1/webhooks/", s.handleWebhookAction)
+	mux.HandleFunc("/v1/webhooks/deliveries", s.handleWebhookDeliveries)
 	mux.HandleFunc("/v1/rules", s.handleRules)
 	mux.HandleFunc("/v1/rules/", s.handleRuleAction)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
@@ -403,6 +409,100 @@ func (s *Server) handleRuleAction(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown rule action"})
 	}
+}
+
+func (s *Server) handleWebhooks(w http.ResponseWriter, r *http.Request) {
+	type createReq struct {
+		Name        string `json:"name"`
+		URL         string `json:"url"`
+		EventPrefix string `json:"event_prefix"`
+		Secret      string `json:"secret"`
+		Enabled     bool   `json:"enabled"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.webhooks.List())
+	case http.MethodPost:
+		var req createReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		webhook, err := s.webhooks.Register(control.WebhookSubscription{
+			Name:        req.Name,
+			URL:         req.URL,
+			EventPrefix: req.EventPrefix,
+			Secret:      req.Secret,
+			Enabled:     req.Enabled,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusCreated, webhook)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleWebhookAction(w http.ResponseWriter, r *http.Request) {
+	// /v1/webhooks/{id} or /v1/webhooks/{id}/enable|disable
+	parts := splitPath(r.URL.Path)
+	if len(parts) < 3 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid webhook path"})
+		return
+	}
+	id := parts[2]
+	if len(parts) == 3 {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		wh, err := s.webhooks.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, wh)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	action := parts[3]
+	switch action {
+	case "enable":
+		wh, err := s.webhooks.SetEnabled(id, true)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, wh)
+	case "disable":
+		wh, err := s.webhooks.SetEnabled(id, false)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, wh)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown webhook action"})
+	}
+}
+
+func (s *Server) handleWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	limit := 200
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	writeJSON(w, http.StatusOK, s.webhooks.Deliveries(limit))
 }
 
 func (s *Server) handleRuns(baseDir string) http.HandlerFunc {
@@ -1445,6 +1545,9 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 
 func (s *Server) recordEvent(e control.Event, evaluateRules bool) {
 	s.events.Append(e)
+	if s.webhooks != nil {
+		_ = s.webhooks.Dispatch(e)
+	}
 	if !evaluateRules || s.rules == nil {
 		return
 	}
