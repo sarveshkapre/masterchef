@@ -90,6 +90,7 @@ Change records and approval workflows are exposed via `/v1/change-records` to ti
 Self-service runbook catalog with approval-gated launches is available via `/v1/runbooks`.
 Operator checklist mode for high-risk changes is available via `/v1/control/checklists`.
 Saved views with share tokens and dashboard pinning are available via `/v1/views`.
+Bulk operation staging with preview/conflict detection/confirmed execution is available via `/v1/bulk/preview` and `/v1/bulk/execute`.
 Persona-based home views for SRE/platform/release/service-owner workflows are available via `GET /v1/views/home`.
 Workload-centric operational views grouped by service/application are available via `GET /v1/views/workloads`.
 Universal command-palette search across hosts, services, runs, policies, and modules is available via `GET /v1/search`.

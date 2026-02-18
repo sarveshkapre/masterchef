@@ -39,6 +39,7 @@ type Server struct {
 	changeRecords      *control.ChangeRecordStore
 	checklists         *control.ChecklistStore
 	views              *control.SavedViewStore
+	bulk               *control.BulkManager
 	migrations         *control.MigrationStore
 	solutionPacks      *control.SolutionPackCatalog
 	useCaseTemplates   *control.UseCaseTemplateCatalog
@@ -81,6 +82,7 @@ func New(addr, baseDir string) *Server {
 	changeRecords := control.NewChangeRecordStore()
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
+	bulk := control.NewBulkManager(15 * time.Minute)
 	migrations := control.NewMigrationStore()
 	solutionPacks := control.NewSolutionPackCatalog()
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
@@ -115,6 +117,7 @@ func New(addr, baseDir string) *Server {
 		changeRecords:      changeRecords,
 		checklists:         checklists,
 		views:              views,
+		bulk:               bulk,
 		migrations:         migrations,
 		solutionPacks:      solutionPacks,
 		useCaseTemplates:   useCaseTemplates,
@@ -167,6 +170,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/notifications/deliveries", s.handleNotificationDeliveries)
 	mux.HandleFunc("/v1/change-records", s.handleChangeRecords)
 	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
+	mux.HandleFunc("/v1/bulk/preview", s.handleBulkPreview)
+	mux.HandleFunc("/v1/bulk/execute", s.handleBulkExecute)
 	mux.HandleFunc("/v1/views", s.handleViews)
 	mux.HandleFunc("/v1/views/", s.handleViewAction)
 	mux.HandleFunc("/v1/views/home", s.handlePersonaHome(baseDir))
@@ -1682,6 +1687,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/change-records/{id}/attach-job",
 			"POST /v1/change-records/{id}/complete",
 			"POST /v1/change-records/{id}/fail",
+			"POST /v1/bulk/preview",
+			"POST /v1/bulk/execute",
 			"GET /v1/views",
 			"POST /v1/views",
 			"GET /v1/views/{id}",

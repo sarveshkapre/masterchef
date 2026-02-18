@@ -1559,6 +1559,134 @@ resources:
 	}
 }
 
+func TestBulkPreviewAndExecute(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-bulk.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/schedules", bytes.NewReader([]byte(`{"config_path":"c.yaml","interval_seconds":60}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("schedule create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var schedule struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &schedule); err != nil {
+		t.Fatalf("schedule decode failed: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/runbooks", bytes.NewReader([]byte(`{"name":"bulk-runbook","target_type":"config","config_path":"c.yaml"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("runbook create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var runbook struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &runbook); err != nil {
+		t.Fatalf("runbook decode failed: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/views", bytes.NewReader([]byte(`{"name":"bulk-view","entity":"alerts","mode":"human","query":"status=open","limit":10}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("view create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var view struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &view); err != nil {
+		t.Fatalf("view decode failed: %v", err)
+	}
+
+	previewBody := `{
+		"name":"bulk-ops",
+		"operations":[
+			{"action":"schedule.disable","target_type":"schedule","target_id":"` + schedule.ID + `"},
+			{"action":"runbook.approve","target_type":"runbook","target_id":"` + runbook.ID + `"},
+			{"action":"view.pin","target_type":"view","target_id":"` + view.ID + `"}
+		]
+	}`
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/bulk/preview", bytes.NewReader([]byte(previewBody)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("bulk preview failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var preview struct {
+		Token string `json:"token"`
+		Ready bool   `json:"ready"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &preview); err != nil {
+		t.Fatalf("bulk preview decode failed: %v", err)
+	}
+	if preview.Token == "" || !preview.Ready {
+		t.Fatalf("expected ready bulk preview token, got %+v", preview)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/bulk/execute", bytes.NewReader([]byte(`{"preview_token":"`+preview.Token+`","confirm":true}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("bulk execute failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/schedules", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"enabled":false`) {
+		t.Fatalf("expected schedule to be disabled by bulk execution: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/runbooks/"+runbook.ID, nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"status":"approved"`) {
+		t.Fatalf("expected runbook approved by bulk execution: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/views/"+view.ID, nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"pinned":true`) {
+		t.Fatalf("expected view pinned by bulk execution: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCommandIngestWithChecksumAndDeadLetters(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
