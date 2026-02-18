@@ -128,6 +128,7 @@ func runPlan(args []string) error {
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	path := fs.String("f", "masterchef.yaml", "config path")
 	out := fs.String("o", "", "write plan json to path")
+	summary := fs.Bool("summary", false, "print blast-radius summary")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -142,6 +143,11 @@ func runPlan(args []string) error {
 	b, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
+	}
+	if *summary {
+		s := planner.AnalyzeBlastRadius(p)
+		sb, _ := json.MarshalIndent(s, "", "  ")
+		fmt.Println(string(sb))
 	}
 	if *out == "" {
 		fmt.Println(string(b))
