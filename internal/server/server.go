@@ -122,6 +122,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
+	mux.HandleFunc("/v1/control/preflight", s.handlePreflight)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
@@ -1209,6 +1210,24 @@ func (s *Server) handleCanaryHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.canaries.HealthSummary())
+}
+
+func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.PreflightRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	report := control.RunPreflight(req, s.queue, s.objectStore != nil)
+	if report.Status != "pass" {
+		writeJSON(w, http.StatusServiceUnavailable, report)
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
 }
 
 func (s *Server) handleQueueControl(w http.ResponseWriter, r *http.Request) {
