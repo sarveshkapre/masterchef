@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -50,6 +51,10 @@ func Run(args []string) error {
 		return runCheck(args[1:])
 	case "apply":
 		return runApply(args[1:])
+	case "observe":
+		return runObserve(args[1:])
+	case "drift":
+		return runDrift(args[1:])
 	case "serve":
 		return runServe(args[1:])
 	case "policy":
@@ -73,6 +78,8 @@ masterchef commands:
   plan [-f masterchef.yaml] [-o plan.json] [-snapshot plan.snapshot.json] [-update-snapshot]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
+  observe [-base .] [-limit 100] [-format json|human]
+  drift [-base .] [-hours 24] [-format json|human]
   serve [-addr :8080]
   policy [keygen|sign|verify] ...
   features [matrix|summary|verify] [-f features.md]
@@ -441,6 +448,228 @@ func runApply(args []string) error {
 		return fmt.Errorf("apply failed")
 	}
 	return nil
+}
+
+func runObserve(args []string) error {
+	fs := flag.NewFlagSet("observe", flag.ContinueOnError)
+	baseDir := fs.String("base", ".", "base directory containing .masterchef state")
+	limit := fs.Int("limit", 100, "maximum runs to inspect")
+	format := fs.String("format", "human", "output format: json|human")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	runs, err := state.New(*baseDir).ListRuns(*limit)
+	if err != nil {
+		return err
+	}
+	type observeReport struct {
+		RunCount         int             `json:"run_count"`
+		SucceededRuns    int             `json:"succeeded_runs"`
+		FailedRuns       int             `json:"failed_runs"`
+		ChangedResources int             `json:"changed_resources"`
+		SkippedResources int             `json:"skipped_resources"`
+		LastRunID        string          `json:"last_run_id,omitempty"`
+		LastRunStatus    state.RunStatus `json:"last_run_status,omitempty"`
+		LastRunStartedAt time.Time       `json:"last_run_started_at,omitempty"`
+		LastRunEndedAt   time.Time       `json:"last_run_ended_at,omitempty"`
+		TopChangedHosts  []string        `json:"top_changed_hosts,omitempty"`
+		TopChangedTypes  []string        `json:"top_changed_resource_types,omitempty"`
+	}
+	report := observeReport{RunCount: len(runs)}
+	hostCounts := map[string]int{}
+	typeCounts := map[string]int{}
+	for _, run := range runs {
+		if run.Status == state.RunSucceeded {
+			report.SucceededRuns++
+		} else if run.Status == state.RunFailed {
+			report.FailedRuns++
+		}
+		for _, res := range run.Results {
+			if res.Changed {
+				report.ChangedResources++
+				host := strings.TrimSpace(res.Host)
+				if host == "" {
+					host = "unknown-host"
+				}
+				hostCounts[host]++
+				t := strings.TrimSpace(strings.ToLower(res.Type))
+				if t == "" {
+					t = "unknown-type"
+				}
+				typeCounts[t]++
+			}
+			if res.Skipped {
+				report.SkippedResources++
+			}
+		}
+	}
+	if len(runs) > 0 {
+		report.LastRunID = runs[0].ID
+		report.LastRunStatus = runs[0].Status
+		report.LastRunStartedAt = runs[0].StartedAt
+		report.LastRunEndedAt = runs[0].EndedAt
+	}
+	report.TopChangedHosts = topCountKeys(hostCounts, 5)
+	report.TopChangedTypes = topCountKeys(typeCounts, 5)
+
+	if strings.EqualFold(strings.TrimSpace(*format), "json") {
+		b, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(b))
+		return nil
+	}
+	fmt.Printf("runs=%d succeeded=%d failed=%d changed_resources=%d skipped_resources=%d\n",
+		report.RunCount, report.SucceededRuns, report.FailedRuns, report.ChangedResources, report.SkippedResources)
+	if report.LastRunID != "" {
+		fmt.Printf("last_run=%s status=%s started=%s ended=%s\n",
+			report.LastRunID, report.LastRunStatus, report.LastRunStartedAt.Format(time.RFC3339), report.LastRunEndedAt.Format(time.RFC3339))
+	}
+	if len(report.TopChangedHosts) > 0 {
+		fmt.Printf("top_changed_hosts=%s\n", strings.Join(report.TopChangedHosts, ","))
+	}
+	if len(report.TopChangedTypes) > 0 {
+		fmt.Printf("top_changed_types=%s\n", strings.Join(report.TopChangedTypes, ","))
+	}
+	return nil
+}
+
+func runDrift(args []string) error {
+	fs := flag.NewFlagSet("drift", flag.ContinueOnError)
+	baseDir := fs.String("base", ".", "base directory containing .masterchef state")
+	hours := fs.Int("hours", 24, "lookback window in hours")
+	format := fs.String("format", "human", "output format: json|human")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *hours <= 0 {
+		*hours = 24
+	}
+	if *hours > 24*30 {
+		*hours = 24 * 30
+	}
+	since := time.Now().UTC().Add(-time.Duration(*hours) * time.Hour)
+	runs, err := state.New(*baseDir).ListRuns(5000)
+	if err != nil {
+		return err
+	}
+
+	host := map[string]*cliDriftTrend{}
+	typ := map[string]*cliDriftTrend{}
+	totalChanged := 0
+	failedRuns := 0
+
+	for _, run := range runs {
+		ref := run.StartedAt
+		if ref.IsZero() {
+			ref = run.EndedAt
+		}
+		if ref.IsZero() || ref.Before(since) {
+			continue
+		}
+		if run.Status == state.RunFailed {
+			failedRuns++
+		}
+		for _, res := range run.Results {
+			if !res.Changed {
+				continue
+			}
+			totalChanged++
+			hk := strings.TrimSpace(res.Host)
+			if hk == "" {
+				hk = "unknown-host"
+			}
+			if host[hk] == nil {
+				host[hk] = &cliDriftTrend{Key: hk}
+			}
+			host[hk].Count++
+			if ref.After(host[hk].LastSeen) {
+				host[hk].LastSeen = ref
+			}
+
+			tk := strings.TrimSpace(strings.ToLower(res.Type))
+			if tk == "" {
+				tk = "unknown-type"
+			}
+			if typ[tk] == nil {
+				typ[tk] = &cliDriftTrend{Key: tk}
+			}
+			typ[tk].Count++
+			if ref.After(typ[tk].LastSeen) {
+				typ[tk].LastSeen = ref
+			}
+		}
+	}
+
+	hostTrends := flattenDrift(host, 10)
+	typeTrends := flattenDrift(typ, 10)
+	report := map[string]any{
+		"window_hours":            *hours,
+		"since":                   since,
+		"total_changed_resources": totalChanged,
+		"failed_runs":             failedRuns,
+		"host_trends":             hostTrends,
+		"resource_type_trends":    typeTrends,
+	}
+	if strings.EqualFold(strings.TrimSpace(*format), "json") {
+		b, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(b))
+		return nil
+	}
+	fmt.Printf("drift window=%dh changed_resources=%d failed_runs=%d\n", *hours, totalChanged, failedRuns)
+	if len(hostTrends) > 0 {
+		fmt.Printf("top_host=%s count=%d\n", hostTrends[0].Key, hostTrends[0].Count)
+	}
+	if len(typeTrends) > 0 {
+		fmt.Printf("top_resource_type=%s count=%d\n", typeTrends[0].Key, typeTrends[0].Count)
+	}
+	return nil
+}
+
+func topCountKeys(m map[string]int, limit int) []string {
+	type kv struct {
+		Key   string
+		Count int
+	}
+	items := make([]kv, 0, len(m))
+	for k, v := range m {
+		items = append(items, kv{Key: k, Count: v})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Count != items[j].Count {
+			return items[i].Count > items[j].Count
+		}
+		return items[i].Key < items[j].Key
+	})
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, item.Key)
+	}
+	return out
+}
+
+type cliDriftTrend struct {
+	Key      string    `json:"key"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+func flattenDrift(in map[string]*cliDriftTrend, limit int) []cliDriftTrend {
+	out := make([]cliDriftTrend, 0, len(in))
+	for _, item := range in {
+		out = append(out, *item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Key < out[j].Key
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }
 
 func requireApplyApproval(p *planner.Plan, autoApprove, nonInteractive bool) error {
