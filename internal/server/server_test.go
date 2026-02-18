@@ -1771,6 +1771,26 @@ resources:
 		t.Fatalf("triage bundle export failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/runs/run-export-1/timeline?minutes_before=10&minutes_after=10", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("run timeline failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var timelineResp struct {
+		Count          int            `json:"count"`
+		PhaseBreakdown map[string]int `json:"phase_breakdown"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &timelineResp); err != nil {
+		t.Fatalf("run timeline decode failed: %v", err)
+	}
+	if timelineResp.Count == 0 {
+		t.Fatalf("expected timeline items for run")
+	}
+	if timelineResp.PhaseBreakdown["during"] == 0 {
+		t.Fatalf("expected during phase timeline items")
+	}
+
 	createBody := []byte(`{
 		"config_path":"c.yaml",
 		"target_kind":"environment",

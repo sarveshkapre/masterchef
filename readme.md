@@ -81,6 +81,7 @@ Schema evolution controls enforce migration plans and stepwise compatibility for
 Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to detect deterministic plan regressions.
 On-call handoff packages are available via `GET /v1/control/handoff` to summarize risks, active rollouts, and blocked actions.
 Deployment-window change digests are available via `GET /v1/runs/digest` with latent-risk scoring.
+Time-travel run timelines (before/during/after change windows) are available via `GET /v1/runs/{id}/timeline`.
 Noise-reduction alert inbox is available via `GET/POST /v1/alerts/inbox` with dedup, suppression windows, and routing.
 Run failure triage bundles are exportable via `POST /v1/runs/{id}/triage-bundle` for incident debugging context.
 Notification integrations are managed via `/v1/notifications/targets` and `/v1/notifications/deliveries` for ChatOps/incident/ticket routing.

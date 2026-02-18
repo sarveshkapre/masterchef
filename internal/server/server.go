@@ -1280,6 +1280,46 @@ func (s *Server) handleRunAction(baseDir string) http.HandlerFunc {
 		runID := parts[2]
 		action := parts[3]
 		switch action {
+		case "timeline":
+			if r.Method != http.MethodGet {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			run, err := state.New(baseDir).GetRun(runID)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+				return
+			}
+			beforeMinutes := 60
+			if raw := strings.TrimSpace(r.URL.Query().Get("minutes_before")); raw != "" {
+				if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+					beforeMinutes = n
+				}
+			}
+			afterMinutes := 60
+			if raw := strings.TrimSpace(r.URL.Query().Get("minutes_after")); raw != "" {
+				if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
+					afterMinutes = n
+				}
+			}
+			limit := 1000
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+					limit = n
+				}
+			}
+			beforeWindow := time.Duration(beforeMinutes) * time.Minute
+			afterWindow := time.Duration(afterMinutes) * time.Minute
+			items := s.buildRunTimeline(run, beforeWindow, afterWindow, limit)
+			windowStart, windowEnd := timelineWindow(run, beforeWindow, afterWindow)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"run_id":          runID,
+				"window_start":    windowStart,
+				"window_end":      windowEnd,
+				"items":           items,
+				"phase_breakdown": timelineSummary(items),
+				"count":           len(items),
+			})
 		case "export":
 			if r.Method != http.MethodPost {
 				w.WriteHeader(http.StatusMethodNotAllowed)
@@ -1324,27 +1364,8 @@ func (s *Server) handleRunAction(baseDir string) http.HandlerFunc {
 				return
 			}
 			events := s.events.List()
-			windowStart := run.StartedAt.Add(-5 * time.Minute)
-			windowEnd := run.EndedAt.Add(5 * time.Minute)
-			if run.StartedAt.IsZero() {
-				windowStart = time.Time{}
-			}
-			if run.EndedAt.IsZero() {
-				windowEnd = time.Time{}
-			}
-			correlated := make([]control.Event, 0)
-			for _, evt := range events {
-				if !windowStart.IsZero() && evt.Time.Before(windowStart) {
-					continue
-				}
-				if !windowEnd.IsZero() && evt.Time.After(windowEnd) {
-					continue
-				}
-				correlated = append(correlated, evt)
-				if len(correlated) >= 1000 {
-					break
-				}
-			}
+			windowStart, windowEnd := timelineWindow(run, 5*time.Minute, 5*time.Minute)
+			correlated := filterCorrelatedEvents(events, windowStart, windowEnd, 1000)
 			hostSet := map[string]struct{}{}
 			for _, result := range run.Results {
 				if strings.TrimSpace(result.Host) == "" {
@@ -1598,6 +1619,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/recover-stuck",
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
+			"GET /v1/runs/{id}/timeline",
 			"POST /v1/runs/{id}/export",
 			"POST /v1/runs/{id}/triage-bundle",
 			"GET /v1/jobs",
