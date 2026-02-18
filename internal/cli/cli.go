@@ -237,6 +237,7 @@ func runApply(args []string) error {
 	path := fs.String("f", "masterchef.yaml", "config path")
 	autoApprove := fs.Bool("yes", false, "auto approve apply without prompt")
 	nonInteractive := fs.Bool("non-interactive", false, "fail instead of prompting for approval")
+	reportPath := fs.String("report", "", "write machine-readable run report json to path")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -264,6 +265,15 @@ func runApply(args []string) error {
 	}
 	b, _ := json.MarshalIndent(run, "", "  ")
 	fmt.Println(string(b))
+	if *reportPath != "" {
+		if err := os.MkdirAll(filepath.Dir(*reportPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(*reportPath, b, 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("run report written: %s\n", *reportPath)
+	}
 	if run.Status != state.RunSucceeded {
 		return fmt.Errorf("apply failed")
 	}
