@@ -1,9 +1,11 @@
 package checker
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	"github.com/masterchef/masterchef/internal/planner"
 )
@@ -15,6 +17,7 @@ type Item struct {
 	Simulatable bool   `json:"simulatable"`
 	WouldChange bool   `json:"would_change"`
 	Reason      string `json:"reason"`
+	Diff        string `json:"diff,omitempty"`
 }
 
 type Coverage struct {
@@ -62,6 +65,11 @@ func Run(p *planner.Plan) Report {
 				} else {
 					it.WouldChange = true
 					it.Reason = "file content differs or does not exist"
+					oldContent := ""
+					if err == nil {
+						oldContent = string(current)
+					}
+					it.Diff = unifiedDiff(r.Path, oldContent, r.Content)
 				}
 			case "command":
 				it.Simulatable = true
@@ -111,4 +119,49 @@ func Run(p *planner.Plan) Report {
 		return rep.Items[i].ResourceID < rep.Items[j].ResourceID
 	})
 	return rep
+}
+
+func unifiedDiff(path, oldContent, newContent string) string {
+	oldLines := splitLines(oldContent)
+	newLines := splitLines(newContent)
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("--- %s\n", path))
+	b.WriteString(fmt.Sprintf("+++ %s\n", path))
+	max := len(oldLines)
+	if len(newLines) > max {
+		max = len(newLines)
+	}
+	for i := 0; i < max; i++ {
+		var oldLine, newLine string
+		if i < len(oldLines) {
+			oldLine = oldLines[i]
+		}
+		if i < len(newLines) {
+			newLine = newLines[i]
+		}
+		if oldLine == newLine {
+			if oldLine != "" {
+				b.WriteString(" " + oldLine + "\n")
+			}
+			continue
+		}
+		if oldLine != "" {
+			b.WriteString("-" + oldLine + "\n")
+		}
+		if newLine != "" {
+			b.WriteString("+" + newLine + "\n")
+		}
+	}
+	return b.String()
+}
+
+func splitLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	raw := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	if len(raw) > 0 && raw[len(raw)-1] == "" {
+		raw = raw[:len(raw)-1]
+	}
+	return raw
 }

@@ -52,3 +52,30 @@ func TestRun_Report(t *testing.T) {
 		t.Fatalf("unexpected confidence: %f", r.Confidence)
 	}
 }
+
+func TestRun_FileDiffPatch(t *testing.T) {
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "a.txt")
+	if err := os.WriteFile(f, []byte("before\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "file1",
+					Type:    "file",
+					Host:    "localhost",
+					Path:    f,
+					Content: "after\n",
+				},
+			},
+		},
+	}
+	r := Run(p)
+	if len(r.Items) != 1 || r.Items[0].Diff == "" {
+		t.Fatalf("expected patch diff in report: %+v", r)
+	}
+}

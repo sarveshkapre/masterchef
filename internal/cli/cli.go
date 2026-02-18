@@ -172,6 +172,7 @@ func runCheck(args []string) error {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	path := fs.String("f", "masterchef.yaml", "config path")
 	minConfidence := fs.Float64("min-confidence", 1.0, "minimum required simulation confidence [0.0-1.0]")
+	format := fs.String("format", "json", "output format: json|human|patch")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -189,8 +190,32 @@ func runCheck(args []string) error {
 	}
 
 	report := checker.Run(p)
-	b, _ := json.MarshalIndent(report, "", "  ")
-	fmt.Println(string(b))
+	switch strings.ToLower(*format) {
+	case "json":
+		b, _ := json.MarshalIndent(report, "", "  ")
+		fmt.Println(string(b))
+	case "human":
+		fmt.Printf("resources=%d changes=%d simulatable=%d non_simulatable=%d confidence=%.3f\n",
+			report.TotalResources, report.ChangesNeeded, report.Simulatable, report.NonSimulatable, report.Confidence)
+		for _, it := range report.Items {
+			state := "ok"
+			if it.WouldChange {
+				state = "change"
+			}
+			if !it.Simulatable {
+				state = "unknown"
+			}
+			fmt.Printf("- [%s] %s (%s on %s): %s\n", state, it.ResourceID, it.Type, it.Host, it.Reason)
+		}
+	case "patch":
+		for _, it := range report.Items {
+			if it.Diff != "" {
+				fmt.Printf("# %s (%s)\n%s\n", it.ResourceID, it.Type, it.Diff)
+			}
+		}
+	default:
+		return fmt.Errorf("unsupported check output format %q", *format)
+	}
 
 	if report.Confidence < *minConfidence {
 		return ExitError{
