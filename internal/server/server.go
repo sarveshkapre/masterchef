@@ -90,6 +90,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/jobs", s.handleJobs(baseDir))
 	mux.HandleFunc("/v1/jobs/", s.handleJobByID)
 	mux.HandleFunc("/v1/control/emergency-stop", s.handleEmergencyStop)
+	mux.HandleFunc("/v1/control/freeze", s.handleFreeze)
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
@@ -465,6 +466,67 @@ func (s *Server) handleEmergencyStop(w http.ResponseWriter, r *http.Request) {
 			Message: "emergency stop toggled",
 			Fields: map[string]any{
 				"active": st.Active,
+				"reason": st.Reason,
+			},
+		})
+		writeJSON(w, http.StatusOK, st)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleFreeze(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Enabled         bool   `json:"enabled"`
+		Until           string `json:"until"`
+		DurationSeconds int    `json:"duration_seconds"`
+		Reason          string `json:"reason"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.queue.FreezeStatus())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		if !req.Enabled {
+			st := s.queue.ClearFreeze()
+			s.events.Append(control.Event{
+				Type:    "control.freeze",
+				Message: "change freeze cleared",
+				Fields: map[string]any{
+					"active": st.Active,
+				},
+			})
+			writeJSON(w, http.StatusOK, st)
+			return
+		}
+
+		var until time.Time
+		switch {
+		case strings.TrimSpace(req.Until) != "":
+			parsed, err := time.Parse(time.RFC3339, req.Until)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "until must be RFC3339"})
+				return
+			}
+			until = parsed
+		default:
+			if req.DurationSeconds <= 0 {
+				req.DurationSeconds = 3600
+			}
+			until = time.Now().UTC().Add(time.Duration(req.DurationSeconds) * time.Second)
+		}
+
+		st := s.queue.SetFreezeUntil(until, req.Reason)
+		s.events.Append(control.Event{
+			Type:    "control.freeze",
+			Message: "change freeze updated",
+			Fields: map[string]any{
+				"active": st.Active,
+				"until":  st.Until,
 				"reason": st.Reason,
 			},
 		})

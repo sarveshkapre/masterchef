@@ -104,6 +104,24 @@ func TestQueue_PauseResumeAndControlStatus(t *testing.T) {
 	}
 }
 
+func TestQueue_ChangeFreezeBlocksUnlessForced(t *testing.T) {
+	q := NewQueue(8)
+	st := q.SetFreezeUntil(time.Now().UTC().Add(2*time.Minute), "release freeze")
+	if !st.Active {
+		t.Fatalf("expected freeze to be active")
+	}
+	if _, err := q.Enqueue("blocked.yaml", "", false, ""); err == nil {
+		t.Fatalf("expected enqueue to fail during freeze")
+	}
+	if _, err := q.Enqueue("forced.yaml", "", true, ""); err != nil {
+		t.Fatalf("expected forced enqueue to bypass freeze: %v", err)
+	}
+	st = q.ClearFreeze()
+	if st.Active {
+		t.Fatalf("expected freeze to be cleared")
+	}
+}
+
 func TestQueue_SafeDrain_NoRunningJobs(t *testing.T) {
 	q := NewQueue(8)
 	st, err := q.SafeDrain(100 * time.Millisecond)

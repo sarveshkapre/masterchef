@@ -47,6 +47,8 @@ type Queue struct {
 	emergencyStop   bool
 	emergencySince  time.Time
 	emergencyReason string
+	freezeUntil     time.Time
+	freezeReason    string
 	paused          bool
 	running         int
 	rrIndex         int
@@ -87,6 +89,15 @@ func (q *Queue) Enqueue(configPath, key string, force bool, priority string) (*J
 	if q.emergencyStop && !force {
 		q.mu.Unlock()
 		return nil, errors.New("emergency stop active; new applies are halted")
+	}
+	if !force && !q.freezeUntil.IsZero() && time.Now().UTC().Before(q.freezeUntil) {
+		until := q.freezeUntil.Format(time.RFC3339)
+		reason := strings.TrimSpace(q.freezeReason)
+		q.mu.Unlock()
+		if reason != "" {
+			return nil, errors.New("change freeze active until " + until + ": " + reason)
+		}
+		return nil, errors.New("change freeze active until " + until)
 	}
 
 	p := normalizePriority(priority)
@@ -306,6 +317,12 @@ type EmergencyStatus struct {
 	Reason string    `json:"reason,omitempty"`
 }
 
+type FreezeStatus struct {
+	Active bool      `json:"active"`
+	Until  time.Time `json:"until,omitempty"`
+	Reason string    `json:"reason,omitempty"`
+}
+
 func (q *Queue) SetEmergencyStop(active bool, reason string) EmergencyStatus {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -333,6 +350,47 @@ func (q *Queue) EmergencyStatus() EmergencyStatus {
 		Active: q.emergencyStop,
 		Since:  q.emergencySince,
 		Reason: q.emergencyReason,
+	}
+}
+
+func (q *Queue) SetFreezeUntil(until time.Time, reason string) FreezeStatus {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	now := time.Now().UTC()
+	if until.IsZero() || !until.After(now) {
+		q.freezeUntil = time.Time{}
+		q.freezeReason = ""
+		return FreezeStatus{}
+	}
+	q.freezeUntil = until.UTC()
+	q.freezeReason = strings.TrimSpace(reason)
+	return FreezeStatus{
+		Active: true,
+		Until:  q.freezeUntil,
+		Reason: q.freezeReason,
+	}
+}
+
+func (q *Queue) ClearFreeze() FreezeStatus {
+	return q.SetFreezeUntil(time.Time{}, "")
+}
+
+func (q *Queue) FreezeStatus() FreezeStatus {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.freezeUntil.IsZero() {
+		return FreezeStatus{}
+	}
+	now := time.Now().UTC()
+	if !now.Before(q.freezeUntil) {
+		q.freezeUntil = time.Time{}
+		q.freezeReason = ""
+		return FreezeStatus{}
+	}
+	return FreezeStatus{
+		Active: true,
+		Until:  q.freezeUntil,
+		Reason: q.freezeReason,
 	}
 }
 
