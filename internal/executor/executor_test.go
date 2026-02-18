@@ -323,6 +323,72 @@ func TestApply_CommandUntilContains(t *testing.T) {
 	}
 }
 
+func TestApply_CommandRescueAndAlwaysHooks(t *testing.T) {
+	tmp := t.TempDir()
+	rescueMarker := filepath.Join(tmp, "rescue.marker")
+	alwaysMarker := filepath.Join(tmp, "always.marker")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:            "hooked-command",
+					Type:          "command",
+					Host:          "localhost",
+					Command:       "echo primary-fail; exit 1",
+					RescueCommand: "echo rescued > " + rescueMarker,
+					AlwaysCommand: "echo always > " + alwaysMarker,
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded {
+		t.Fatalf("expected rescued run to succeed, got %s with %#v", run.Status, run.Results)
+	}
+	if _, err := os.Stat(rescueMarker); err != nil {
+		t.Fatalf("expected rescue command to run: %v", err)
+	}
+	if _, err := os.Stat(alwaysMarker); err != nil {
+		t.Fatalf("expected always command to run: %v", err)
+	}
+	if !strings.Contains(run.Results[0].Message, "rescue hook") || !strings.Contains(run.Results[0].Message, "always hook") {
+		t.Fatalf("expected hook markers in message, got %q", run.Results[0].Message)
+	}
+}
+
+func TestApply_CommandAlwaysHookFailureFailsStep(t *testing.T) {
+	tmp := t.TempDir()
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:            "always-fail",
+					Type:          "command",
+					Host:          "localhost",
+					Command:       "echo ok",
+					AlwaysCommand: "exit 3",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed unexpectedly: %v", err)
+	}
+	if run.Status != state.RunFailed {
+		t.Fatalf("expected always hook failure to fail run, got %s", run.Status)
+	}
+}
+
 func TestApply_WinRMTransportLocalhostShim(t *testing.T) {
 	tmp := t.TempDir()
 	target := filepath.Join(tmp, "winrm-file.txt")

@@ -182,13 +182,76 @@ func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool
 	} else if recordPath != "" {
 		res.Message = appendAuditMessage(res.Message, "session record: "+recordPath)
 	}
-	if err != nil {
-		if strings.TrimSpace(res.Message) == "" {
-			res.Message = err.Error()
+
+	if err != nil && strings.TrimSpace(r.RescueCommand) != "" {
+		hookMsg, hookChanged, hookErr := e.runCommandHook(step, handler, r, "rescue", r.RescueCommand)
+		res.Message = appendAuditMessage(res.Message, hookMsg)
+		res.Changed = res.Changed || hookChanged
+		if hookErr == nil {
+			err = nil
+			res.Skipped = false
+		} else {
+			err = fmt.Errorf("%w; rescue hook failed: %v", err, hookErr)
 		}
-		return res, true
 	}
-	return res, false
+
+	if strings.TrimSpace(r.AlwaysCommand) != "" {
+		hookMsg, hookChanged, hookErr := e.runCommandHook(step, handler, r, "always", r.AlwaysCommand)
+		res.Message = appendAuditMessage(res.Message, hookMsg)
+		res.Changed = res.Changed || hookChanged
+		if hookErr != nil {
+			if err != nil {
+				err = fmt.Errorf("%w; always hook failed: %v", err, hookErr)
+			} else {
+				err = fmt.Errorf("always hook failed: %w", hookErr)
+			}
+		}
+	}
+
+	if err == nil {
+		return res, false
+	}
+	if strings.TrimSpace(res.Message) == "" {
+		res.Message = err.Error()
+	}
+	return res, true
+}
+
+func (e *Executor) runCommandHook(step planner.Step, handler transportApplyFunc, base config.Resource, hookName, command string) (string, bool, error) {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return "", false, nil
+	}
+	hookResource := base
+	hookResource.Command = command
+	hookResource.Creates = ""
+	hookResource.Unless = ""
+	hookResource.Retries = 0
+	hookResource.RetryDelaySeconds = 0
+	hookResource.UntilContains = ""
+	hookResource.RescueCommand = ""
+	hookResource.AlwaysCommand = ""
+
+	preparedResource, audit, prepErr := prepareResourceForExecution(step.Host, hookResource)
+	if prepErr != nil {
+		return hookName + ": " + prepErr.Error(), false, prepErr
+	}
+	changed, _, msg, execErr := handler(step, preparedResource)
+	msg = appendAuditMessage(msg, hookName+" hook")
+	msg = appendAuditMessage(msg, audit)
+	recordPath, recordErr := e.maybeRecordSession(step, preparedResource, msg, execErr)
+	if recordErr != nil {
+		msg = appendAuditMessage(msg, "session record error: "+recordErr.Error())
+	} else if recordPath != "" {
+		msg = appendAuditMessage(msg, "session record: "+recordPath)
+	}
+	if execErr != nil {
+		if strings.TrimSpace(msg) == "" {
+			msg = execErr.Error()
+		}
+		return msg, changed, execErr
+	}
+	return msg, changed, nil
 }
 
 func prepareResourceForExecution(host config.Host, r config.Resource) (config.Resource, string, error) {

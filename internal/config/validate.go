@@ -150,6 +150,9 @@ func Validate(cfg *Config) error {
 			if r.Become {
 				return fmt.Errorf("resource %q privilege escalation is only supported for command resources", r.ID)
 			}
+			if strings.TrimSpace(r.RescueCommand) != "" || strings.TrimSpace(r.AlwaysCommand) != "" {
+				return fmt.Errorf("resource %q block/rescue/always hooks are only supported for command resources", r.ID)
+			}
 			if strings.TrimSpace(r.Path) == "" {
 				return fmt.Errorf("resource %q file.path is required", r.ID)
 			}
@@ -157,6 +160,8 @@ func Validate(cfg *Config) error {
 			if strings.TrimSpace(r.Command) == "" {
 				return fmt.Errorf("resource %q command.command is required", r.ID)
 			}
+			r.RescueCommand = strings.TrimSpace(r.RescueCommand)
+			r.AlwaysCommand = strings.TrimSpace(r.AlwaysCommand)
 			if r.Retries < 0 {
 				return fmt.Errorf("resource %q command.retries must be >= 0", r.ID)
 			}

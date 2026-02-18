@@ -145,6 +145,38 @@ func TestValidate_PrivilegeEscalationCommandOnly(t *testing.T) {
 	}
 }
 
+func TestValidate_BlockRescueAlwaysCommandOnly(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:            "c1",
+				Type:          "command",
+				Host:          "localhost",
+				Command:       "echo ok",
+				RescueCommand: "echo rescued",
+				AlwaysCommand: "echo always",
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected command hooks to validate, got %v", err)
+	}
+	cfg.Resources[0] = Resource{
+		ID:            "f1",
+		Type:          "file",
+		Host:          "localhost",
+		Path:          "/tmp/x",
+		RescueCommand: "echo no",
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected file hook validation error")
+	}
+}
+
 func TestValidate_DelegateToHost(t *testing.T) {
 	cfg := &Config{
 		Version: "v0",
