@@ -46,6 +46,7 @@ type Server struct {
 	notifications          *control.NotificationRouter
 	reportProcessors       *control.ReportProcessorStore
 	changeRecords          *control.ChangeRecordStore
+	ticketIntegrations     *control.TicketIntegrationStore
 	checklists             *control.ChecklistStore
 	views                  *control.SavedViewStore
 	accessibility          *control.AccessibilityStore
@@ -206,6 +207,7 @@ func New(addr, baseDir string) *Server {
 	notifications := control.NewNotificationRouter(5000)
 	reportProcessors := control.NewReportProcessorStore()
 	changeRecords := control.NewChangeRecordStore()
+	ticketIntegrations := control.NewTicketIntegrationStore()
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
 	accessibility := control.NewAccessibilityStore()
@@ -358,6 +360,7 @@ func New(addr, baseDir string) *Server {
 		notifications:          notifications,
 		reportProcessors:       reportProcessors,
 		changeRecords:          changeRecords,
+		ticketIntegrations:     ticketIntegrations,
 		checklists:             checklists,
 		views:                  views,
 		accessibility:          accessibility,
@@ -855,6 +858,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/reports/process", s.handleReportProcessorDispatch)
 	mux.HandleFunc("/v1/change-records", s.handleChangeRecords)
 	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
+	mux.HandleFunc("/v1/change-records/ticket-integrations", s.handleTicketIntegrations)
+	mux.HandleFunc("/v1/change-records/ticket-integrations/", s.handleTicketIntegrationAction)
+	mux.HandleFunc("/v1/change-records/tickets/sync", s.handleTicketSync)
 	mux.HandleFunc("/v1/bulk/preview", s.handleBulkPreview)
 	mux.HandleFunc("/v1/bulk/execute", s.handleBulkExecute)
 	mux.HandleFunc("/v1/views", s.handleViews)
@@ -2838,6 +2844,13 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/change-records/{id}/attach-job",
 			"POST /v1/change-records/{id}/complete",
 			"POST /v1/change-records/{id}/fail",
+			"GET /v1/change-records/ticket-integrations",
+			"POST /v1/change-records/ticket-integrations",
+			"GET /v1/change-records/ticket-integrations/{id}",
+			"POST /v1/change-records/ticket-integrations/{id}/enable",
+			"POST /v1/change-records/ticket-integrations/{id}/disable",
+			"GET /v1/change-records/tickets/sync",
+			"POST /v1/change-records/tickets/sync",
 			"POST /v1/bulk/preview",
 			"POST /v1/bulk/execute",
 			"GET /v1/views",
