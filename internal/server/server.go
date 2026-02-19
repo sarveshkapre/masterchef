@@ -65,6 +65,7 @@ type Server struct {
 	disruptionBudgets  *control.DisruptionBudgetStore
 	executionEnvs      *control.ExecutionEnvironmentStore
 	executionCreds     *control.ExecutionCredentialStore
+	signatureAdmission *control.SignatureAdmissionStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -127,6 +128,7 @@ func New(addr, baseDir string) *Server {
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
+	signatureAdmission := control.NewSignatureAdmissionStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -181,6 +183,7 @@ func New(addr, baseDir string) *Server {
 		disruptionBudgets:  disruptionBudgets,
 		executionEnvs:      executionEnvs,
 		executionCreds:     executionCreds,
+		signatureAdmission: signatureAdmission,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -238,6 +241,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/credentials", s.handleExecutionCredentials)
 	mux.HandleFunc("/v1/execution/credentials/validate", s.handleExecutionCredentialValidate)
 	mux.HandleFunc("/v1/execution/credentials/", s.handleExecutionCredentialAction)
+	mux.HandleFunc("/v1/security/signatures/keyrings", s.handleSignatureKeyrings)
+	mux.HandleFunc("/v1/security/signatures/keyrings/", s.handleSignatureKeyringAction)
+	mux.HandleFunc("/v1/security/signatures/admission-policy", s.handleSignatureAdmissionPolicy)
+	mux.HandleFunc("/v1/security/signatures/admit-check", s.handleSignatureAdmissionCheck)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1841,6 +1848,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/credentials/validate",
 			"GET /v1/execution/credentials/{id}",
 			"POST /v1/execution/credentials/{id}/revoke",
+			"GET /v1/security/signatures/keyrings",
+			"POST /v1/security/signatures/keyrings",
+			"GET /v1/security/signatures/keyrings/{id}",
+			"GET /v1/security/signatures/admission-policy",
+			"POST /v1/security/signatures/admission-policy",
+			"POST /v1/security/signatures/admit-check",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
