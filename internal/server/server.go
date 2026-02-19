@@ -595,6 +595,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
 	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
+	mux.HandleFunc("/v1/drift/history", s.handleDriftHistory(baseDir))
 	mux.HandleFunc("/v1/drift/suppressions", s.handleDriftSuppressions)
 	mux.HandleFunc("/v1/drift/suppressions/", s.handleDriftSuppressionByID)
 	mux.HandleFunc("/v1/drift/allowlists", s.handleDriftAllowlists)
@@ -2450,6 +2451,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
 			"GET /v1/drift/insights",
+			"GET /v1/drift/history",
 			"GET /v1/drift/suppressions",
 			"POST /v1/drift/suppressions",
 			"DELETE /v1/drift/suppressions/{id}",
