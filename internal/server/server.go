@@ -82,6 +82,7 @@ type Server struct {
 	workerAutoscaling     *control.WorkerAutoscalingStore
 	costScheduling        *control.CostSchedulingStore
 	artifactDistribution  *control.ArtifactDistributionStore
+	workspaceIsolation    *control.WorkspaceIsolationStore
 	tenantLimits          *control.TenantLimitStore
 	schemaMigs            *control.SchemaMigrationManager
 	openSchemas           *control.OpenSchemaStore
@@ -219,6 +220,7 @@ func New(addr, baseDir string) *Server {
 	workerAutoscaling := control.NewWorkerAutoscalingStore()
 	costScheduling := control.NewCostSchedulingStore()
 	artifactDistribution := control.NewArtifactDistributionStore()
+	workspaceIsolation := control.NewWorkspaceIsolationStore()
 	tenantLimits := control.NewTenantLimitStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	openSchemas := control.NewOpenSchemaStore()
@@ -348,6 +350,7 @@ func New(addr, baseDir string) *Server {
 		workerAutoscaling:     workerAutoscaling,
 		costScheduling:        costScheduling,
 		artifactDistribution:  artifactDistribution,
+		workspaceIsolation:    workspaceIsolation,
 		tenantLimits:          tenantLimits,
 		schemaMigs:            schemaMigs,
 		openSchemas:           openSchemas,
@@ -824,6 +827,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/cost-scheduling/admit", s.handleCostSchedulingAdmit)
 	mux.HandleFunc("/v1/control/artifact-distribution/policies", s.handleArtifactDistributionPolicies)
 	mux.HandleFunc("/v1/control/artifact-distribution/plan", s.handleArtifactDistributionPlan)
+	mux.HandleFunc("/v1/control/workspaces/isolation-policies", s.handleWorkspaceIsolationPolicies)
+	mux.HandleFunc("/v1/control/workspaces/isolation/evaluate", s.handleWorkspaceIsolationEvaluate)
 	mux.HandleFunc("/v1/control/tenancy/policies", s.handleTenantPolicies)
 	mux.HandleFunc("/v1/control/tenancy/admit-check", s.handleTenantAdmissionCheck)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
@@ -2878,6 +2883,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/artifact-distribution/policies",
 			"POST /v1/control/artifact-distribution/policies",
 			"POST /v1/control/artifact-distribution/plan",
+			"GET /v1/control/workspaces/isolation-policies",
+			"POST /v1/control/workspaces/isolation-policies",
+			"POST /v1/control/workspaces/isolation/evaluate",
 			"GET /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/admit-check",
