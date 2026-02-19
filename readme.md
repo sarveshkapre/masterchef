@@ -235,6 +235,7 @@ Documentation generator for modules/providers/policy APIs is available via `GET/
 Executable documentation examples verification is available via `POST /v1/docs/examples/verify` and `masterchef docs verify-examples`.
 API docs version-diff views with deprecation timelines are available via `GET/POST /v1/docs/api/version-diff`.
 Built-in style and best-practice analyzers for policy/module/provider code are available via `/v1/lint/style/rules` and `/v1/lint/style/analyze`.
+Deterministic formatting and canonicalization for config and plan documents are available via `POST /v1/format/canonicalize`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.
 Execution graph visualization for UI/automation consumers is available via `POST /v1/plans/graph` (structured nodes/edges plus DOT and Mermaid renderings).
 Resource graph query API for dependency/impact analysis is available via `POST /v1/plans/graph/query` with upstream/downstream traversal controls.

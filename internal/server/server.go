@@ -467,6 +467,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/docs/api/version-diff", s.handleDocsAPIVersionDiff)
 	mux.HandleFunc("/v1/lint/style/rules", s.handleStyleAnalyzerRules)
 	mux.HandleFunc("/v1/lint/style/analyze", s.handleStyleAnalyzerAnalyze)
+	mux.HandleFunc("/v1/format/canonicalize", s.handleCanonicalize)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
 	mux.HandleFunc("/v1/release/readiness/scorecards", s.handleReadinessScorecards)
 	mux.HandleFunc("/v1/release/readiness/scorecards/", s.handleReadinessScorecardAction)
@@ -2339,6 +2340,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/docs/api/version-diff",
 			"GET /v1/lint/style/rules",
 			"POST /v1/lint/style/analyze",
+			"POST /v1/format/canonicalize",
 			"GET /v1/policy/pull/sources",
 			"POST /v1/policy/pull/sources",
 			"GET /v1/policy/pull/sources/{id}",
