@@ -323,6 +323,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/docs/actions", s.handleActionDocs)
 	mux.HandleFunc("/v1/docs/actions/", s.handleActionDocByID)
 	mux.HandleFunc("/v1/docs/generate", s.handleDocsGenerate)
+	mux.HandleFunc("/v1/docs/examples/verify", s.handleDocsExampleVerify)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
 	mux.HandleFunc("/v1/release/blocker-policy", s.handleReleaseBlockerPolicy)
 	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
@@ -2058,6 +2059,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/offline/mirrors/sync",
 			"GET /v1/docs/generate",
 			"POST /v1/docs/generate",
+			"POST /v1/docs/examples/verify",
 			"GET /v1/policy/pull/sources",
 			"POST /v1/policy/pull/sources",
 			"GET /v1/policy/pull/sources/{id}",

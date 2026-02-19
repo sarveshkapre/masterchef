@@ -72,6 +72,8 @@ func Run(args []string) error {
 		return runPolicy(args[1:])
 	case "features":
 		return runFeatures(args[1:])
+	case "docs":
+		return runDocs(args[1:])
 	default:
 		return usage()
 	}
@@ -97,6 +99,7 @@ masterchef commands:
   dev [-state-dir .masterchef/dev] [-addr :8080] [-grpc-addr :9090] [-dry-run]
   policy [keygen|sign|verify] ...
   features [matrix|summary|verify] [-f features.md]
+  docs [verify-examples] [-format human|json]
 `))
 	return errors.New("invalid command")
 }
@@ -995,6 +998,39 @@ func runFeatures(args []string) error {
 		return fmt.Errorf("unknown features subcommand %q", sub)
 	}
 	return nil
+}
+
+func runDocs(args []string) error {
+	sub := "verify-examples"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		sub = args[0]
+		args = args[1:]
+	}
+	fs := flag.NewFlagSet("docs", flag.ContinueOnError)
+	format := fs.String("format", "human", "output format: human|json")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	switch sub {
+	case "verify-examples":
+		report := control.VerifyActionDocExamples(control.NewActionDocCatalog().List(), nil)
+		if strings.EqualFold(strings.TrimSpace(*format), "json") {
+			b, _ := json.MarshalIndent(report, "", "  ")
+			fmt.Println(string(b))
+		} else {
+			fmt.Printf("checked=%d passed=%t\n", report.Checked, report.Passed)
+			for _, item := range report.Failures {
+				fmt.Printf("- %s\n", item)
+			}
+		}
+		if !report.Passed {
+			return ExitError{Code: 6, Msg: "documentation example verification failed"}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown docs subcommand %q", sub)
+	}
 }
 
 func runServe(args []string) error {

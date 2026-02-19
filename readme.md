@@ -184,6 +184,7 @@ SSH bastion/jump-host and proxy-aware routing are supported via host fields `jum
 Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
 Documentation generator for modules/providers/policy APIs is available via `GET/POST /v1/docs/generate`.
+Executable documentation examples verification is available via `POST /v1/docs/examples/verify` and `masterchef docs verify-examples`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.
 Topology-aware blast-radius maps for impacted hosts/resources/dependencies are available via `POST /v1/control/blast-radius-map`.
 Human-readable pre-apply risk summaries are available via `POST /v1/plans/risk-summary`.

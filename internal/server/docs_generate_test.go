@@ -59,4 +59,11 @@ func TestDocsGenerateEndpoint(t *testing.T) {
 	if !strings.Contains(body, "/v1/policy/pull/sources") {
 		t.Fatalf("expected policy api docs in generated artifact: %s", body)
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/docs/examples/verify", bytes.NewReader([]byte(`{}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("docs examples verify failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

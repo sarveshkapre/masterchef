@@ -40,3 +40,16 @@ func (s *Server) handleDocsGenerate(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
+
+func (s *Server) handleDocsExampleVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	report := control.VerifyActionDocExamples(s.actionDocs.List(), currentAPISpec().Endpoints)
+	code := http.StatusOK
+	if !report.Passed {
+		code = http.StatusConflict
+	}
+	writeJSON(w, code, report)
+}
