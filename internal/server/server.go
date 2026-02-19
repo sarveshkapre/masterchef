@@ -66,6 +66,7 @@ type Server struct {
 	varSources          *control.VariableSourceRegistry
 	discoveryInventory  *control.DiscoveryInventoryStore
 	encProviders        *control.ENCProviderStore
+	nodeClassification  *control.NodeClassificationStore
 	plugins             *control.PluginExtensionStore
 	eventBus            *control.EventBus
 	nodes               *control.NodeLifecycleStore
@@ -172,6 +173,7 @@ func New(addr, baseDir string) *Server {
 	varSources := control.NewVariableSourceRegistry(baseDir)
 	discoveryInventory := control.NewDiscoveryInventoryStore()
 	encProviders := control.NewENCProviderStore()
+	nodeClassification := control.NewNodeClassificationStore()
 	plugins := control.NewPluginExtensionStore()
 	eventBus := control.NewEventBus()
 	nodes := control.NewNodeLifecycleStore()
@@ -270,6 +272,7 @@ func New(addr, baseDir string) *Server {
 		varSources:          varSources,
 		discoveryInventory:  discoveryInventory,
 		encProviders:        encProviders,
+		nodeClassification:  nodeClassification,
 		plugins:             plugins,
 		eventBus:            eventBus,
 		nodes:               nodes,
@@ -393,6 +396,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/import/cmdb", s.handleInventoryCMDBImport)
 	mux.HandleFunc("/v1/inventory/import/assist", s.handleInventoryImportAssistant)
 	mux.HandleFunc("/v1/inventory/import/brownfield-bootstrap", s.handleInventoryBrownfieldBootstrap)
+	mux.HandleFunc("/v1/inventory/classification-rules", s.handleNodeClassificationRules)
+	mux.HandleFunc("/v1/inventory/classification-rules/", s.handleNodeClassificationRuleByID)
+	mux.HandleFunc("/v1/inventory/classify", s.handleNodeClassify)
 	mux.HandleFunc("/v1/inventory/node-classifiers", s.handleENCProviders)
 	mux.HandleFunc("/v1/inventory/node-classifiers/classify", s.handleENCClassify)
 	mux.HandleFunc("/v1/inventory/node-classifiers/", s.handleENCProviderAction)
@@ -2158,6 +2164,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/inventory/import/cmdb",
 			"POST /v1/inventory/import/assist",
 			"POST /v1/inventory/import/brownfield-bootstrap",
+			"GET /v1/inventory/classification-rules",
+			"POST /v1/inventory/classification-rules",
+			"GET /v1/inventory/classification-rules/{id}",
+			"POST /v1/inventory/classify",
 			"GET /v1/inventory/node-classifiers",
 			"POST /v1/inventory/node-classifiers",
 			"GET /v1/inventory/node-classifiers/{id}",
