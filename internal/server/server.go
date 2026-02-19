@@ -37,6 +37,7 @@ type Server struct {
 	assocs              *control.AssociationStore
 	commands            *control.CommandIngestStore
 	convergeTriggers    *control.ConvergeTriggerStore
+	exportedResources   *control.ExportedResourceStore
 	canaries            *control.CanaryStore
 	rules               *control.RuleEngine
 	webhooks            *control.WebhookDispatcher
@@ -148,6 +149,7 @@ func New(addr, baseDir string) *Server {
 	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
 	convergeTriggers := control.NewConvergeTriggerStore(5000)
+	exportedResources := control.NewExportedResourceStore(5000)
 	canaries := control.NewCanaryStore(queue)
 	rules := control.NewRuleEngine()
 	webhooks := control.NewWebhookDispatcher(5000)
@@ -251,6 +253,7 @@ func New(addr, baseDir string) *Server {
 		assocs:              assocs,
 		commands:            commands,
 		convergeTriggers:    convergeTriggers,
+		exportedResources:   exportedResources,
 		canaries:            canaries,
 		rules:               rules,
 		webhooks:            webhooks,
@@ -602,6 +605,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
 	mux.HandleFunc("/v1/converge/triggers", s.handleConvergeTriggers(baseDir))
 	mux.HandleFunc("/v1/converge/triggers/", s.handleConvergeTriggerByID)
+	mux.HandleFunc("/v1/resources/exported", s.handleExportedResources)
+	mux.HandleFunc("/v1/resources/collect", s.handleResourceCollect)
 	mux.HandleFunc("/v1/alerts/inbox", s.handleAlertInbox)
 	mux.HandleFunc("/v1/notifications/targets", s.handleNotificationTargets)
 	mux.HandleFunc("/v1/notifications/targets/", s.handleNotificationTargetAction)
@@ -2556,6 +2561,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/converge/triggers",
 			"POST /v1/converge/triggers",
 			"GET /v1/converge/triggers/{id}",
+			"GET /v1/resources/exported",
+			"POST /v1/resources/exported",
+			"POST /v1/resources/collect",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",
 			"GET /v1/object-store/objects",

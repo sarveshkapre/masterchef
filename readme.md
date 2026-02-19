@@ -208,6 +208,7 @@ Agentless WinRM execution is supported in the executor for command/file resource
 Pythonless managed-node execution path using portable remote runners is available via `/v1/execution/portable-runners` and `POST /v1/execution/portable-runners/select`.
 Native scheduler-first recurring execution planning (systemd timers, cron, Windows Task Scheduler, with embedded fallback) is available via `/v1/execution/native-schedulers` and `POST /v1/execution/native-schedulers/select`, and association creation stores the selected scheduler backend.
 Real-time event-driven converge triggering for policy/package/security changes is available via `GET/POST /v1/converge/triggers`, with trigger history, enqueue outcomes, and direct trigger lookup by id.
+Virtual/exported resource discovery patterns are supported via `GET/POST /v1/resources/exported` and `POST /v1/resources/collect`, including collector selector syntax (`type=... and attrs.key=value`) for cross-node service lookup.
 Per-node execution backend auto-selection is supported via `transport: auto` with host capability and metadata discovery (local/ssh/winrm).
 Connection plugin architecture is available via executor transport handlers with support for custom `plugin/*` transports.
 SSH bastion/jump-host and proxy-aware routing are supported via host fields `jump_address`, `jump_user`, `jump_port`, and `proxy_command`.
