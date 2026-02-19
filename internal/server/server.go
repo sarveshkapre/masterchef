@@ -79,6 +79,7 @@ type Server struct {
 	mtls               *control.MTLSStore
 	secretIntegrations *control.SecretsIntegrationStore
 	packageRegistry    *control.PackageRegistryStore
+	agentPKI           *control.AgentPKIStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -155,6 +156,7 @@ func New(addr, baseDir string) *Server {
 	mtls := control.NewMTLSStore()
 	secretIntegrations := control.NewSecretsIntegrationStore()
 	packageRegistry := control.NewPackageRegistryStore()
+	agentPKI := control.NewAgentPKIStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -223,6 +225,7 @@ func New(addr, baseDir string) *Server {
 		mtls:               mtls,
 		secretIntegrations: secretIntegrations,
 		packageRegistry:    packageRegistry,
+		agentPKI:           agentPKI,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -328,6 +331,12 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/artifacts/", s.handlePackageArtifactAction)
 	mux.HandleFunc("/v1/packages/signing-policy", s.handlePackageSigningPolicy)
 	mux.HandleFunc("/v1/packages/verify", s.handlePackageVerify)
+	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
+	mux.HandleFunc("/v1/agents/csrs", s.handleAgentCSRs)
+	mux.HandleFunc("/v1/agents/csrs/", s.handleAgentCSRAction)
+	mux.HandleFunc("/v1/agents/certificates", s.handleAgentCertificates)
+	mux.HandleFunc("/v1/agents/certificates/", s.handleAgentCertificateAction)
+	mux.HandleFunc("/v1/agents/certificates/rotate", s.handleAgentCertificateRotate)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -2015,6 +2024,15 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/packages/signing-policy",
 			"POST /v1/packages/signing-policy",
 			"POST /v1/packages/verify",
+			"GET /v1/agents/cert-policy",
+			"POST /v1/agents/cert-policy",
+			"GET /v1/agents/csrs",
+			"POST /v1/agents/csrs",
+			"POST /v1/agents/csrs/{id}/approve",
+			"POST /v1/agents/csrs/{id}/reject",
+			"GET /v1/agents/certificates",
+			"POST /v1/agents/certificates/{id}/revoke",
+			"POST /v1/agents/certificates/rotate",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",
