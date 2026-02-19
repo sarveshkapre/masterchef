@@ -82,6 +82,7 @@ type Server struct {
 	agentPKI           *control.AgentPKIStore
 	agentAttestation   *control.AgentAttestationStore
 	policyPull         *control.PolicyPullStore
+	multiMaster        *control.MultiMasterStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -161,6 +162,7 @@ func New(addr, baseDir string) *Server {
 	agentPKI := control.NewAgentPKIStore()
 	agentAttestation := control.NewAgentAttestationStore()
 	policyPull := control.NewPolicyPullStore()
+	multiMaster := control.NewMultiMasterStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -232,6 +234,7 @@ func New(addr, baseDir string) *Server {
 		agentPKI:           agentPKI,
 		agentAttestation:   agentAttestation,
 		policyPull:         policyPull,
+		multiMaster:        multiMaster,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -461,6 +464,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
+	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
+	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
+	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
 	mux.HandleFunc("/v1/control/schema-migrations", s.handleSchemaMigrations)
 	mux.HandleFunc("/v1/control/preflight", s.handlePreflight)
 	mux.HandleFunc("/v1/control/invariants/check", s.handleInvariantChecks)
@@ -2227,6 +2233,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/canary-health",
 			"POST /v1/control/channels",
 			"GET /v1/control/channels",
+			"GET /v1/control/multi-master/nodes",
+			"POST /v1/control/multi-master/nodes",
+			"GET /v1/control/multi-master/nodes/{id}",
+			"POST /v1/control/multi-master/nodes/{id}/heartbeat",
+			"GET /v1/control/multi-master/cache",
+			"POST /v1/control/multi-master/cache",
 			"POST /v1/control/schema-migrations",
 			"GET /v1/control/schema-migrations",
 			"POST /v1/control/preflight",
