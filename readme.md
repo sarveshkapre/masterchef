@@ -104,6 +104,7 @@ Workload-centric operational views grouped by service/application are available 
 Fleet node views with cursor-based incremental loading plus `compact`, `virtualized`, and `low-bandwidth` render modes are available via `GET /v1/fleet/nodes`.
 Fleet health SLO/error-budget views are available via `GET /v1/fleet/health`.
 Universal command-palette search across hosts, services, runs, policies, and modules is available via `GET /v1/search`.
+Inline action guidance with endpoint-aware examples is available via `GET /v1/docs/inline` to surface docs at point of action.
 Data bag/global object store with encrypted item support and structured search is available via `/v1/data-bags` and `/v1/data-bags/search`.
 Chef-style role and environment objects with deterministic per-environment resolution are available via `/v1/roles`, `/v1/environments`, and `GET /v1/roles/{name}/resolve`.
 Role/profile/environment inheritance is supported via role `profiles`, with parent-role run-list and attribute resolution plus cycle detection in `GET /v1/roles/{name}/resolve`.

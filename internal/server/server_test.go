@@ -1746,6 +1746,26 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("action docs query failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/docs/inline?endpoint=POST+/v1/runs/run-123/retry", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("inline docs endpoint lookup failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"investigate-failed-run"`) || !strings.Contains(rr.Body.String(), `"matched_endpoint":"POST /v1/runs/{id}/retry"`) {
+		t.Fatalf("expected endpoint-matched inline docs response: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/docs/inline?q=incident&limit=1", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("inline docs query lookup failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"inline_examples":true`) || !strings.Contains(rr.Body.String(), `"count":1`) {
+		t.Fatalf("expected inline docs query response metadata: %s", rr.Body.String())
+	}
 }
 
 func TestFleetNodesEndpointPaginationAndRenderModes(t *testing.T) {
