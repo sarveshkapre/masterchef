@@ -66,6 +66,7 @@ type Server struct {
 	executionEnvs      *control.ExecutionEnvironmentStore
 	executionCreds     *control.ExecutionCredentialStore
 	signatureAdmission *control.SignatureAdmissionStore
+	runtimeSecrets     *control.RuntimeSecretStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -129,6 +130,7 @@ func New(addr, baseDir string) *Server {
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
 	signatureAdmission := control.NewSignatureAdmissionStore()
+	runtimeSecrets := control.NewRuntimeSecretStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -184,6 +186,7 @@ func New(addr, baseDir string) *Server {
 		executionEnvs:      executionEnvs,
 		executionCreds:     executionCreds,
 		signatureAdmission: signatureAdmission,
+		runtimeSecrets:     runtimeSecrets,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -245,6 +248,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/security/signatures/keyrings/", s.handleSignatureKeyringAction)
 	mux.HandleFunc("/v1/security/signatures/admission-policy", s.handleSignatureAdmissionPolicy)
 	mux.HandleFunc("/v1/security/signatures/admit-check", s.handleSignatureAdmissionCheck)
+	mux.HandleFunc("/v1/secrets/runtime/sessions", s.handleRuntimeSecretSessions)
+	mux.HandleFunc("/v1/secrets/runtime/sessions/", s.handleRuntimeSecretSessionAction)
+	mux.HandleFunc("/v1/secrets/runtime/consume", s.handleRuntimeSecretConsume)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1854,6 +1860,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/security/signatures/admission-policy",
 			"POST /v1/security/signatures/admission-policy",
 			"POST /v1/security/signatures/admit-check",
+			"GET /v1/secrets/runtime/sessions",
+			"POST /v1/secrets/runtime/sessions",
+			"GET /v1/secrets/runtime/sessions/{id}",
+			"POST /v1/secrets/runtime/sessions/{id}/destroy",
+			"POST /v1/secrets/runtime/consume",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
