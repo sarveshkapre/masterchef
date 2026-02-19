@@ -31,6 +31,7 @@ type Server struct {
 	checkpoints         *control.ExecutionCheckpointStore
 	scheduler           *control.Scheduler
 	templates           *control.TemplateStore
+	tasks               *control.TaskFrameworkStore
 	workflows           *control.WorkflowStore
 	runbooks            *control.RunbookStore
 	assocs              *control.AssociationStore
@@ -138,6 +139,7 @@ func New(addr, baseDir string) *Server {
 	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
 	templates := control.NewTemplateStore()
+	tasks := control.NewTaskFrameworkStore()
 	workflows := control.NewWorkflowStore(queue, templates)
 	runbooks := control.NewRunbookStore()
 	assocs := control.NewAssociationStore(scheduler)
@@ -237,6 +239,7 @@ func New(addr, baseDir string) *Server {
 		checkpoints:         checkpoints,
 		scheduler:           scheduler,
 		templates:           templates,
+		tasks:               tasks,
 		workflows:           workflows,
 		runbooks:            runbooks,
 		assocs:              assocs,
@@ -359,6 +362,10 @@ func New(addr, baseDir string) *Server {
 
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
+	mux.HandleFunc("/v1/tasks/definitions", s.handleTaskDefinitions)
+	mux.HandleFunc("/v1/tasks/definitions/", s.handleTaskDefinitionByID)
+	mux.HandleFunc("/v1/tasks/plans", s.handleTaskPlans)
+	mux.HandleFunc("/v1/tasks/plans/", s.handleTaskPlanAction)
 	mux.HandleFunc("/v1/edge-relay/sites", s.handleEdgeRelaySites)
 	mux.HandleFunc("/v1/edge-relay/sites/", s.handleEdgeRelaySiteAction)
 	mux.HandleFunc("/v1/edge-relay/messages", s.handleEdgeRelayMessages)
@@ -2134,6 +2141,13 @@ func currentAPISpec() control.APISpec {
 			"GET /healthz",
 			"GET /v1/activity",
 			"GET /v1/search",
+			"GET /v1/tasks/definitions",
+			"POST /v1/tasks/definitions",
+			"GET /v1/tasks/definitions/{id}",
+			"GET /v1/tasks/plans",
+			"POST /v1/tasks/plans",
+			"GET /v1/tasks/plans/{id}",
+			"POST /v1/tasks/plans/{id}/preview",
 			"GET /v1/edge-relay/sites",
 			"POST /v1/edge-relay/sites",
 			"GET /v1/edge-relay/sites/{id}",
