@@ -119,6 +119,7 @@ type Server struct {
 	disruptionBudgets      *control.DisruptionBudgetStore
 	executionEnvs          *control.ExecutionEnvironmentStore
 	executionCreds         *control.ExecutionCredentialStore
+	systemdUnits           *control.SystemdUnitStore
 	sessionRecordings      *control.SessionRecordingStore
 	masterless             *control.MasterlessStore
 	hopRelay               *control.HopRelayStore
@@ -265,6 +266,7 @@ func New(addr, baseDir string) *Server {
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
+	systemdUnits := control.NewSystemdUnitStore()
 	sessionRecordings := control.NewSessionRecordingStore(baseDir)
 	masterless := control.NewMasterlessStore()
 	hopRelay := control.NewHopRelayStore()
@@ -403,6 +405,7 @@ func New(addr, baseDir string) *Server {
 		disruptionBudgets:      disruptionBudgets,
 		executionEnvs:          executionEnvs,
 		executionCreds:         executionCreds,
+		systemdUnits:           systemdUnits,
 		sessionRecordings:      sessionRecordings,
 		masterless:             masterless,
 		hopRelay:               hopRelay,
@@ -597,6 +600,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/portable-runners/select", s.handlePortableRunnerSelect)
 	mux.HandleFunc("/v1/execution/native-schedulers", s.handleNativeSchedulers)
 	mux.HandleFunc("/v1/execution/native-schedulers/select", s.handleNativeSchedulerSelect)
+	mux.HandleFunc("/v1/execution/systemd/units", s.handleSystemdUnits)
+	mux.HandleFunc("/v1/execution/systemd/units/", s.handleSystemdUnitAction)
+	mux.HandleFunc("/v1/execution/systemd/units/render", s.handleSystemdRender)
 	mux.HandleFunc("/v1/execution/session-recordings", s.handleSessionRecordings)
 	mux.HandleFunc("/v1/execution/session-recordings/", s.handleSessionRecordingAction)
 	mux.HandleFunc("/v1/execution/adaptive-concurrency/policy", s.handleAdaptiveConcurrencyPolicy)
@@ -2467,6 +2473,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/portable-runners/select",
 			"GET /v1/execution/native-schedulers",
 			"POST /v1/execution/native-schedulers/select",
+			"GET /v1/execution/systemd/units",
+			"POST /v1/execution/systemd/units",
+			"GET /v1/execution/systemd/units/{name}",
+			"POST /v1/execution/systemd/units/render",
 			"GET /v1/execution/session-recordings",
 			"GET /v1/execution/session-recordings/{id}",
 			"GET /v1/execution/adaptive-concurrency/policy",
