@@ -84,6 +84,7 @@ type Server struct {
 	artifactDistribution  *control.ArtifactDistributionStore
 	workspaceIsolation    *control.WorkspaceIsolationStore
 	tenantCrypto          *control.TenantCryptoStore
+	delegatedAdmin        *control.DelegatedAdminStore
 	tenantLimits          *control.TenantLimitStore
 	schemaMigs            *control.SchemaMigrationManager
 	openSchemas           *control.OpenSchemaStore
@@ -223,6 +224,7 @@ func New(addr, baseDir string) *Server {
 	artifactDistribution := control.NewArtifactDistributionStore()
 	workspaceIsolation := control.NewWorkspaceIsolationStore()
 	tenantCrypto := control.NewTenantCryptoStore()
+	delegatedAdmin := control.NewDelegatedAdminStore()
 	tenantLimits := control.NewTenantLimitStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	openSchemas := control.NewOpenSchemaStore()
@@ -354,6 +356,7 @@ func New(addr, baseDir string) *Server {
 		artifactDistribution:  artifactDistribution,
 		workspaceIsolation:    workspaceIsolation,
 		tenantCrypto:          tenantCrypto,
+		delegatedAdmin:        delegatedAdmin,
 		tenantLimits:          tenantLimits,
 		schemaMigs:            schemaMigs,
 		openSchemas:           openSchemas,
@@ -837,6 +840,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/security/tenant-keys", s.handleTenantCryptoKeys)
 	mux.HandleFunc("/v1/security/tenant-keys/rotate", s.handleTenantCryptoRotate)
 	mux.HandleFunc("/v1/security/tenant-keys/boundary-check", s.handleTenantCryptoBoundaryCheck)
+	mux.HandleFunc("/v1/control/delegated-admin/grants", s.handleDelegatedAdminGrants)
+	mux.HandleFunc("/v1/control/delegated-admin/authorize", s.handleDelegatedAdminAuthorize)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
 	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
 	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
@@ -2899,6 +2904,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/security/tenant-keys",
 			"POST /v1/security/tenant-keys/rotate",
 			"POST /v1/security/tenant-keys/boundary-check",
+			"GET /v1/control/delegated-admin/grants",
+			"POST /v1/control/delegated-admin/grants",
+			"POST /v1/control/delegated-admin/authorize",
 			"GET /v1/control/multi-master/nodes",
 			"POST /v1/control/multi-master/nodes",
 			"GET /v1/control/multi-master/nodes/{id}",

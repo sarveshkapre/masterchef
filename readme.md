@@ -201,6 +201,7 @@ Cost-aware scheduling and throttling controls are available via `/v1/control/cos
 Bandwidth-aware artifact distribution and caching controls are available via `/v1/control/artifact-distribution/policies` and `/v1/control/artifact-distribution/plan`.
 Workspace and multi-tenant isolation boundaries are available via `/v1/control/workspaces/isolation-policies` and `/v1/control/workspaces/isolation/evaluate`.
 Hard tenant boundaries with per-tenant crypto keys are available via `/v1/security/tenant-keys`, `POST /v1/security/tenant-keys/rotate`, and `POST /v1/security/tenant-keys/boundary-check`.
+Delegated administration per tenant and environment is available via `/v1/control/delegated-admin/grants` and `POST /v1/control/delegated-admin/authorize`.
 Short-lived stateless worker execution mode (to reduce long-running process drift) is configurable via `GET/POST /v1/control/workers/lifecycle`, including max jobs per worker and restart delay controls.
 Long-running run leases with heartbeat and stale-lease recovery are available via `/v1/control/run-leases`, `/v1/control/run-leases/heartbeat`, and `/v1/control/run-leases/recover`.
 Per-step execution snapshots for forensic analysis are available via `/v1/execution/snapshots` with filterable run/job queries and snapshot-by-id retrieval.
