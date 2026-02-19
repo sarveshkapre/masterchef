@@ -28,6 +28,7 @@ type Server struct {
 	runLeases           *control.RunLeaseStore
 	stepSnapshots       *control.StepSnapshotStore
 	executionLocks      *control.ExecutionLockStore
+	checkpoints         *control.ExecutionCheckpointStore
 	scheduler           *control.Scheduler
 	templates           *control.TemplateStore
 	workflows           *control.WorkflowStore
@@ -130,6 +131,7 @@ func New(addr, baseDir string) *Server {
 	runLeases := control.NewRunLeaseStore()
 	stepSnapshots := control.NewStepSnapshotStore(20_000)
 	executionLocks := control.NewExecutionLockStore()
+	checkpoints := control.NewExecutionCheckpointStore()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
@@ -228,6 +230,7 @@ func New(addr, baseDir string) *Server {
 		runLeases:           runLeases,
 		stepSnapshots:       stepSnapshots,
 		executionLocks:      executionLocks,
+		checkpoints:         checkpoints,
 		scheduler:           scheduler,
 		templates:           templates,
 		workflows:           workflows,
@@ -415,6 +418,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/native-schedulers/select", s.handleNativeSchedulerSelect)
 	mux.HandleFunc("/v1/execution/adaptive-concurrency/policy", s.handleAdaptiveConcurrencyPolicy)
 	mux.HandleFunc("/v1/execution/adaptive-concurrency/recommend", s.handleAdaptiveConcurrencyRecommend)
+	mux.HandleFunc("/v1/execution/checkpoints", s.handleExecutionCheckpoints(baseDir))
+	mux.HandleFunc("/v1/execution/checkpoints/resume", s.handleExecutionCheckpointResume(baseDir))
+	mux.HandleFunc("/v1/execution/checkpoints/", s.handleExecutionCheckpointByID)
 	mux.HandleFunc("/v1/execution/snapshots", s.handleStepSnapshots)
 	mux.HandleFunc("/v1/execution/snapshots/", s.handleStepSnapshotByID)
 	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
@@ -2193,6 +2199,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/execution/adaptive-concurrency/policy",
 			"POST /v1/execution/adaptive-concurrency/policy",
 			"POST /v1/execution/adaptive-concurrency/recommend",
+			"GET /v1/execution/checkpoints",
+			"POST /v1/execution/checkpoints",
+			"GET /v1/execution/checkpoints/{id}",
+			"POST /v1/execution/checkpoints/resume",
 			"GET /v1/execution/snapshots",
 			"POST /v1/execution/snapshots",
 			"GET /v1/execution/snapshots/{id}",
