@@ -125,6 +125,7 @@ type Server struct {
 	systemdUnits           *control.SystemdUnitStore
 	rebootOrchestration    *control.RebootOrchestrationStore
 	patchManagement        *control.PatchManagementStore
+	imageBaking            *control.ImageBakeStore
 	artifactDeployments    *control.ArtifactDeploymentStore
 	sessionRecordings      *control.SessionRecordingStore
 	masterless             *control.MasterlessStore
@@ -279,6 +280,7 @@ func New(addr, baseDir string) *Server {
 	systemdUnits := control.NewSystemdUnitStore()
 	rebootOrchestration := control.NewRebootOrchestrationStore()
 	patchManagement := control.NewPatchManagementStore()
+	imageBaking := control.NewImageBakeStore()
 	artifactDeployments := control.NewArtifactDeploymentStore()
 	sessionRecordings := control.NewSessionRecordingStore(baseDir)
 	masterless := control.NewMasterlessStore()
@@ -425,6 +427,7 @@ func New(addr, baseDir string) *Server {
 		systemdUnits:           systemdUnits,
 		rebootOrchestration:    rebootOrchestration,
 		patchManagement:        patchManagement,
+		imageBaking:            imageBaking,
 		artifactDeployments:    artifactDeployments,
 		sessionRecordings:      sessionRecordings,
 		masterless:             masterless,
@@ -633,6 +636,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/reboot/plan", s.handleRebootPlan)
 	mux.HandleFunc("/v1/execution/patch/policies", s.handlePatchPolicies)
 	mux.HandleFunc("/v1/execution/patch/plan", s.handlePatchPlan)
+	mux.HandleFunc("/v1/execution/image-baking/pipelines", s.handleImageBakePipelines)
+	mux.HandleFunc("/v1/execution/image-baking/pipelines/", s.handleImageBakePipelineAction)
 	mux.HandleFunc("/v1/execution/artifacts/deployments", s.handleArtifactDeployments)
 	mux.HandleFunc("/v1/execution/artifacts/deployments/", s.handleArtifactDeploymentAction)
 	mux.HandleFunc("/v1/execution/session-recordings", s.handleSessionRecordings)
@@ -2522,6 +2527,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/execution/patch/policies",
 			"POST /v1/execution/patch/policies",
 			"POST /v1/execution/patch/plan",
+			"GET /v1/execution/image-baking/pipelines",
+			"POST /v1/execution/image-baking/pipelines",
+			"GET /v1/execution/image-baking/pipelines/{id}",
+			"POST /v1/execution/image-baking/pipelines/{id}/plan",
 			"GET /v1/execution/artifacts/deployments",
 			"POST /v1/execution/artifacts/deployments",
 			"GET /v1/execution/artifacts/deployments/{id}",
