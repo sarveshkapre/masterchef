@@ -107,6 +107,84 @@ func (s *Server) handleOfflineBundles(baseDir string) http.HandlerFunc {
 	}
 }
 
+func (s *Server) handleOfflineMirrors(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.offline.ListMirrors())
+	case http.MethodPost:
+		var req control.OfflineMirrorInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		item, err := s.offline.UpsertMirror(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.recordEvent(control.Event{
+			Type:    "control.offline.mirror.upserted",
+			Message: "offline mirror configuration updated",
+			Fields: map[string]any{
+				"mirror_id":   item.ID,
+				"name":        item.Name,
+				"upstream":    item.Upstream,
+				"mirror_path": item.MirrorPath,
+			},
+		}, true)
+		writeJSON(w, http.StatusCreated, item)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleOfflineMirrorAction(w http.ResponseWriter, r *http.Request) {
+	parts := splitPath(r.URL.Path)
+	// /v1/offline/mirrors/{id}
+	if len(parts) != 4 || parts[0] != "v1" || parts[1] != "offline" || parts[2] != "mirrors" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	item, ok := s.offline.GetMirror(parts[3])
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "offline mirror not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleOfflineMirrorSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.OfflineMirrorSyncInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	item, err := s.offline.SyncMirror(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordEvent(control.Event{
+		Type:    "control.offline.mirror.sync",
+		Message: "offline mirror sync evaluated",
+		Fields: map[string]any{
+			"mirror_id":        item.MirrorID,
+			"artifact_count":   item.ArtifactCount,
+			"synced_artifacts": item.SyncedArtifacts,
+			"status":           item.Status,
+		},
+	}, true)
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (s *Server) handleOfflineBundleVerify(baseDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

@@ -25,3 +25,37 @@ func TestOfflineStoreModeAndBundles(t *testing.T) {
 		t.Fatalf("expected one bundle")
 	}
 }
+
+func TestOfflineStoreMirrorsAndSync(t *testing.T) {
+	store := NewOfflineStore()
+	if _, err := store.CreateBundle(OfflineBundleInput{
+		ManifestSHA: "sha256:def",
+		Items:       []string{"policy/edge.yaml"},
+		Artifacts:   []string{"registry/pkg@sha256:def", "registry/no-digest"},
+		Signed:      false,
+	}); err != nil {
+		t.Fatalf("seed bundle failed: %v", err)
+	}
+	mirror, err := store.UpsertMirror(OfflineMirrorInput{
+		Name:            "corp-registry",
+		Upstream:        "registry.example.com",
+		MirrorPath:      "/srv/mirror",
+		IncludePatterns: []string{"masterchef/*"},
+	})
+	if err != nil {
+		t.Fatalf("upsert mirror failed: %v", err)
+	}
+	if mirror.ID == "" {
+		t.Fatalf("expected mirror id")
+	}
+	result, err := store.SyncMirror(OfflineMirrorSyncInput{MirrorID: mirror.ID})
+	if err != nil {
+		t.Fatalf("sync mirror failed: %v", err)
+	}
+	if result.ArtifactCount != 2 || result.SyncedArtifacts != 1 || result.Status != "partial" {
+		t.Fatalf("unexpected sync result %+v", result)
+	}
+	if len(store.ListMirrors()) != 1 {
+		t.Fatalf("expected one mirror")
+	}
+}

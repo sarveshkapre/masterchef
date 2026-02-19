@@ -72,3 +72,58 @@ func TestOfflineModeAndBundles(t *testing.T) {
 		t.Fatalf("verify offline bundle failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestOfflineMirrorEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	features := filepath.Join(tmp, "features.md")
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/offline/mirrors", bytes.NewReader([]byte(`{"name":"corp-registry","upstream":"registry.example.com","mirror_path":"/srv/mirror","include_patterns":["masterchef/*"]}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create offline mirror failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var mirror struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &mirror)
+	if mirror.ID == "" {
+		t.Fatalf("expected mirror id")
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/offline/bundles", bytes.NewReader([]byte(`{"items":["policy/main.yaml"],"artifacts":["registry/pkg@sha256:abc","registry/no-digest"]}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("seed offline bundle for sync failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/offline/mirrors/sync", bytes.NewReader([]byte(`{"mirror_id":"`+mirror.ID+`"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("sync offline mirror failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/offline/mirrors/"+mirror.ID, nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get offline mirror failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
