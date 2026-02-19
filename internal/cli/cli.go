@@ -56,6 +56,8 @@ func Run(args []string) error {
 		return runCheck(args[1:])
 	case "apply":
 		return runApply(args[1:])
+	case "deploy":
+		return runDeploy(args[1:])
 	case "observe":
 		return runObserve(args[1:])
 	case "drift":
@@ -85,6 +87,7 @@ masterchef commands:
   plan [-f masterchef.yaml] [-o plan.json] [-snapshot plan.snapshot.json] [-update-snapshot]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
+  deploy [-f masterchef.yaml] -env staging -branch env/staging [-yes]
   observe [-base .] [-limit 100] [-format json|human]
   drift [-base .] [-hours 24] [-format json|human]
   tui [-base .] [-limit 20]
@@ -480,6 +483,60 @@ func runApply(args []string) error {
 	}
 	if run.Status != state.RunSucceeded {
 		return fmt.Errorf("apply failed")
+	}
+	return nil
+}
+
+func runDeploy(args []string) error {
+	fs := flag.NewFlagSet("deploy", flag.ContinueOnError)
+	path := fs.String("f", "masterchef.yaml", "config path")
+	environment := fs.String("env", "", "deployment environment name")
+	branch := fs.String("branch", "", "deployment branch reference")
+	autoApprove := fs.Bool("yes", false, "auto approve deployment without prompt")
+	nonInteractive := fs.Bool("non-interactive", false, "fail instead of prompting for approval")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*environment) == "" || strings.TrimSpace(*branch) == "" {
+		return fmt.Errorf("deploy requires -env and -branch")
+	}
+
+	cfg, err := config.Load(*path)
+	if err != nil {
+		return err
+	}
+	p, err := planner.Build(cfg)
+	if err != nil {
+		return err
+	}
+	if len(p.Steps) == 0 {
+		return ExitError{Code: 7, Msg: "no plan steps to deploy"}
+	}
+	if err := requireApplyApproval(p, *autoApprove, *nonInteractive); err != nil {
+		return err
+	}
+
+	ex := executor.New(".")
+	run, err := ex.Apply(p)
+	if err != nil {
+		return err
+	}
+	st := state.New(".")
+	if err := st.SaveRun(run); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(run, "", "  ")
+	fmt.Println(string(b))
+	trigger := map[string]string{
+		"source":      "cli",
+		"environment": strings.ToLower(strings.TrimSpace(*environment)),
+		"branch":      strings.TrimSpace(*branch),
+		"config_path": *path,
+	}
+	tb, _ := json.Marshal(trigger)
+	fmt.Printf("deployment_trigger=%s\n", string(tb))
+	if run.Status != state.RunSucceeded {
+		return fmt.Errorf("deploy failed")
 	}
 	return nil
 }

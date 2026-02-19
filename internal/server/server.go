@@ -58,6 +58,7 @@ type Server struct {
 	gitopsPreviews     *control.GitOpsPreviewStore
 	gitopsPromotions   *control.GitOpsPromotionStore
 	gitopsEnvironments *control.GitOpsEnvironmentStore
+	deployments        *control.DeploymentStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -113,6 +114,7 @@ func New(addr, baseDir string) *Server {
 	gitopsPreviews := control.NewGitOpsPreviewStore()
 	gitopsPromotions := control.NewGitOpsPromotionStore()
 	gitopsEnvironments := control.NewGitOpsEnvironmentStore()
+	deployments := control.NewDeploymentStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -160,6 +162,7 @@ func New(addr, baseDir string) *Server {
 		gitopsPreviews:     gitopsPreviews,
 		gitopsPromotions:   gitopsPromotions,
 		gitopsEnvironments: gitopsEnvironments,
+		deployments:        deployments,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -211,6 +214,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
 	mux.HandleFunc("/v1/gitops/environments/materialize", s.handleGitOpsEnvironmentMaterializeAlias(baseDir))
 	mux.HandleFunc("/v1/gitops/environments/", s.handleGitOpsEnvironmentAction)
+	mux.HandleFunc("/v1/gitops/deployments", s.handleGitOpsDeployments(baseDir))
+	mux.HandleFunc("/v1/gitops/deployments/trigger", s.handleGitOpsDeploymentTriggerAlias(baseDir, "api"))
+	mux.HandleFunc("/v1/gitops/deployments/webhook", s.handleGitOpsDeploymentTriggerAlias(baseDir, "webhook"))
+	mux.HandleFunc("/v1/gitops/deployments/", s.handleGitOpsDeploymentAction)
 	mux.HandleFunc("/v1/gitops/promotions", s.handleGitOpsPromotions)
 	mux.HandleFunc("/v1/gitops/promotions/", s.handleGitOpsPromotionAction)
 	mux.HandleFunc("/v1/gitops/reconcile", s.handleGitOpsReconcile(baseDir))
@@ -1791,6 +1798,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/gitops/environments",
 			"POST /v1/gitops/environments/materialize",
 			"GET /v1/gitops/environments/{name}",
+			"GET /v1/gitops/deployments",
+			"POST /v1/gitops/deployments",
+			"POST /v1/gitops/deployments/trigger",
+			"POST /v1/gitops/deployments/webhook",
+			"GET /v1/gitops/deployments/{id}",
 			"GET /v1/gitops/promotions",
 			"POST /v1/gitops/promotions",
 			"GET /v1/gitops/promotions/{id}",
