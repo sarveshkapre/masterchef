@@ -183,6 +183,7 @@ Connection plugin architecture is available via executor transport handlers with
 SSH bastion/jump-host and proxy-aware routing are supported via host fields `jump_address`, `jump_user`, `jump_port`, and `proxy_command`.
 Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
+Documentation generator for modules/providers/policy APIs is available via `GET/POST /v1/docs/generate`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.
 Topology-aware blast-radius maps for impacted hosts/resources/dependencies are available via `POST /v1/control/blast-radius-map`.
 Human-readable pre-apply risk summaries are available via `POST /v1/plans/risk-summary`.
