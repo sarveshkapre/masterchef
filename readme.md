@@ -134,6 +134,7 @@ Built-in template rendering now includes a safe function library (`upper`, `lowe
 Handler/notification model for event-triggered resource actions is supported with `notify_handlers` plus top-level `handlers` definitions, with deduplicated post-change handler execution.
 Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.
 Event bus integrations for webhook, Kafka, and NATS targets are available via `/v1/event-bus/targets`, `/v1/event-bus/publish`, and `/v1/event-bus/deliveries`.
+External SaaS/webhook event ingress endpoints are available via `POST /v1/event-stream/ingest` and `POST /v1/event-stream/webhooks/ingest` (aliases to the core ingest pipeline).
 Hermetic execution environments with pinned image digests are available via `/v1/execution/environments` and admission evaluation endpoints.
 Short-lived execution credentials are available via `/v1/execution/credentials` with scope-aware validation and explicit revoke workflows.
 Signed collection/image admission with client-side verification keyrings is available via `/v1/security/signatures/keyrings` and `/v1/security/signatures/admit-check`.

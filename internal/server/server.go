@@ -603,6 +603,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
+	mux.HandleFunc("/v1/event-stream/ingest", s.handleEventIngest)
+	mux.HandleFunc("/v1/event-stream/webhooks/ingest", s.handleEventIngest)
 	mux.HandleFunc("/v1/converge/triggers", s.handleConvergeTriggers(baseDir))
 	mux.HandleFunc("/v1/converge/triggers/", s.handleConvergeTriggerByID)
 	mux.HandleFunc("/v1/resources/exported", s.handleExportedResources)
@@ -2558,6 +2560,8 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/facts/cache/{node}",
 			"POST /v1/facts/mine/query",
 			"POST /v1/events/ingest",
+			"POST /v1/event-stream/ingest",
+			"POST /v1/event-stream/webhooks/ingest",
 			"GET /v1/converge/triggers",
 			"POST /v1/converge/triggers",
 			"GET /v1/converge/triggers/{id}",
