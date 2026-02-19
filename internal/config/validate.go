@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -176,10 +177,24 @@ func Validate(cfg *Config) error {
 			if strings.TrimSpace(r.RetryBackoff) != "" || r.RetryJitterSecs != 0 {
 				return fmt.Errorf("resource %q retry_backoff/retry_jitter_seconds are only supported for command resources", r.ID)
 			}
+			r.ContentChecksum = strings.TrimSpace(r.ContentChecksum)
+			r.ContentSignature = strings.TrimSpace(r.ContentSignature)
+			r.ContentSigningPubKey = strings.TrimSpace(r.ContentSigningPubKey)
+			if r.ContentChecksum != "" && !isSHA256Digest(r.ContentChecksum) {
+				return fmt.Errorf("resource %q file.content_checksum must use sha256:<hex> format", r.ID)
+			}
+			if r.ContentSignature != "" || r.ContentSigningPubKey != "" {
+				if r.ContentSignature == "" || r.ContentSigningPubKey == "" {
+					return fmt.Errorf("resource %q file.content_signature and file.content_signing_pubkey must be provided together", r.ID)
+				}
+			}
 			if strings.TrimSpace(r.Path) == "" {
 				return fmt.Errorf("resource %q file.path is required", r.ID)
 			}
 		case "command":
+			if strings.TrimSpace(r.ContentChecksum) != "" || strings.TrimSpace(r.ContentSignature) != "" || strings.TrimSpace(r.ContentSigningPubKey) != "" {
+				return fmt.Errorf("resource %q file content integrity fields are only supported for file resources", r.ID)
+			}
 			if strings.TrimSpace(r.Command) == "" {
 				return fmt.Errorf("resource %q command.command is required", r.ID)
 			}
@@ -207,6 +222,9 @@ func Validate(cfg *Config) error {
 			if r.Become {
 				return fmt.Errorf("resource %q privilege escalation is only supported for command resources", r.ID)
 			}
+			if strings.TrimSpace(r.ContentChecksum) != "" || strings.TrimSpace(r.ContentSignature) != "" || strings.TrimSpace(r.ContentSigningPubKey) != "" {
+				return fmt.Errorf("resource %q file content integrity fields are only supported for file resources", r.ID)
+			}
 			if strings.TrimSpace(r.RegistryKey) == "" {
 				return fmt.Errorf("resource %q registry.registry_key is required", r.ID)
 			}
@@ -223,6 +241,9 @@ func Validate(cfg *Config) error {
 		case "scheduled_task":
 			if r.Become {
 				return fmt.Errorf("resource %q privilege escalation is only supported for command resources", r.ID)
+			}
+			if strings.TrimSpace(r.ContentChecksum) != "" || strings.TrimSpace(r.ContentSignature) != "" || strings.TrimSpace(r.ContentSigningPubKey) != "" {
+				return fmt.Errorf("resource %q file content integrity fields are only supported for file resources", r.ID)
 			}
 			r.TaskName = strings.TrimSpace(r.TaskName)
 			r.TaskCommand = strings.TrimSpace(r.TaskCommand)
@@ -305,10 +326,24 @@ func Validate(cfg *Config) error {
 			if strings.TrimSpace(h.RetryBackoff) != "" || h.RetryJitterSecs != 0 {
 				return fmt.Errorf("handler %q retry_backoff/retry_jitter_seconds are only supported for command resources", h.ID)
 			}
+			h.ContentChecksum = strings.TrimSpace(h.ContentChecksum)
+			h.ContentSignature = strings.TrimSpace(h.ContentSignature)
+			h.ContentSigningPubKey = strings.TrimSpace(h.ContentSigningPubKey)
+			if h.ContentChecksum != "" && !isSHA256Digest(h.ContentChecksum) {
+				return fmt.Errorf("handler %q file.content_checksum must use sha256:<hex> format", h.ID)
+			}
+			if h.ContentSignature != "" || h.ContentSigningPubKey != "" {
+				if h.ContentSignature == "" || h.ContentSigningPubKey == "" {
+					return fmt.Errorf("handler %q file.content_signature and file.content_signing_pubkey must be provided together", h.ID)
+				}
+			}
 			if strings.TrimSpace(h.Path) == "" {
 				return fmt.Errorf("handler %q file.path is required", h.ID)
 			}
 		case "command":
+			if strings.TrimSpace(h.ContentChecksum) != "" || strings.TrimSpace(h.ContentSignature) != "" || strings.TrimSpace(h.ContentSigningPubKey) != "" {
+				return fmt.Errorf("handler %q file content integrity fields are only supported for file resources", h.ID)
+			}
 			if strings.TrimSpace(h.Command) == "" {
 				return fmt.Errorf("handler %q command.command is required", h.ID)
 			}
@@ -336,6 +371,9 @@ func Validate(cfg *Config) error {
 			if h.Become {
 				return fmt.Errorf("handler %q privilege escalation is only supported for command resources", h.ID)
 			}
+			if strings.TrimSpace(h.ContentChecksum) != "" || strings.TrimSpace(h.ContentSignature) != "" || strings.TrimSpace(h.ContentSigningPubKey) != "" {
+				return fmt.Errorf("handler %q file content integrity fields are only supported for file resources", h.ID)
+			}
 			if strings.TrimSpace(h.RegistryKey) == "" {
 				return fmt.Errorf("handler %q registry.registry_key is required", h.ID)
 			}
@@ -352,6 +390,9 @@ func Validate(cfg *Config) error {
 		case "scheduled_task":
 			if h.Become {
 				return fmt.Errorf("handler %q privilege escalation is only supported for command resources", h.ID)
+			}
+			if strings.TrimSpace(h.ContentChecksum) != "" || strings.TrimSpace(h.ContentSignature) != "" || strings.TrimSpace(h.ContentSigningPubKey) != "" {
+				return fmt.Errorf("handler %q file content integrity fields are only supported for file resources", h.ID)
 			}
 			h.TaskName = strings.TrimSpace(h.TaskName)
 			h.TaskCommand = strings.TrimSpace(h.TaskCommand)
@@ -485,4 +526,17 @@ func normalizeLoop(resource *Resource, owner string) error {
 		return fmt.Errorf("%s loop_var %q conflicts with matrix key", owner, resource.LoopVar)
 	}
 	return nil
+}
+
+func isSHA256Digest(v string) bool {
+	v = strings.TrimSpace(strings.ToLower(v))
+	if !strings.HasPrefix(v, "sha256:") {
+		return false
+	}
+	hexPart := strings.TrimPrefix(v, "sha256:")
+	if len(hexPart) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(hexPart)
+	return err == nil
 }

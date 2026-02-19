@@ -52,9 +52,12 @@ type Resource struct {
 	Tags           []string            `json:"tags,omitempty" yaml:"tags,omitempty"`
 
 	// file
-	Path    string `json:"path,omitempty" yaml:"path,omitempty"`
-	Content string `json:"content,omitempty" yaml:"content,omitempty"`
-	Mode    string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Path                 string `json:"path,omitempty" yaml:"path,omitempty"`
+	Content              string `json:"content,omitempty" yaml:"content,omitempty"`
+	Mode                 string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	ContentChecksum      string `json:"content_checksum,omitempty" yaml:"content_checksum,omitempty"`             // sha256:<hex>
+	ContentSignature     string `json:"content_signature,omitempty" yaml:"content_signature,omitempty"`           // base64 ed25519 signature over checksum
+	ContentSigningPubKey string `json:"content_signing_pubkey,omitempty" yaml:"content_signing_pubkey,omitempty"` // base64 ed25519 public key
 
 	// command
 	Command           string `json:"command,omitempty" yaml:"command,omitempty"`

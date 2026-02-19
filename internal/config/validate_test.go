@@ -599,3 +599,43 @@ func TestValidate_WindowsResourceTypes(t *testing.T) {
 		t.Fatalf("expected missing task command error")
 	}
 }
+
+func TestValidate_FileIntegrityMetadata(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:                   "f1",
+				Type:                 "file",
+				Host:                 "localhost",
+				Path:                 "/tmp/x",
+				Content:              "hello",
+				ContentChecksum:      "sha256:2cf24dba5fb0a030eecaeb2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+				ContentSignature:     "ZmFrZQ==",
+				ContentSigningPubKey: "ZmFrZQ==",
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected file integrity metadata to validate syntactically, got %v", err)
+	}
+
+	cfg.Resources[0].ContentChecksum = "bad"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected invalid checksum format error")
+	}
+	cfg.Resources[0].ContentChecksum = "sha256:2cf24dba5fb0a030eecaeb2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+	cfg.Resources[0].ContentSigningPubKey = ""
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected signature/pubkey pair validation error")
+	}
+	cfg.Resources[0].ContentSigningPubKey = "ZmFrZQ=="
+	cfg.Resources[0].Type = "command"
+	cfg.Resources[0].Command = "echo ok"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected integrity metadata on non-file resource to fail")
+	}
+}

@@ -1,7 +1,10 @@
 package executor
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -115,6 +118,58 @@ func TestApply_FilebucketBackupAndHistory(t *testing.T) {
 	history := string(historyRaw)
 	if !strings.Contains(history, `"resource_id":"f-bucket"`) || !strings.Contains(history, `"checksum":"sha256:`) {
 		t.Fatalf("unexpected filebucket history: %s", history)
+	}
+}
+
+func TestApply_FileIntegrityChecksumAndSignature(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "signed.txt")
+	content := "trusted\n"
+	sum := sha256.Sum256([]byte(content))
+	checksum := "sha256:" + hex.EncodeToString(sum[:])
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate ed25519 key failed: %v", err)
+	}
+	signature := ed25519.Sign(priv, []byte(checksum))
+
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:                   "signed-file",
+					Type:                 "file",
+					Host:                 "localhost",
+					Path:                 target,
+					Content:              content,
+					ContentChecksum:      checksum,
+					ContentSignature:     base64.StdEncoding.EncodeToString(signature),
+					ContentSigningPubKey: base64.StdEncoding.EncodeToString(pub),
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded {
+		t.Fatalf("expected signed file run to succeed, got %#v", run)
+	}
+
+	p.Steps[0].Resource.Content = "tampered\n"
+	run, err = ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed unexpectedly: %v", err)
+	}
+	if run.Status != state.RunFailed {
+		t.Fatalf("expected integrity failure for tampered content, got %#v", run)
+	}
+	if !strings.Contains(strings.ToLower(run.Results[0].Message), "content_checksum mismatch") {
+		t.Fatalf("expected checksum mismatch message, got %q", run.Results[0].Message)
 	}
 }
 

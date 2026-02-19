@@ -3,7 +3,9 @@ package executor
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -238,6 +240,16 @@ func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool
 	r := step.Resource
 	if r.Type == "registry" || r.Type == "scheduled_task" {
 		return e.executeWindowsShimResource(step, r)
+	}
+	if r.Type == "file" {
+		if err := validateManagedFileIntegrity(r); err != nil {
+			return state.ResourceRun{
+				ResourceID: r.ID,
+				Type:       r.Type,
+				Host:       r.Host,
+				Message:    "file integrity validation failed: " + err.Error(),
+			}, true
+		}
 	}
 	handler, ok := e.transportHandlers[strings.ToLower(strings.TrimSpace(step.Host.Transport))]
 	if !ok {
@@ -623,6 +635,45 @@ func (e *Executor) persistFilebucketBackup(step planner.Step, snap filebucketSna
 		return "", fmt.Errorf("append history: %w", err)
 	}
 	return "filebucket backup: " + snap.Checksum, nil
+}
+
+func validateManagedFileIntegrity(r config.Resource) error {
+	checksum := strings.TrimSpace(r.ContentChecksum)
+	computed := "sha256:" + sha256HexString([]byte(r.Content))
+	if checksum != "" && !strings.EqualFold(checksum, computed) {
+		return fmt.Errorf("content_checksum mismatch: expected %s computed %s", checksum, computed)
+	}
+	if checksum == "" {
+		checksum = computed
+	}
+	signature := strings.TrimSpace(r.ContentSignature)
+	publicKey := strings.TrimSpace(r.ContentSigningPubKey)
+	if signature == "" && publicKey == "" {
+		return nil
+	}
+	if signature == "" || publicKey == "" {
+		return errors.New("content_signature and content_signing_pubkey must be provided together")
+	}
+	pubBytes, err := base64.StdEncoding.DecodeString(publicKey)
+	if err != nil {
+		return fmt.Errorf("decode content_signing_pubkey: %w", err)
+	}
+	if len(pubBytes) != ed25519.PublicKeySize {
+		return errors.New("content_signing_pubkey must be a base64 ed25519 public key")
+	}
+	sigBytes, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return fmt.Errorf("decode content_signature: %w", err)
+	}
+	if !ed25519.Verify(ed25519.PublicKey(pubBytes), []byte(strings.ToLower(checksum)), sigBytes) {
+		return errors.New("content_signature verification failed")
+	}
+	return nil
+}
+
+func sha256HexString(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
 }
 
 func normalizeRetryBackoff(mode string) string {
