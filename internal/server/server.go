@@ -83,6 +83,7 @@ type Server struct {
 	costScheduling        *control.CostSchedulingStore
 	artifactDistribution  *control.ArtifactDistributionStore
 	workspaceIsolation    *control.WorkspaceIsolationStore
+	tenantCrypto          *control.TenantCryptoStore
 	tenantLimits          *control.TenantLimitStore
 	schemaMigs            *control.SchemaMigrationManager
 	openSchemas           *control.OpenSchemaStore
@@ -221,6 +222,7 @@ func New(addr, baseDir string) *Server {
 	costScheduling := control.NewCostSchedulingStore()
 	artifactDistribution := control.NewArtifactDistributionStore()
 	workspaceIsolation := control.NewWorkspaceIsolationStore()
+	tenantCrypto := control.NewTenantCryptoStore()
 	tenantLimits := control.NewTenantLimitStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	openSchemas := control.NewOpenSchemaStore()
@@ -351,6 +353,7 @@ func New(addr, baseDir string) *Server {
 		costScheduling:        costScheduling,
 		artifactDistribution:  artifactDistribution,
 		workspaceIsolation:    workspaceIsolation,
+		tenantCrypto:          tenantCrypto,
 		tenantLimits:          tenantLimits,
 		schemaMigs:            schemaMigs,
 		openSchemas:           openSchemas,
@@ -831,6 +834,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/workspaces/isolation/evaluate", s.handleWorkspaceIsolationEvaluate)
 	mux.HandleFunc("/v1/control/tenancy/policies", s.handleTenantPolicies)
 	mux.HandleFunc("/v1/control/tenancy/admit-check", s.handleTenantAdmissionCheck)
+	mux.HandleFunc("/v1/security/tenant-keys", s.handleTenantCryptoKeys)
+	mux.HandleFunc("/v1/security/tenant-keys/rotate", s.handleTenantCryptoRotate)
+	mux.HandleFunc("/v1/security/tenant-keys/boundary-check", s.handleTenantCryptoBoundaryCheck)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
 	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
 	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
@@ -2889,6 +2895,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/admit-check",
+			"GET /v1/security/tenant-keys",
+			"POST /v1/security/tenant-keys",
+			"POST /v1/security/tenant-keys/rotate",
+			"POST /v1/security/tenant-keys/boundary-check",
 			"GET /v1/control/multi-master/nodes",
 			"POST /v1/control/multi-master/nodes",
 			"GET /v1/control/multi-master/nodes/{id}",
