@@ -64,6 +64,7 @@ type Server struct {
 	flakes                *control.FlakeQuarantineStore
 	scenarioTests         *control.ScenarioTestStore
 	providerConformance   *control.ProviderConformanceStore
+	ephemeralTestEnv      *control.EphemeralEnvironmentStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -189,6 +190,7 @@ func New(addr, baseDir string) *Server {
 	flakes := control.NewFlakeQuarantineStore()
 	scenarioTests := control.NewScenarioTestStore()
 	providerConformance := control.NewProviderConformanceStore()
+	ephemeralTestEnv := control.NewEphemeralEnvironmentStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -306,6 +308,7 @@ func New(addr, baseDir string) *Server {
 		flakes:                flakes,
 		scenarioTests:         scenarioTests,
 		providerConformance:   providerConformance,
+		ephemeralTestEnv:      ephemeralTestEnv,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -455,6 +458,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/scenario-runs/", s.handleTestScenarioRunAction)
 	mux.HandleFunc("/v1/release/tests/scenario-baselines", s.handleTestScenarioBaselines)
 	mux.HandleFunc("/v1/release/tests/scenario-baselines/", s.handleTestScenarioBaselineAction)
+	mux.HandleFunc("/v1/release/tests/environments", s.handleTestEnvironments)
+	mux.HandleFunc("/v1/release/tests/environments/", s.handleTestEnvironmentAction)
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
@@ -2652,6 +2657,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/tests/scenario-baselines",
 			"POST /v1/release/tests/scenario-baselines",
 			"GET /v1/release/tests/scenario-baselines/{id}",
+			"GET /v1/release/tests/environments",
+			"POST /v1/release/tests/environments",
+			"GET /v1/release/tests/environments/{id}",
+			"POST /v1/release/tests/environments/{id}/run-check",
+			"GET /v1/release/tests/environments/{id}/checks",
+			"POST /v1/release/tests/environments/{id}/destroy",
 			"GET /v1/providers/conformance/suites",
 			"POST /v1/providers/conformance/suites",
 			"GET /v1/providers/conformance/runs",
