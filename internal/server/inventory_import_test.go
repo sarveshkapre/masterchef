@@ -68,4 +68,19 @@ func TestInventoryCMDBImportEndpoint(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `"required_fields"`) {
 		t.Fatalf("expected assistant response details: %s", rr.Body.String())
 	}
+
+	bootstrap := []byte(`{
+  "hosts":[
+    {"name":"legacy-1","address":"10.30.0.1","transport":"ssh","packages":["nginx"],"services":["nginx"],"files":["/etc/nginx/nginx.conf"]}
+  ]
+}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/inventory/import/brownfield-bootstrap", bytes.NewReader(bootstrap))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("brownfield bootstrap failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"resources"`) {
+		t.Fatalf("expected baseline resources in brownfield bootstrap response: %s", rr.Body.String())
+	}
 }

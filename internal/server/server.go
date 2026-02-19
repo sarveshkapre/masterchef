@@ -347,6 +347,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
 	mux.HandleFunc("/v1/inventory/import/cmdb", s.handleInventoryCMDBImport)
 	mux.HandleFunc("/v1/inventory/import/assist", s.handleInventoryImportAssistant)
+	mux.HandleFunc("/v1/inventory/import/brownfield-bootstrap", s.handleInventoryBrownfieldBootstrap)
 	mux.HandleFunc("/v1/inventory/discovery-sources", s.handleDiscoverySources)
 	mux.HandleFunc("/v1/inventory/discovery-sources/sync", s.handleDiscoverySourceSync)
 	mux.HandleFunc("/v1/inventory/discovery-sources/", s.handleDiscoverySourceAction)
@@ -2082,6 +2083,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/inventory/groups",
 			"POST /v1/inventory/import/cmdb",
 			"POST /v1/inventory/import/assist",
+			"POST /v1/inventory/import/brownfield-bootstrap",
 			"GET /v1/inventory/discovery-sources",
 			"POST /v1/inventory/discovery-sources",
 			"GET /v1/inventory/discovery-sources/{id}",

@@ -159,6 +159,7 @@ Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/b
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.
 Bulk runtime-host import from CMDB/asset systems is available via `POST /v1/inventory/import/cmdb` with dry-run support.
 Import assistants for secrets, facts, and role/group hierarchies are available via `POST /v1/inventory/import/assist`.
+Brownfield bootstrap from observed host state into desired-state baselines is available via `POST /v1/inventory/import/brownfield-bootstrap`.
 Runtime host discovery and auto-enrollment are available via `/v1/inventory/enroll` and `/v1/inventory/runtime-hosts`, including lifecycle actions for bootstrap, activate, quarantine, and decommission.
 Service-discovery-backed inventory sources (Consul, Kubernetes, cloud tags) are available via `/v1/inventory/discovery-sources` with sync-driven runtime host materialization via `POST /v1/inventory/discovery-sources/sync`.
 Agent check-in jitter/splay controls are available via `POST /v1/agents/checkins` with deterministic per-agent splay assignment.

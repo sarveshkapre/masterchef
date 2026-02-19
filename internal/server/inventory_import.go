@@ -57,3 +57,29 @@ func (s *Server) handleInventoryImportAssistant(w http.ResponseWriter, r *http.R
 	}
 	writeJSON(w, http.StatusOK, item)
 }
+
+func (s *Server) handleInventoryBrownfieldBootstrap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.BrownfieldBootstrapRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	result, err := control.BuildBrownfieldBaseline(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordEvent(control.Event{
+		Type:    "inventory.import.brownfield_bootstrap",
+		Message: "brownfield baseline generated from observed host state",
+		Fields: map[string]any{
+			"hosts":     result.Counts["hosts"],
+			"resources": result.Counts["resources"],
+		},
+	}, true)
+	writeJSON(w, http.StatusOK, result)
+}
