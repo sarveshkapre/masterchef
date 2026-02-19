@@ -450,6 +450,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/scenarios", s.handleTestScenarios)
 	mux.HandleFunc("/v1/release/tests/scenario-runs", s.handleTestScenarioRuns)
 	mux.HandleFunc("/v1/release/tests/scenario-runs/", s.handleTestScenarioRunAction)
+	mux.HandleFunc("/v1/release/tests/scenario-baselines", s.handleTestScenarioBaselines)
+	mux.HandleFunc("/v1/release/tests/scenario-baselines/", s.handleTestScenarioBaselineAction)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/graph", s.handlePlanGraph(baseDir))
 	mux.HandleFunc("/v1/plans/graph/query", s.handlePlanGraphQuery(baseDir))
@@ -2640,6 +2642,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/tests/scenario-runs",
 			"POST /v1/release/tests/scenario-runs",
 			"GET /v1/release/tests/scenario-runs/{id}",
+			"POST /v1/release/tests/scenario-runs/{id}/compare-baseline",
+			"GET /v1/release/tests/scenario-baselines",
+			"POST /v1/release/tests/scenario-baselines",
+			"GET /v1/release/tests/scenario-baselines/{id}",
 			"POST /v1/query",
 			"GET /v1/data-bags",
 			"POST /v1/data-bags",

@@ -78,4 +78,53 @@ func TestScenarioRunnerEndpoints(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get run failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	baselineBody := []byte(`{"name":"golden-fleet-nightly","run_id":"` + run.ID + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/tests/scenario-baselines", bytes.NewReader(baselineBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("create baseline failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var baseline struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &baseline); err != nil {
+		t.Fatalf("decode baseline failed: %v", err)
+	}
+	if baseline.ID == "" {
+		t.Fatalf("expected baseline id, got body=%s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/release/tests/scenario-baselines/"+baseline.ID, nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get baseline failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	runBody = []byte(`{"scenario_id":"fleet-sim-nightly","seed":1235,"baseline_id":"` + baseline.ID + `","triggered_by":"ci"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/tests/scenario-runs", bytes.NewReader(runBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("run with baseline failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var secondRun struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &secondRun); err != nil {
+		t.Fatalf("decode second run failed: %v", err)
+	}
+	if secondRun.ID == "" {
+		t.Fatalf("expected second run id, body=%s", rr.Body.String())
+	}
+
+	compareBody := []byte(`{"baseline_id":"` + baseline.ID + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/release/tests/scenario-runs/"+secondRun.ID+"/compare-baseline", bytes.NewReader(compareBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("compare baseline failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }
