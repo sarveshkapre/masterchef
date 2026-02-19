@@ -56,6 +56,8 @@ func (s *Server) handlePolicySimulation(baseDir string) http.HandlerFunc {
 
 		decisions := make([]policyDecision, 0, len(p.Steps))
 		supported := 0
+		coverageByType := map[string]map[string]int{}
+		unsupportedInventory := make([]map[string]any, 0)
 		for _, step := range p.Steps {
 			allowed := true
 			reason := "allowed by simulation guardrails"
@@ -69,8 +71,24 @@ func (s *Server) handlePolicySimulation(baseDir string) http.HandlerFunc {
 				allowed = false
 				reason = "blocked: host denied by simulation policy"
 			}
-			if simulationSupported(stepType) {
+			typeCoverage := coverageByType[stepType]
+			if typeCoverage == nil {
+				typeCoverage = map[string]int{"total": 0, "supported": 0, "unsupported": 0}
+				coverageByType[stepType] = typeCoverage
+			}
+			typeCoverage["total"]++
+			supportedBySimulator, unsupportedReason := simulationSupportForResource(step.Resource)
+			if supportedBySimulator {
 				supported++
+				typeCoverage["supported"]++
+			} else {
+				typeCoverage["unsupported"]++
+				unsupportedInventory = append(unsupportedInventory, map[string]any{
+					"resource_id":   step.Resource.ID,
+					"resource_type": step.Resource.Type,
+					"host":          step.Resource.Host,
+					"reason":        unsupportedReason,
+				})
 			}
 			decisions = append(decisions, policyDecision{
 				Order:      step.Order,
@@ -112,10 +130,12 @@ func (s *Server) handlePolicySimulation(baseDir string) http.HandlerFunc {
 				"unsupported_steps": len(p.Steps) - supported,
 				"total_steps":       len(p.Steps),
 			},
-			"decisions":         decisions,
-			"would_block_apply": blockedByPolicy || confidence < minConfidence,
-			"block_reasons":     blockReasons,
-			"mitigations":       mitigations,
+			"coverage_by_resource_type": coverageByType,
+			"unsupported_inventory":     unsupportedInventory,
+			"decisions":                 decisions,
+			"would_block_apply":         blockedByPolicy || confidence < minConfidence,
+			"block_reasons":             blockReasons,
+			"mitigations":               mitigations,
 		})
 	}
 }
@@ -194,12 +214,20 @@ func loadPlanRequest(baseDir, configPath string) (string, *config.Config, *plann
 	return configPath, cfg, p, nil
 }
 
-func simulationSupported(resourceType string) bool {
-	switch strings.ToLower(strings.TrimSpace(resourceType)) {
-	case "file", "command":
-		return true
+func simulationSupportForResource(resource config.Resource) (bool, string) {
+	switch strings.ToLower(strings.TrimSpace(resource.Type)) {
+	case "file":
+		return true, ""
+	case "command":
+		if strings.TrimSpace(resource.RescueCommand) != "" || strings.TrimSpace(resource.AlwaysCommand) != "" {
+			return false, "command rescue/always hooks are not fully simulatable"
+		}
+		if resource.Retries > 0 || resource.RetryDelaySeconds > 0 {
+			return false, "command retry behavior is not fully simulatable"
+		}
+		return true, ""
 	default:
-		return false
+		return false, "resource type has no full-fidelity simulator"
 	}
 }
 
