@@ -227,6 +227,7 @@ Maintainer health metrics (test pass rate, issue latency, release cadence, open 
 Module/provider quality scoring with craftsmanship tiers (`gold`/`silver`/`bronze`) and trust badges (`trusted`/`verified`/`community`) is available via `GET /v1/packages/quality` and `POST /v1/packages/quality/evaluate`.
 Continuous conformance suites for built-in providers are available via `/v1/providers/conformance/suites` and `/v1/providers/conformance/runs`.
 Built-in container/Kubernetes/cloud provider catalog with capability validation is available via `GET /v1/providers/catalog` and `POST /v1/providers/catalog/validate`.
+Sandboxed third-party provider profiles with WASI runtime evaluation and least-privilege checks are available via `/v1/providers/sandbox/profiles` and `POST /v1/providers/sandbox/evaluate`.
 Versioned provider protocol descriptors with backward-compatibility negotiation and feature-flag capability mapping are available via `/v1/providers/protocol/descriptors` and `/v1/providers/protocol/negotiate`.
 Curated content channels (`certified`, `validated`, `community`) with controlled sync policies and per-organization sync remotes secured by API tokens are available via `/v1/packages/content-channels`, `/v1/packages/content-channels/sync-policy`, and `/v1/packages/content-channels/remotes`.
 Module/provider scaffolding generator with best-practice templates is available via `GET /v1/packages/scaffold/templates` and `POST /v1/packages/scaffold/generate`.
