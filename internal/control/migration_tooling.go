@@ -52,6 +52,26 @@ type MigrationDiffReportResult struct {
 	GeneratedAt     time.Time            `json:"generated_at"`
 }
 
+type MigrationDeprecationScanModule struct {
+	Name        string `json:"name"`
+	Severity    string `json:"severity"` // low|medium|high|critical
+	EOLDate     string `json:"eol_date,omitempty"`
+	Replacement string `json:"replacement,omitempty"`
+}
+
+type MigrationDeprecationScanInput struct {
+	SourcePlatform string                           `json:"source_platform"`
+	Modules        []MigrationDeprecationScanModule `json:"modules"`
+}
+
+type MigrationDeprecationScanResult struct {
+	SourcePlatform  string                     `json:"source_platform"`
+	UrgencyScore    int                        `json:"urgency_score"`
+	Items           []MigrationDeprecationRisk `json:"items,omitempty"`
+	Recommendations []string                   `json:"recommendations,omitempty"`
+	ScannedAt       time.Time                  `json:"scanned_at"`
+}
+
 type MigrationToolingStore struct {
 	mu           sync.RWMutex
 	nextID       int64
@@ -181,6 +201,50 @@ func (s *MigrationToolingStore) DiffReport(translationID string) (MigrationDiffR
 		DiffReport:      append([]MigrationDiffEntry{}, item.DiffReport...),
 		Recommendations: recommendations,
 		GeneratedAt:     time.Now().UTC(),
+	}, nil
+}
+
+func (s *MigrationToolingStore) DeprecationScan(in MigrationDeprecationScanInput) (MigrationDeprecationScanResult, error) {
+	platform := normalizeFeature(in.SourcePlatform)
+	if platform == "" {
+		return MigrationDeprecationScanResult{}, errors.New("source_platform is required")
+	}
+	if len(in.Modules) == 0 {
+		return MigrationDeprecationScanResult{}, errors.New("modules are required")
+	}
+	inputs := make([]MigrationDeprecationInput, 0, len(in.Modules))
+	for _, module := range in.Modules {
+		name := strings.TrimSpace(module.Name)
+		if name == "" {
+			continue
+		}
+		inputs = append(inputs, MigrationDeprecationInput{
+			Name:        name,
+			Severity:    module.Severity,
+			EOLDate:     module.EOLDate,
+			Replacement: module.Replacement,
+		})
+	}
+	if len(inputs) == 0 {
+		return MigrationDeprecationScanResult{}, errors.New("at least one module name is required")
+	}
+	items := evaluateDeprecationRisk(inputs)
+	urgency := 0
+	for _, item := range items {
+		if item.UrgencyScore > urgency {
+			urgency = item.UrgencyScore
+		}
+	}
+	recommendations := buildMigrationRecommendations(nil, 0, urgency)
+	if len(recommendations) == 0 {
+		recommendations = []string{"deprecation scan completed; continue staged migration planning"}
+	}
+	return MigrationDeprecationScanResult{
+		SourcePlatform:  platform,
+		UrgencyScore:    urgency,
+		Items:           items,
+		Recommendations: recommendations,
+		ScannedAt:       time.Now().UTC(),
 	}, nil
 }
 

@@ -889,6 +889,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/migrations/translations/", s.handleMigrationTranslationAction)
 	mux.HandleFunc("/v1/migrations/equivalence-check", s.handleMigrationEquivalence)
 	mux.HandleFunc("/v1/migrations/diff-report", s.handleMigrationDiffReport)
+	mux.HandleFunc("/v1/migrations/deprecation-scan", s.handleMigrationDeprecationScan)
 	mux.HandleFunc("/v1/use-case-templates", s.handleUseCaseTemplates(baseDir))
 	mux.HandleFunc("/v1/use-case-templates/", s.handleUseCaseTemplateAction(baseDir))
 	mux.HandleFunc("/v1/solution-packs", s.handleSolutionPacks(baseDir))
@@ -2900,6 +2901,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/migrations/translations/{id}",
 			"POST /v1/migrations/equivalence-check",
 			"POST /v1/migrations/diff-report",
+			"POST /v1/migrations/deprecation-scan",
 			"GET /v1/use-case-templates",
 			"POST /v1/use-case-templates/{id}/apply",
 			"GET /v1/solution-packs",

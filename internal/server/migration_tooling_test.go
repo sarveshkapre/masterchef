@@ -68,4 +68,12 @@ func TestMigrationToolingEndpoints(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("migration diff report failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	deprecation := []byte(`{"source_platform":"ansible","modules":[{"name":"legacy-role","severity":"high","eol_date":"2026-05-01","replacement":"masterchef-role"}]}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/migrations/deprecation-scan", bytes.NewReader(deprecation))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK && rr.Code != http.StatusConflict {
+		t.Fatalf("migration deprecation scan failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

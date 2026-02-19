@@ -93,3 +93,25 @@ func (s *Server) handleMigrationDiffReport(w http.ResponseWriter, r *http.Reques
 	}
 	writeJSON(w, http.StatusOK, result)
 }
+
+func (s *Server) handleMigrationDeprecationScan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.MigrationDeprecationScanInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	result, err := s.migrationTooling.DeprecationScan(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	code := http.StatusOK
+	if result.UrgencyScore >= 80 {
+		code = http.StatusConflict
+	}
+	writeJSON(w, code, result)
+}

@@ -291,6 +291,7 @@ Pinned toolchain reproducibility checks for local/CI pipelines are available via
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters and `GET /v1/activity/audit-timeline` identity/resource categories.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
 Chef/Ansible/Puppet migration translation tooling with semantic equivalence checks and auto-generated diff reports is available via `/v1/migrations/translate`, `/v1/migrations/equivalence-check`, and `/v1/migrations/diff-report`.
+Deprecation-risk scanner for source modules/platform inputs with migration urgency scoring is available via `POST /v1/migrations/deprecation-scan`.
 Solution pack catalog is available via `/v1/solution-packs` and workspace-template catalog/bootstrap flows are available via `/v1/workspace-templates`.
 Curated use-case templates for rollout/patching/DR/migration workflows are available via `/v1/use-case-templates`.
 

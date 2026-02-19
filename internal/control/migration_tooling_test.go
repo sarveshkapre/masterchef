@@ -74,3 +74,20 @@ func TestMigrationToolingEquivalenceAndDiff(t *testing.T) {
 		t.Fatalf("expected non-empty diff report, got %+v", diff)
 	}
 }
+
+func TestMigrationToolingDeprecationScan(t *testing.T) {
+	store := NewMigrationToolingStore()
+	result, err := store.DeprecationScan(MigrationDeprecationScanInput{
+		SourcePlatform: "chef",
+		Modules: []MigrationDeprecationScanModule{
+			{Name: "legacy-cookbook", Severity: "high", EOLDate: "2026-05-01", Replacement: "masterchef-module"},
+			{Name: "old-handler", Severity: "medium"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("deprecation scan failed: %v", err)
+	}
+	if result.UrgencyScore <= 0 || len(result.Items) != 2 {
+		t.Fatalf("expected scored deprecation scan items, got %+v", result)
+	}
+}
