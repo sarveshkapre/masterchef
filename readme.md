@@ -205,6 +205,7 @@ Masterless execution mode with local state/pillar rendering is available via `/v
 Public plugin/module certification pipelines and publication quality gates are available via `/v1/packages/certify`, `/v1/packages/certification-policy`, and `POST /v1/packages/publication/check`.
 Maintainer health metrics (test pass rate, issue latency, release cadence, open security issues) are available via `/v1/packages/maintainers/health`.
 Control-plane canary upgrade workflow with automatic rollback on regression is available via `/v1/control/canary-upgrades`.
+Health probe integrations for promotion/rollback gating are available via `/v1/control/health-probes`, `/v1/control/health-probes/checks`, and `/v1/control/health-probes/evaluate`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).
 Windows-oriented resource support now includes `registry` and `scheduled_task` resource types with deterministic local/WinRM-localhost shim state handling for convergent runs.

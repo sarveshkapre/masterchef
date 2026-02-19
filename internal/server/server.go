@@ -54,6 +54,7 @@ type Server struct {
 	workspaceTemplates  *control.WorkspaceTemplateCatalog
 	channels            *control.ChannelManager
 	dependencyUpdates   *control.DependencyUpdateStore
+	healthProbes        *control.HealthProbeStore
 	canaryUpgrades      *control.CanaryUpgradeStore
 	failoverDrills      *control.RegionalFailoverDrillStore
 	federation          *control.FederationStore
@@ -167,6 +168,7 @@ func New(addr, baseDir string) *Server {
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
 	dependencyUpdates := control.NewDependencyUpdateStore()
+	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
 	federation := control.NewFederationStore()
@@ -272,6 +274,7 @@ func New(addr, baseDir string) *Server {
 		workspaceTemplates:  workspaceTemplates,
 		channels:            channels,
 		dependencyUpdates:   dependencyUpdates,
+		healthProbes:        healthProbes,
 		canaryUpgrades:      canaryUpgrades,
 		failoverDrills:      failoverDrills,
 		federation:          federation,
@@ -669,6 +672,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/bootstrap/ha", s.handleHABootstrap)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
+	mux.HandleFunc("/v1/control/health-probes", s.handleHealthProbes)
+	mux.HandleFunc("/v1/control/health-probes/checks", s.handleHealthProbeChecks)
+	mux.HandleFunc("/v1/control/health-probes/evaluate", s.handleHealthProbeGateEvaluate)
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
 	mux.HandleFunc("/v1/control/canary-upgrades", s.handleCanaryUpgrades)
 	mux.HandleFunc("/v1/control/canary-upgrades/", s.handleCanaryUpgradeAction)
@@ -2604,6 +2610,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/capacity",
 			"GET /v1/control/capacity",
 			"GET /v1/control/canary-health",
+			"GET /v1/control/health-probes",
+			"POST /v1/control/health-probes",
+			"POST /v1/control/health-probes/checks",
+			"POST /v1/control/health-probes/evaluate",
 			"POST /v1/control/channels",
 			"GET /v1/control/channels",
 			"GET /v1/control/canary-upgrades",
