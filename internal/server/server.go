@@ -47,6 +47,7 @@ type Server struct {
 	changeRecords       *control.ChangeRecordStore
 	checklists          *control.ChecklistStore
 	views               *control.SavedViewStore
+	accessibility       *control.AccessibilityStore
 	bulk                *control.BulkManager
 	actionDocs          *control.ActionDocCatalog
 	migrations          *control.MigrationStore
@@ -162,6 +163,7 @@ func New(addr, baseDir string) *Server {
 	changeRecords := control.NewChangeRecordStore()
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
+	accessibility := control.NewAccessibilityStore()
 	bulk := control.NewBulkManager(15 * time.Minute)
 	actionDocs := control.NewActionDocCatalog()
 	migrations := control.NewMigrationStore()
@@ -269,6 +271,7 @@ func New(addr, baseDir string) *Server {
 		changeRecords:       changeRecords,
 		checklists:          checklists,
 		views:               views,
+		accessibility:       accessibility,
 		bulk:                bulk,
 		actionDocs:          actionDocs,
 		migrations:          migrations,
@@ -636,6 +639,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/views/", s.handleViewAction)
 	mux.HandleFunc("/v1/views/home", s.handlePersonaHome(baseDir))
 	mux.HandleFunc("/v1/views/workloads", s.handleWorkloadViews)
+	mux.HandleFunc("/v1/ui/accessibility/profiles", s.handleAccessibilityProfiles)
+	mux.HandleFunc("/v1/ui/accessibility/active", s.handleAccessibilityActive)
 	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
 	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
 	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
@@ -2520,6 +2525,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/views/{id}/share",
 			"GET /v1/views/home",
 			"GET /v1/views/workloads",
+			"GET /v1/ui/accessibility/profiles",
+			"POST /v1/ui/accessibility/profiles",
+			"GET /v1/ui/accessibility/active",
+			"POST /v1/ui/accessibility/active",
 			"POST /v1/migrations/assess",
 			"GET /v1/migrations/reports",
 			"GET /v1/migrations/reports/{id}",
