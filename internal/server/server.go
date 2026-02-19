@@ -25,6 +25,7 @@ type Server struct {
 	httpServer             *http.Server
 	baseDir                string
 	queue                  *control.Queue
+	queueBackends          *control.QueueBackendStore
 	runLeases              *control.RunLeaseStore
 	stepSnapshots          *control.StepSnapshotStore
 	executionLocks         *control.ExecutionLockStore
@@ -184,6 +185,7 @@ type backlogSample struct {
 func New(addr, baseDir string) *Server {
 	runner := control.NewRunner(baseDir)
 	queue := control.NewQueue(512)
+	queueBackends := control.NewQueueBackendStore()
 	runLeases := control.NewRunLeaseStore()
 	stepSnapshots := control.NewStepSnapshotStore(20_000)
 	executionLocks := control.NewExecutionLockStore()
@@ -339,6 +341,7 @@ func New(addr, baseDir string) *Server {
 	s := &Server{
 		baseDir:                baseDir,
 		queue:                  queue,
+		queueBackends:          queueBackends,
 		runLeases:              runLeases,
 		stepSnapshots:          stepSnapshots,
 		executionLocks:         executionLocks,
@@ -972,6 +975,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/disruption-budgets", s.handleDisruptionBudgets)
 	mux.HandleFunc("/v1/control/disruption-budgets/evaluate", s.handleDisruptionBudgetEvaluate)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
+	mux.HandleFunc("/v1/control/queue/backends", s.handleQueueBackends)
+	mux.HandleFunc("/v1/control/queue/backends/", s.handleQueueBackendAction)
+	mux.HandleFunc("/v1/control/queue/backends/policy", s.handleQueueBackendPolicy)
+	mux.HandleFunc("/v1/control/queue/backends/admit", s.handleQueueBackendAdmit)
 	mux.HandleFunc("/v1/control/workers/lifecycle", s.handleWorkerLifecycle)
 	mux.HandleFunc("/v1/control/execution-locks", s.handleExecutionLocks)
 	mux.HandleFunc("/v1/control/execution-locks/release", s.handleExecutionLockRelease)
@@ -3128,6 +3135,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/disruption-budgets/evaluate",
 			"POST /v1/control/queue",
 			"GET /v1/control/queue",
+			"GET /v1/control/queue/backends",
+			"POST /v1/control/queue/backends",
+			"GET /v1/control/queue/backends/{id}",
+			"GET /v1/control/queue/backends/policy",
+			"POST /v1/control/queue/backends/policy",
+			"POST /v1/control/queue/backends/admit",
 			"POST /v1/control/workers/lifecycle",
 			"GET /v1/control/workers/lifecycle",
 			"GET /v1/control/execution-locks",
