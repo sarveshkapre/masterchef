@@ -228,6 +228,7 @@ Cross-runner plan reproducibility checks for baseline/runner artifacts are avail
 Topology-aware blast-radius maps for impacted hosts/resources/dependencies are available via `POST /v1/control/blast-radius-map`.
 Human-readable pre-apply risk summaries are available via `POST /v1/plans/risk-summary`.
 Policy simulation and gating checks are available via `POST /v1/policy/simulate`.
+Per-policy enforcement modes (`audit`, `apply-and-monitor`, `apply-and-autocorrect`) are configurable via `GET/POST /v1/policy/enforcement-modes` with decision evaluation support at `POST /v1/policy/enforcement-modes/evaluate`.
 Simulation coverage reporting now includes per-resource-type support breakdown and explicit unsupported-action inventory in `POST /v1/policy/simulate` responses.
 Post-run invariant checks with configurable severity are available via `POST /v1/control/invariants/check`.
 Release blocker policy enforcement with craftsmanship tiers is available via `GET/POST /v1/release/blocker-policy`.

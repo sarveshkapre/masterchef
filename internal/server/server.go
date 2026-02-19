@@ -68,6 +68,7 @@ type Server struct {
 	facts               *control.FactCache
 	varSources          *control.VariableSourceRegistry
 	discoveryInventory  *control.DiscoveryInventoryStore
+	policyModes         *control.PolicyEnforcementStore
 	encProviders        *control.ENCProviderStore
 	nodeClassification  *control.NodeClassificationStore
 	plugins             *control.PluginExtensionStore
@@ -180,6 +181,7 @@ func New(addr, baseDir string) *Server {
 	facts := control.NewFactCache(5 * time.Minute)
 	varSources := control.NewVariableSourceRegistry(baseDir)
 	discoveryInventory := control.NewDiscoveryInventoryStore()
+	policyModes := control.NewPolicyEnforcementStore()
 	encProviders := control.NewENCProviderStore()
 	nodeClassification := control.NewNodeClassificationStore()
 	plugins := control.NewPluginExtensionStore()
@@ -284,6 +286,7 @@ func New(addr, baseDir string) *Server {
 		facts:               facts,
 		varSources:          varSources,
 		discoveryInventory:  discoveryInventory,
+		policyModes:         policyModes,
 		encProviders:        encProviders,
 		nodeClassification:  nodeClassification,
 		plugins:             plugins,
@@ -408,6 +411,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/plans/reproducibility-check", s.handlePlanReproducibility(baseDir))
 	mux.HandleFunc("/v1/plans/risk-summary", s.handlePlanRiskSummary(baseDir))
 	mux.HandleFunc("/v1/policy/simulate", s.handlePolicySimulation(baseDir))
+	mux.HandleFunc("/v1/policy/enforcement-modes", s.handlePolicyEnforcementModes)
+	mux.HandleFunc("/v1/policy/enforcement-modes/", s.handlePolicyEnforcementModeAction)
 	mux.HandleFunc("/v1/policy/pull/sources", s.handlePolicyPullSources)
 	mux.HandleFunc("/v1/policy/pull/sources/", s.handlePolicyPullSourceAction)
 	mux.HandleFunc("/v1/policy/pull/execute", s.handlePolicyPullExecute(baseDir))
@@ -2470,6 +2475,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/plans/reproducibility-check",
 			"POST /v1/plans/risk-summary",
 			"POST /v1/policy/simulate",
+			"GET /v1/policy/enforcement-modes",
+			"POST /v1/policy/enforcement-modes",
+			"GET /v1/policy/enforcement-modes/{policy_ref}",
+			"POST /v1/policy/enforcement-modes/evaluate",
 			"GET /v1/alerts/inbox",
 			"POST /v1/alerts/inbox",
 			"GET /v1/notifications/targets",
