@@ -195,6 +195,33 @@ func (q *Queue) Cancel(id string) error {
 	return nil
 }
 
+func (q *Queue) FailJob(id, reason string) (Job, error) {
+	q.mu.Lock()
+	j, ok := q.jobs[strings.TrimSpace(id)]
+	if !ok {
+		q.mu.Unlock()
+		return Job{}, errors.New("job not found")
+	}
+	if j.Status == JobSucceeded || j.Status == JobFailed {
+		cp := *q.clone(j)
+		q.mu.Unlock()
+		return cp, nil
+	}
+	j.Status = JobFailed
+	j.Error = strings.TrimSpace(reason)
+	if j.Error == "" {
+		j.Error = "job failed by operator action"
+	}
+	j.EndedAt = time.Now().UTC()
+	if q.running > 0 {
+		q.running--
+	}
+	cp := *q.clone(j)
+	q.mu.Unlock()
+	q.publish(cp)
+	return cp, nil
+}
+
 func (q *Queue) StartWorker(ctx context.Context, exec Executor) {
 	go func() {
 		defer close(q.workerShutdown)

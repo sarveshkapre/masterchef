@@ -224,3 +224,18 @@ func TestQueue_WorkerLifecyclePolicyStateless(t *testing.T) {
 		t.Fatalf("expected at least 2 worker recycles in stateless mode, got %+v", status)
 	}
 }
+
+func TestQueue_FailJob(t *testing.T) {
+	q := NewQueue(8)
+	job, err := q.Enqueue("fail.yaml", "", false, "")
+	if err != nil {
+		t.Fatalf("enqueue fail.yaml: %v", err)
+	}
+	failed, err := q.FailJob(job.ID, "lease expired")
+	if err != nil {
+		t.Fatalf("fail job: %v", err)
+	}
+	if failed.Status != JobFailed || failed.Error != "lease expired" {
+		t.Fatalf("expected failed lease-expired job, got %+v", failed)
+	}
+}

@@ -25,6 +25,7 @@ type Server struct {
 	httpServer          *http.Server
 	baseDir             string
 	queue               *control.Queue
+	runLeases           *control.RunLeaseStore
 	scheduler           *control.Scheduler
 	templates           *control.TemplateStore
 	workflows           *control.WorkflowStore
@@ -122,6 +123,7 @@ type backlogSample struct {
 func New(addr, baseDir string) *Server {
 	runner := control.NewRunner(baseDir)
 	queue := control.NewQueue(512)
+	runLeases := control.NewRunLeaseStore()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
@@ -215,6 +217,7 @@ func New(addr, baseDir string) *Server {
 	s := &Server{
 		baseDir:             baseDir,
 		queue:               queue,
+		runLeases:           runLeases,
 		scheduler:           scheduler,
 		templates:           templates,
 		workflows:           workflows,
@@ -602,6 +605,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/disruption-budgets/evaluate", s.handleDisruptionBudgetEvaluate)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/workers/lifecycle", s.handleWorkerLifecycle)
+	mux.HandleFunc("/v1/control/run-leases", s.handleRunLeases)
+	mux.HandleFunc("/v1/control/run-leases/heartbeat", s.handleRunLeaseHeartbeat)
+	mux.HandleFunc("/v1/control/run-leases/release", s.handleRunLeaseRelease)
+	mux.HandleFunc("/v1/control/run-leases/recover", s.handleRunLeaseRecover)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
@@ -2482,6 +2489,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/queue",
 			"POST /v1/control/workers/lifecycle",
 			"GET /v1/control/workers/lifecycle",
+			"GET /v1/control/run-leases",
+			"POST /v1/control/run-leases",
+			"POST /v1/control/run-leases/heartbeat",
+			"POST /v1/control/run-leases/release",
+			"POST /v1/control/run-leases/recover",
 			"POST /v1/control/recover-stuck",
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
