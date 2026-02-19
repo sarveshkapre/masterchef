@@ -46,6 +46,7 @@ type Server struct {
 	useCaseTemplates   *control.UseCaseTemplateCatalog
 	workspaceTemplates *control.WorkspaceTemplateCatalog
 	channels           *control.ChannelManager
+	canaryUpgrades     *control.CanaryUpgradeStore
 	schemaMigs         *control.SchemaMigrationManager
 	dataBags           *control.DataBagStore
 	roleEnv            *control.RoleEnvironmentStore
@@ -131,6 +132,7 @@ func New(addr, baseDir string) *Server {
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
+	canaryUpgrades := control.NewCanaryUpgradeStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	dataBags := control.NewDataBagStore()
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
@@ -208,6 +210,7 @@ func New(addr, baseDir string) *Server {
 		useCaseTemplates:   useCaseTemplates,
 		workspaceTemplates: workspaceTemplates,
 		channels:           channels,
+		canaryUpgrades:     canaryUpgrades,
 		schemaMigs:         schemaMigs,
 		dataBags:           dataBags,
 		roleEnv:            roleEnv,
@@ -495,6 +498,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
+	mux.HandleFunc("/v1/control/canary-upgrades", s.handleCanaryUpgrades)
+	mux.HandleFunc("/v1/control/canary-upgrades/", s.handleCanaryUpgradeAction)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
 	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
 	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
@@ -2290,6 +2295,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/canary-health",
 			"POST /v1/control/channels",
 			"GET /v1/control/channels",
+			"GET /v1/control/canary-upgrades",
+			"POST /v1/control/canary-upgrades",
+			"GET /v1/control/canary-upgrades/{id}",
 			"GET /v1/control/multi-master/nodes",
 			"POST /v1/control/multi-master/nodes",
 			"GET /v1/control/multi-master/nodes/{id}",
