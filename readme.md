@@ -168,6 +168,7 @@ Message-bus dispatch mode for scalable agent execution is available via `/v1/age
 Hybrid push/pull execution routing per environment is available via `/v1/agents/dispatch-environments`, allowing environment strategy overrides (`push`, `pull`, `hybrid`) while preserving global dispatch defaults.
 Minimal-footprint and scalable deployment profile guidance is available via `/v1/control/deployment-profiles` and `POST /v1/control/deployment-profiles/evaluate`.
 Proxy-minion mode for devices that cannot run full agents is available via `/v1/agents/proxy-minions` and `/v1/agents/proxy-minions/dispatch`.
+Network device transport support (NETCONF, RESTCONF, API-driven, and plugin/custom extensions) is available via `/v1/execution/network-transports` and `/v1/execution/network-transports/validate`, and is enforced for proxy-minion bindings.
 Multi-master control mode with centralized job/event cache is available via `/v1/control/multi-master/nodes` and `/v1/control/multi-master/cache` for cross-controller status and replay-oriented cache synchronization.
 Multi-region control-plane federation is available via `/v1/control/federation/peers` and `/v1/control/federation/health`.
 Fleet sharding and tenancy-aware scheduler partitioning are available via `/v1/control/scheduler/partitions` and `/v1/control/scheduler/partition-decision`.

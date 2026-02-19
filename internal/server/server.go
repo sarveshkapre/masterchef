@@ -71,6 +71,7 @@ type Server struct {
 	agentCheckins       *control.AgentCheckinStore
 	agentDispatch       *control.AgentDispatchStore
 	proxyMinions        *control.ProxyMinionStore
+	networkTransports   *control.NetworkTransportCatalog
 	disruptionBudgets   *control.DisruptionBudgetStore
 	executionEnvs       *control.ExecutionEnvironmentStore
 	executionCreds      *control.ExecutionCredentialStore
@@ -167,6 +168,7 @@ func New(addr, baseDir string) *Server {
 	agentCheckins := control.NewAgentCheckinStore()
 	agentDispatch := control.NewAgentDispatchStore()
 	proxyMinions := control.NewProxyMinionStore()
+	networkTransports := control.NewNetworkTransportCatalog()
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
@@ -255,6 +257,7 @@ func New(addr, baseDir string) *Server {
 		agentCheckins:       agentCheckins,
 		agentDispatch:       agentDispatch,
 		proxyMinions:        proxyMinions,
+		networkTransports:   networkTransports,
 		disruptionBudgets:   disruptionBudgets,
 		executionEnvs:       executionEnvs,
 		executionCreds:      executionCreds,
@@ -365,6 +368,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/agents/proxy-minions", s.handleProxyMinions)
 	mux.HandleFunc("/v1/agents/proxy-minions/", s.handleProxyMinionAction)
 	mux.HandleFunc("/v1/agents/proxy-minions/dispatch", s.handleProxyMinionDispatch(baseDir))
+	mux.HandleFunc("/v1/execution/network-transports", s.handleNetworkTransports)
+	mux.HandleFunc("/v1/execution/network-transports/validate", s.handleNetworkTransportValidate)
 	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
 	mux.HandleFunc("/v1/execution/environments/", s.handleExecutionEnvironmentAction)
 	mux.HandleFunc("/v1/execution/admission-policy", s.handleExecutionAdmissionPolicy)
@@ -2116,6 +2121,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/agents/proxy-minions/{id}",
 			"GET /v1/agents/proxy-minions/dispatch",
 			"POST /v1/agents/proxy-minions/dispatch",
+			"GET /v1/execution/network-transports",
+			"POST /v1/execution/network-transports",
+			"POST /v1/execution/network-transports/validate",
 			"GET /v1/execution/environments",
 			"POST /v1/execution/environments",
 			"GET /v1/execution/environments/{id}",

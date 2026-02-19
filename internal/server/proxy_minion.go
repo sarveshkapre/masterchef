@@ -21,6 +21,16 @@ func (s *Server) handleProxyMinions(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		validation, err := s.networkTransports.Validate(req.Transport)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if !validation.Supported {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": validation.Message})
+			return
+		}
+		req.Transport = validation.Canonical
 		item, err := s.proxyMinions.UpsertBinding(req)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

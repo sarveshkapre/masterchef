@@ -89,4 +89,12 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("list proxy dispatches failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	unsupportedBind := []byte(`{"proxy_id":"proxy-east-2","device_id":"switch-2","transport":"snmp"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/agents/proxy-minions", bytes.NewReader(unsupportedBind))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("unsupported transport expected conflict: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }
