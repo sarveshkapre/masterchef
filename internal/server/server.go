@@ -62,6 +62,7 @@ type Server struct {
 	channels              *control.ChannelManager
 	dependencyUpdates     *control.DependencyUpdateStore
 	flakes                *control.FlakeQuarantineStore
+	scenarioTests         *control.ScenarioTestStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -185,6 +186,7 @@ func New(addr, baseDir string) *Server {
 	channels := control.NewChannelManager()
 	dependencyUpdates := control.NewDependencyUpdateStore()
 	flakes := control.NewFlakeQuarantineStore()
+	scenarioTests := control.NewScenarioTestStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -300,6 +302,7 @@ func New(addr, baseDir string) *Server {
 		channels:              channels,
 		dependencyUpdates:     dependencyUpdates,
 		flakes:                flakes,
+		scenarioTests:         scenarioTests,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -444,6 +447,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/flake-cases", s.handleFlakeCases)
 	mux.HandleFunc("/v1/release/tests/flake-cases/", s.handleFlakeCaseAction)
 	mux.HandleFunc("/v1/release/tests/impact-analysis", s.handleTestImpactAnalysis)
+	mux.HandleFunc("/v1/release/tests/scenarios", s.handleTestScenarios)
+	mux.HandleFunc("/v1/release/tests/scenario-runs", s.handleTestScenarioRuns)
+	mux.HandleFunc("/v1/release/tests/scenario-runs/", s.handleTestScenarioRunAction)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/graph", s.handlePlanGraph(baseDir))
 	mux.HandleFunc("/v1/plans/graph/query", s.handlePlanGraphQuery(baseDir))
@@ -2629,6 +2635,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/release/tests/flake-cases/{id}/quarantine",
 			"POST /v1/release/tests/flake-cases/{id}/unquarantine",
 			"POST /v1/release/tests/impact-analysis",
+			"GET /v1/release/tests/scenarios",
+			"POST /v1/release/tests/scenarios",
+			"GET /v1/release/tests/scenario-runs",
+			"POST /v1/release/tests/scenario-runs",
+			"GET /v1/release/tests/scenario-runs/{id}",
 			"POST /v1/query",
 			"GET /v1/data-bags",
 			"POST /v1/data-bags",
