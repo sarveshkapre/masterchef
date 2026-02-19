@@ -1142,6 +1142,7 @@ func runDev(args []string) error {
 	stateDir := fs.String("state-dir", ".masterchef/dev", "local dev state directory")
 	addr := fs.String("addr", ":8080", "http bind address")
 	grpcAddr := fs.String("grpc-addr", ":9090", "grpc bind address")
+	manifestPath := fs.String("manifest", "", "optional path to write local dev runtime manifest json")
 	dryRun := fs.Bool("dry-run", false, "print computed local dev runtime and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1155,17 +1156,61 @@ func runDev(args []string) error {
 		return err
 	}
 	objectStorePath := filepath.Join(root, "objectstore")
+	registryPath := filepath.Join(root, "registry")
+	queuePath := filepath.Join(root, "queue")
+	if err := os.MkdirAll(objectStorePath, 0o755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(registryPath, 0o755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(queuePath, 0o755); err != nil {
+		return err
+	}
 	if err := os.Setenv("MC_OBJECT_STORE_BACKEND", "filesystem"); err != nil {
 		return err
 	}
 	if err := os.Setenv("MC_OBJECT_STORE_PATH", objectStorePath); err != nil {
 		return err
 	}
+	if err := os.Setenv("MC_REGISTRY_BACKEND", "filesystem"); err != nil {
+		return err
+	}
+	if err := os.Setenv("MC_REGISTRY_PATH", registryPath); err != nil {
+		return err
+	}
+	if err := os.Setenv("MC_WORKER_QUEUE_BACKEND", "embedded"); err != nil {
+		return err
+	}
+	if err := os.Setenv("MC_WORKER_QUEUE_PATH", queuePath); err != nil {
+		return err
+	}
+	manifest := map[string]any{
+		"mode":              "single-binary",
+		"state_dir":         root,
+		"http_addr":         strings.TrimSpace(*addr),
+		"grpc_addr":         strings.TrimSpace(*grpcAddr),
+		"object_store_path": objectStorePath,
+		"registry_path":     registryPath,
+		"worker_queue_path": queuePath,
+	}
+	if path := strings.TrimSpace(*manifestPath); path != "" {
+		dir := filepath.Dir(path)
+		if dir != "." {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return err
+			}
+		}
+		b, _ := json.MarshalIndent(manifest, "", "  ")
+		if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
+			return err
+		}
+	}
 	if *dryRun {
-		fmt.Printf("dev runtime prepared: state_dir=%s object_store=%s addr=%s grpc_addr=%s\n", root, objectStorePath, *addr, *grpcAddr)
+		fmt.Printf("dev runtime prepared: state_dir=%s object_store=%s registry=%s queue=%s addr=%s grpc_addr=%s\n", root, objectStorePath, registryPath, queuePath, *addr, *grpcAddr)
 		return nil
 	}
-	fmt.Printf("dev mode active: state_dir=%s object_store=%s\n", root, objectStorePath)
+	fmt.Printf("dev mode active: state_dir=%s object_store=%s registry=%s queue=%s\n", root, objectStorePath, registryPath, queuePath)
 	return serveRuntime(*addr, *grpcAddr, ".")
 }
 
