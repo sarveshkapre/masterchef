@@ -70,6 +70,7 @@ type Server struct {
 	delegationTokens   *control.DelegationTokenStore
 	accessApprovals    *control.AccessApprovalStore
 	jitGrants          *control.JITAccessGrantStore
+	compliance         *control.ComplianceStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -137,6 +138,7 @@ func New(addr, baseDir string) *Server {
 	delegationTokens := control.NewDelegationTokenStore()
 	accessApprovals := control.NewAccessApprovalStore()
 	jitGrants := control.NewJITAccessGrantStore()
+	compliance := control.NewComplianceStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -196,6 +198,7 @@ func New(addr, baseDir string) *Server {
 		delegationTokens:   delegationTokens,
 		accessApprovals:    accessApprovals,
 		jitGrants:          jitGrants,
+		compliance:         compliance,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -270,6 +273,12 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/access/jit-grants", s.handleJITAccessGrants)
 	mux.HandleFunc("/v1/access/jit-grants/validate", s.handleJITAccessGrantValidate)
 	mux.HandleFunc("/v1/access/jit-grants/", s.handleJITAccessGrantAction)
+	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
+	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
+	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
+	mux.HandleFunc("/v1/compliance/scans/", s.handleComplianceScanAction)
+	mux.HandleFunc("/v1/compliance/continuous", s.handleComplianceContinuous)
+	mux.HandleFunc("/v1/compliance/continuous/", s.handleComplianceContinuousAction)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1903,6 +1912,16 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/access/jit-grants/validate",
 			"GET /v1/access/jit-grants/{id}",
 			"POST /v1/access/jit-grants/{id}/revoke",
+			"GET /v1/compliance/profiles",
+			"POST /v1/compliance/profiles",
+			"GET /v1/compliance/profiles/{id}",
+			"GET /v1/compliance/scans",
+			"POST /v1/compliance/scans",
+			"GET /v1/compliance/scans/{id}",
+			"GET /v1/compliance/scans/{id}/evidence",
+			"GET /v1/compliance/continuous",
+			"POST /v1/compliance/continuous",
+			"POST /v1/compliance/continuous/{id}/run",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
