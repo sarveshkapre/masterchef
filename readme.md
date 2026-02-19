@@ -132,7 +132,7 @@ Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds
 Failure-domain-aware serial orchestration is supported with `execution.failure_domain` (`rack|zone|region`) to interleave hosts across domains.
 Disruption budget definitions and rollout-gating evaluation are available via `/v1/control/disruption-budgets` and `/v1/control/disruption-budgets/evaluate`.
 Privilege escalation controls for command resources are supported via `become` and `become_user`, with explicit run-result audit markers.
-Session recording artifacts for privileged remote command executions are emitted under `.masterchef/sessions` and linked from run output.
+Session recording artifacts for privileged remote command executions are emitted under `.masterchef/sessions` and linked from run output, with query APIs at `/v1/execution/session-recordings` and `/v1/execution/session-recordings/{id}`.
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-groups`, `-resources`, `-tags`, and `-skip-tags`.
 Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, `retry_backoff`, `retry_jitter_seconds`, and `until_contains`.
 Command resources support `rescue_command` and `always_command` hooks for block/rescue/always-style error handling flows.

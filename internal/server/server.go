@@ -119,6 +119,7 @@ type Server struct {
 	disruptionBudgets      *control.DisruptionBudgetStore
 	executionEnvs          *control.ExecutionEnvironmentStore
 	executionCreds         *control.ExecutionCredentialStore
+	sessionRecordings      *control.SessionRecordingStore
 	masterless             *control.MasterlessStore
 	hopRelay               *control.HopRelayStore
 	syndic                 *control.SyndicStore
@@ -263,6 +264,7 @@ func New(addr, baseDir string) *Server {
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
+	sessionRecordings := control.NewSessionRecordingStore(baseDir)
 	masterless := control.NewMasterlessStore()
 	hopRelay := control.NewHopRelayStore()
 	syndic := control.NewSyndicStore()
@@ -399,6 +401,7 @@ func New(addr, baseDir string) *Server {
 		disruptionBudgets:      disruptionBudgets,
 		executionEnvs:          executionEnvs,
 		executionCreds:         executionCreds,
+		sessionRecordings:      sessionRecordings,
 		masterless:             masterless,
 		hopRelay:               hopRelay,
 		syndic:                 syndic,
@@ -591,6 +594,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/portable-runners/select", s.handlePortableRunnerSelect)
 	mux.HandleFunc("/v1/execution/native-schedulers", s.handleNativeSchedulers)
 	mux.HandleFunc("/v1/execution/native-schedulers/select", s.handleNativeSchedulerSelect)
+	mux.HandleFunc("/v1/execution/session-recordings", s.handleSessionRecordings)
+	mux.HandleFunc("/v1/execution/session-recordings/", s.handleSessionRecordingAction)
 	mux.HandleFunc("/v1/execution/adaptive-concurrency/policy", s.handleAdaptiveConcurrencyPolicy)
 	mux.HandleFunc("/v1/execution/adaptive-concurrency/recommend", s.handleAdaptiveConcurrencyRecommend)
 	mux.HandleFunc("/v1/execution/checkpoints", s.handleExecutionCheckpoints(baseDir))
@@ -2457,6 +2462,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/portable-runners/select",
 			"GET /v1/execution/native-schedulers",
 			"POST /v1/execution/native-schedulers/select",
+			"GET /v1/execution/session-recordings",
+			"GET /v1/execution/session-recordings/{id}",
 			"GET /v1/execution/adaptive-concurrency/policy",
 			"POST /v1/execution/adaptive-concurrency/policy",
 			"POST /v1/execution/adaptive-concurrency/recommend",
