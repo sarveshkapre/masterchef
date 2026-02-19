@@ -139,6 +139,7 @@ mTLS component trust/policy management with handshake verification is available 
 Secrets manager integrations plus secret-usage tracing with redaction-by-default logs are available via `/v1/secrets/integrations`, `/v1/secrets/resolve`, and `/v1/secrets/traces`.
 Signed module/provider package artifacts with provenance metadata and policy-driven verification are available via `/v1/packages/artifacts`, `/v1/packages/signing-policy`, and `/v1/packages/verify`.
 Agent certificate issuance, policy-based autosigning/manual approval fallback, rotation, and revocation workflows are available via `/v1/agents/cert-policy`, `/v1/agents/csrs`, and `/v1/agents/certificates`.
+Catalog compile/distribute flows with cached artifacts and signed replay for disconnected nodes are available via `/v1/agents/catalogs`, `POST /v1/agents/catalogs/replay`, and `/v1/agents/catalogs/replays`.
 Certificate expiry SLO visibility and automatic renewal workflows are available via `/v1/agents/certificates/expiry-report` and `/v1/agents/certificates/renew-expiring`.
 Identity bootstrap attestation gates (TPM/cloud IID evidence) are available via `/v1/agents/attestation/policy`, `/v1/agents/attestations`, and `/v1/agents/attestations/check` to enforce verification before certificate issuance.
 Branch-based ephemeral environment previews are available via `/v1/gitops/previews` with lifecycle actions for promote/close and queued preview applies.

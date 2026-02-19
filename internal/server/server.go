@@ -80,6 +80,7 @@ type Server struct {
 	secretIntegrations *control.SecretsIntegrationStore
 	packageRegistry    *control.PackageRegistryStore
 	agentPKI           *control.AgentPKIStore
+	agentCatalogs      *control.AgentCatalogStore
 	agentAttestation   *control.AgentAttestationStore
 	policyPull         *control.PolicyPullStore
 	multiMaster        *control.MultiMasterStore
@@ -160,6 +161,7 @@ func New(addr, baseDir string) *Server {
 	secretIntegrations := control.NewSecretsIntegrationStore()
 	packageRegistry := control.NewPackageRegistryStore()
 	agentPKI := control.NewAgentPKIStore()
+	agentCatalogs := control.NewAgentCatalogStore()
 	agentAttestation := control.NewAgentAttestationStore()
 	policyPull := control.NewPolicyPullStore()
 	multiMaster := control.NewMultiMasterStore()
@@ -232,6 +234,7 @@ func New(addr, baseDir string) *Server {
 		secretIntegrations: secretIntegrations,
 		packageRegistry:    packageRegistry,
 		agentPKI:           agentPKI,
+		agentCatalogs:      agentCatalogs,
 		agentAttestation:   agentAttestation,
 		policyPull:         policyPull,
 		multiMaster:        multiMaster,
@@ -347,6 +350,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/signing-policy", s.handlePackageSigningPolicy)
 	mux.HandleFunc("/v1/packages/verify", s.handlePackageVerify)
 	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
+	mux.HandleFunc("/v1/agents/catalogs", s.handleAgentCatalogs(baseDir))
+	mux.HandleFunc("/v1/agents/catalogs/replay", s.handleAgentCatalogReplay(baseDir))
+	mux.HandleFunc("/v1/agents/catalogs/replays", s.handleAgentCatalogReplays)
+	mux.HandleFunc("/v1/agents/catalogs/", s.handleAgentCatalogAction)
 	mux.HandleFunc("/v1/agents/attestation/policy", s.handleAgentAttestationPolicy)
 	mux.HandleFunc("/v1/agents/attestations", s.handleAgentAttestations)
 	mux.HandleFunc("/v1/agents/attestations/check", s.handleAgentAttestationCheck)
@@ -2058,6 +2065,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/packages/verify",
 			"GET /v1/agents/cert-policy",
 			"POST /v1/agents/cert-policy",
+			"GET /v1/agents/catalogs",
+			"POST /v1/agents/catalogs",
+			"GET /v1/agents/catalogs/{id}",
+			"POST /v1/agents/catalogs/replay",
+			"GET /v1/agents/catalogs/replays",
 			"GET /v1/agents/attestation/policy",
 			"POST /v1/agents/attestation/policy",
 			"GET /v1/agents/attestations",
