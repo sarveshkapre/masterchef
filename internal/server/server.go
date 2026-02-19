@@ -64,6 +64,7 @@ type Server struct {
 	agentDispatch      *control.AgentDispatchStore
 	disruptionBudgets  *control.DisruptionBudgetStore
 	executionEnvs      *control.ExecutionEnvironmentStore
+	executionCreds     *control.ExecutionCredentialStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -125,6 +126,7 @@ func New(addr, baseDir string) *Server {
 	agentDispatch := control.NewAgentDispatchStore()
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
+	executionCreds := control.NewExecutionCredentialStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -178,6 +180,7 @@ func New(addr, baseDir string) *Server {
 		agentDispatch:      agentDispatch,
 		disruptionBudgets:  disruptionBudgets,
 		executionEnvs:      executionEnvs,
+		executionCreds:     executionCreds,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -232,6 +235,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/environments/", s.handleExecutionEnvironmentAction)
 	mux.HandleFunc("/v1/execution/admission-policy", s.handleExecutionAdmissionPolicy)
 	mux.HandleFunc("/v1/execution/admit-check", s.handleExecutionAdmissionCheck)
+	mux.HandleFunc("/v1/execution/credentials", s.handleExecutionCredentials)
+	mux.HandleFunc("/v1/execution/credentials/validate", s.handleExecutionCredentialValidate)
+	mux.HandleFunc("/v1/execution/credentials/", s.handleExecutionCredentialAction)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1830,6 +1836,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/execution/admission-policy",
 			"POST /v1/execution/admission-policy",
 			"POST /v1/execution/admit-check",
+			"GET /v1/execution/credentials",
+			"POST /v1/execution/credentials",
+			"POST /v1/execution/credentials/validate",
+			"GET /v1/execution/credentials/{id}",
+			"POST /v1/execution/credentials/{id}/revoke",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
