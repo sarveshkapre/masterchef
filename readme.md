@@ -110,6 +110,7 @@ Fact caching with TTL/invalidation and Salt Mine-style cross-node fact queries a
 Variable precedence resolution with source graph, conflict detection, hard-fail policy, and explain output is available via `POST /v1/vars/resolve` and `POST /v1/vars/explain`.
 External variable source plugins (`inline`, `env`, `file`, `http`) are available via `POST /v1/vars/sources/resolve`.
 Unified CLI now includes `observe` and `drift` commands for local run telemetry and drift trend inspection.
+Contributor-friendly single-binary local dev runtime (control plane + worker + local registry/object store) is available via `masterchef dev -state-dir .masterchef/dev -grpc-addr :9090`.
 Interactive CLI TUI inspection is available via `masterchef tui` with run browsing and per-step detail views.
 Ansible-compatible plugin extension points (`callback`, `lookup`, `filter`, `vars`, `strategy`) are available via `/v1/plugins/extensions`.
 Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds (`max_fail_percentage`, `any_errors_fatal`) are supported in config and executor runtime.
@@ -193,6 +194,7 @@ Curated use-case templates for rollout/patching/DR/migration workflows are avail
 
 ## Release Tooling (Current CLI)
 
+- `masterchef dev -state-dir .masterchef/dev -addr :8080 -grpc-addr :9090`
 - `masterchef release sbom -root . -files . -o sbom.json`
 - `masterchef release sign -sbom sbom.json -key policy-private.key -o signed-sbom.json`
 - `masterchef release verify -signed signed-sbom.json -pub policy-public.key`

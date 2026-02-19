@@ -66,6 +66,8 @@ func Run(args []string) error {
 		return runTUI(args[1:])
 	case "serve":
 		return runServe(args[1:])
+	case "dev":
+		return runDev(args[1:])
 	case "policy":
 		return runPolicy(args[1:])
 	case "features":
@@ -92,6 +94,7 @@ masterchef commands:
   drift [-base .] [-hours 24] [-format json|human]
   tui [-base .] [-limit 20]
   serve [-addr :8080] [-grpc-addr :9090]
+  dev [-state-dir .masterchef/dev] [-addr :8080] [-grpc-addr :9090] [-dry-run]
   policy [keygen|sign|verify] ...
   features [matrix|summary|verify] [-f features.md]
 `))
@@ -1001,18 +1004,53 @@ func runServe(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	return serveRuntime(*addr, *grpcAddr, ".")
+}
 
-	s := server.New(*addr, ".")
+func runDev(args []string) error {
+	fs := flag.NewFlagSet("dev", flag.ContinueOnError)
+	stateDir := fs.String("state-dir", ".masterchef/dev", "local dev state directory")
+	addr := fs.String("addr", ":8080", "http bind address")
+	grpcAddr := fs.String("grpc-addr", ":9090", "grpc bind address")
+	dryRun := fs.Bool("dry-run", false, "print computed local dev runtime and exit")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	root := strings.TrimSpace(*stateDir)
+	if root == "" {
+		return fmt.Errorf("state-dir is required")
+	}
+	root = filepath.Clean(root)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	objectStorePath := filepath.Join(root, "objectstore")
+	if err := os.Setenv("MC_OBJECT_STORE_BACKEND", "filesystem"); err != nil {
+		return err
+	}
+	if err := os.Setenv("MC_OBJECT_STORE_PATH", objectStorePath); err != nil {
+		return err
+	}
+	if *dryRun {
+		fmt.Printf("dev runtime prepared: state_dir=%s object_store=%s addr=%s grpc_addr=%s\n", root, objectStorePath, *addr, *grpcAddr)
+		return nil
+	}
+	fmt.Printf("dev mode active: state_dir=%s object_store=%s\n", root, objectStorePath)
+	return serveRuntime(*addr, *grpcAddr, ".")
+}
+
+func serveRuntime(addr, grpcAddr, baseDir string) error {
+	s := server.New(addr, baseDir)
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- s.ListenAndServe()
 	}()
-	fmt.Printf("server listening on %s\n", *addr)
+	fmt.Printf("server listening on %s\n", addr)
 
 	var grpcServer *grpc.Server
 	var grpcLis net.Listener
-	if strings.TrimSpace(*grpcAddr) != "" {
-		g, lis, err := grpcapi.Listen(*grpcAddr, ".")
+	if strings.TrimSpace(grpcAddr) != "" {
+		g, lis, err := grpcapi.Listen(grpcAddr, baseDir)
 		if err != nil {
 			return err
 		}
@@ -1021,7 +1059,7 @@ func runServe(args []string) error {
 		go func() {
 			errCh <- g.Serve(lis)
 		}()
-		fmt.Printf("grpc listening on %s\n", *grpcAddr)
+		fmt.Printf("grpc listening on %s\n", grpcAddr)
 	}
 
 	sigCh := make(chan os.Signal, 1)
