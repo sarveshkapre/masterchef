@@ -78,6 +78,7 @@ type Server struct {
 	oidcWorkload       *control.OIDCWorkloadStore
 	mtls               *control.MTLSStore
 	secretIntegrations *control.SecretsIntegrationStore
+	packageRegistry    *control.PackageRegistryStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -153,6 +154,7 @@ func New(addr, baseDir string) *Server {
 	oidcWorkload := control.NewOIDCWorkloadStore()
 	mtls := control.NewMTLSStore()
 	secretIntegrations := control.NewSecretsIntegrationStore()
+	packageRegistry := control.NewPackageRegistryStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -220,6 +222,7 @@ func New(addr, baseDir string) *Server {
 		oidcWorkload:       oidcWorkload,
 		mtls:               mtls,
 		secretIntegrations: secretIntegrations,
+		packageRegistry:    packageRegistry,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -321,6 +324,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/secrets/integrations", s.handleSecretIntegrations)
 	mux.HandleFunc("/v1/secrets/resolve", s.handleSecretResolve)
 	mux.HandleFunc("/v1/secrets/traces", s.handleSecretUsageTraces)
+	mux.HandleFunc("/v1/packages/artifacts", s.handlePackageArtifacts)
+	mux.HandleFunc("/v1/packages/artifacts/", s.handlePackageArtifactAction)
+	mux.HandleFunc("/v1/packages/signing-policy", s.handlePackageSigningPolicy)
+	mux.HandleFunc("/v1/packages/verify", s.handlePackageVerify)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -2002,6 +2009,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/secrets/integrations",
 			"POST /v1/secrets/resolve",
 			"GET /v1/secrets/traces",
+			"GET /v1/packages/artifacts",
+			"POST /v1/packages/artifacts",
+			"GET /v1/packages/artifacts/{id}",
+			"GET /v1/packages/signing-policy",
+			"POST /v1/packages/signing-policy",
+			"POST /v1/packages/verify",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",
