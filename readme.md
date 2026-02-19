@@ -185,6 +185,7 @@ Inventory host grouping by roles, labels, and topology is available via `GET /v1
 Bulk runtime-host import from CMDB/asset systems is available via `POST /v1/inventory/import/cmdb` with dry-run support.
 Import assistants for secrets, facts, and role/group hierarchies are available via `POST /v1/inventory/import/assist`.
 Brownfield bootstrap from observed host state into desired-state baselines is available via `POST /v1/inventory/import/brownfield-bootstrap`.
+Inventory drift detection and reconciliation planning are available via `POST /v1/inventory/drift/analyze`, `POST /v1/inventory/drift/reconcile`, and `GET /v1/inventory/drift/reports`.
 Node classification rules based on facts/labels/policy are available via `/v1/inventory/classification-rules` and `POST /v1/inventory/classify`.
 External node classifier (ENC) integration with third-party engines is available via `/v1/inventory/node-classifiers` and `POST /v1/inventory/node-classifiers/classify`.
 Runtime host discovery and auto-enrollment are available via `/v1/inventory/enroll` and `/v1/inventory/runtime-hosts`, including lifecycle actions for bootstrap, activate, quarantine, and decommission.

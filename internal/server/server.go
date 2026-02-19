@@ -98,6 +98,7 @@ type Server struct {
 	facts                  *control.FactCache
 	varSources             *control.VariableSourceRegistry
 	discoveryInventory     *control.DiscoveryInventoryStore
+	inventoryDrift         *control.InventoryDriftStore
 	policyModes            *control.PolicyEnforcementStore
 	encProviders           *control.ENCProviderStore
 	nodeClassification     *control.NodeClassificationStore
@@ -250,6 +251,7 @@ func New(addr, baseDir string) *Server {
 	facts := control.NewFactCache(5 * time.Minute)
 	varSources := control.NewVariableSourceRegistry(baseDir)
 	discoveryInventory := control.NewDiscoveryInventoryStore()
+	inventoryDrift := control.NewInventoryDriftStore()
 	policyModes := control.NewPolicyEnforcementStore()
 	encProviders := control.NewENCProviderStore()
 	nodeClassification := control.NewNodeClassificationStore()
@@ -394,6 +396,7 @@ func New(addr, baseDir string) *Server {
 		facts:                  facts,
 		varSources:             varSources,
 		discoveryInventory:     discoveryInventory,
+		inventoryDrift:         inventoryDrift,
 		policyModes:            policyModes,
 		encProviders:           encProviders,
 		nodeClassification:     nodeClassification,
@@ -585,6 +588,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/import/cmdb", s.handleInventoryCMDBImport)
 	mux.HandleFunc("/v1/inventory/import/assist", s.handleInventoryImportAssistant)
 	mux.HandleFunc("/v1/inventory/import/brownfield-bootstrap", s.handleInventoryBrownfieldBootstrap)
+	mux.HandleFunc("/v1/inventory/drift/analyze", s.handleInventoryDriftAnalyze)
+	mux.HandleFunc("/v1/inventory/drift/reconcile", s.handleInventoryDriftReconcile)
+	mux.HandleFunc("/v1/inventory/drift/reports", s.handleInventoryDriftReports)
 	mux.HandleFunc("/v1/inventory/classification-rules", s.handleNodeClassificationRules)
 	mux.HandleFunc("/v1/inventory/classification-rules/", s.handleNodeClassificationRuleByID)
 	mux.HandleFunc("/v1/inventory/classify", s.handleNodeClassify)
@@ -2449,6 +2455,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/inventory/import/cmdb",
 			"POST /v1/inventory/import/assist",
 			"POST /v1/inventory/import/brownfield-bootstrap",
+			"POST /v1/inventory/drift/analyze",
+			"POST /v1/inventory/drift/reconcile",
+			"GET /v1/inventory/drift/reports",
 			"GET /v1/inventory/classification-rules",
 			"POST /v1/inventory/classification-rules",
 			"GET /v1/inventory/classification-rules/{id}",
