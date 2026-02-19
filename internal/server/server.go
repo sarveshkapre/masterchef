@@ -107,6 +107,7 @@ type Server struct {
 	agentPKI            *control.AgentPKIStore
 	agentCatalogs       *control.AgentCatalogStore
 	agentAttestation    *control.AgentAttestationStore
+	driftPolicies       *control.DriftPolicyStore
 	policyBundles       *control.PolicyBundleStore
 	policyPull          *control.PolicyPullStore
 	multiMaster         *control.MultiMasterStore
@@ -216,6 +217,7 @@ func New(addr, baseDir string) *Server {
 	agentPKI := control.NewAgentPKIStore()
 	agentCatalogs := control.NewAgentCatalogStore()
 	agentAttestation := control.NewAgentAttestationStore()
+	driftPolicies := control.NewDriftPolicyStore()
 	policyBundles := control.NewPolicyBundleStore()
 	policyPull := control.NewPolicyPullStore()
 	multiMaster := control.NewMultiMasterStore()
@@ -317,6 +319,7 @@ func New(addr, baseDir string) *Server {
 		agentPKI:            agentPKI,
 		agentCatalogs:       agentCatalogs,
 		agentAttestation:    agentAttestation,
+		driftPolicies:       driftPolicies,
 		policyBundles:       policyBundles,
 		policyPull:          policyPull,
 		multiMaster:         multiMaster,
@@ -585,6 +588,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/incidents/view", s.handleIncidentView(baseDir))
 	mux.HandleFunc("/v1/fleet/nodes", s.handleFleetNodes(baseDir))
 	mux.HandleFunc("/v1/drift/insights", s.handleDriftInsights(baseDir))
+	mux.HandleFunc("/v1/drift/suppressions", s.handleDriftSuppressions)
+	mux.HandleFunc("/v1/drift/suppressions/", s.handleDriftSuppressionByID)
+	mux.HandleFunc("/v1/drift/allowlists", s.handleDriftAllowlists)
+	mux.HandleFunc("/v1/drift/allowlists/", s.handleDriftAllowlistByID)
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
@@ -2428,6 +2435,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
 			"GET /v1/drift/insights",
+			"GET /v1/drift/suppressions",
+			"POST /v1/drift/suppressions",
+			"DELETE /v1/drift/suppressions/{id}",
+			"GET /v1/drift/allowlists",
+			"POST /v1/drift/allowlists",
+			"DELETE /v1/drift/allowlists/{id}",
 			"GET /v1/metrics",
 			"GET /v1/features/summary",
 			"GET /v1/docs/actions",

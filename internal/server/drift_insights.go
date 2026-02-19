@@ -41,6 +41,8 @@ func (s *Server) handleDriftInsights(baseDir string) http.HandlerFunc {
 		hostTrends := map[string]*driftTrend{}
 		typeTrends := map[string]*driftTrend{}
 		totalChanged := 0
+		suppressedChanges := 0
+		allowlistedChanges := 0
 		failedRuns := 0
 		for _, run := range runs {
 			ref := run.StartedAt
@@ -55,6 +57,14 @@ func (s *Server) handleDriftInsights(baseDir string) http.HandlerFunc {
 			}
 			for _, res := range run.Results {
 				if !res.Changed {
+					continue
+				}
+				if s.driftPolicies != nil && s.driftPolicies.IsSuppressed(res.Host, res.Type, res.ResourceID, ref) {
+					suppressedChanges++
+					continue
+				}
+				if s.driftPolicies != nil && s.driftPolicies.IsAllowlisted(res.Host, res.Type, res.ResourceID, ref) {
+					allowlistedChanges++
 					continue
 				}
 				totalChanged++
@@ -83,10 +93,24 @@ func (s *Server) handleDriftInsights(baseDir string) http.HandlerFunc {
 		hostItems := sortDriftTrends(hostTrends, 10)
 		typeItems := sortDriftTrends(typeTrends, 10)
 		hints, remediations := driftHints(hostItems, typeItems, failedRuns)
+		activeSuppressions := []any{}
+		activeAllowlist := []any{}
+		if s.driftPolicies != nil {
+			for _, item := range s.driftPolicies.ListSuppressions(false) {
+				activeSuppressions = append(activeSuppressions, item)
+			}
+			for _, item := range s.driftPolicies.ListAllowlist(false) {
+				activeAllowlist = append(activeAllowlist, item)
+			}
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"window_hours":            hours,
 			"since":                   since,
 			"total_changed_resources": totalChanged,
+			"suppressed_changes":      suppressedChanges,
+			"allowlisted_changes":     allowlistedChanges,
+			"active_suppressions":     activeSuppressions,
+			"active_allowlists":       activeAllowlist,
 			"failed_runs":             failedRuns,
 			"host_trends":             hostItems,
 			"resource_type_trends":    typeItems,
