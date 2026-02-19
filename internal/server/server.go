@@ -74,6 +74,7 @@ type Server struct {
 	propertyHarness        *control.PropertyHarnessStore
 	modulePolicyHarness    *control.ModulePolicyHarnessStore
 	styleAnalyzer          *control.StyleAnalyzer
+	providerCatalog        *control.ProviderCatalog
 	providerProtocols      *control.ProviderProtocolStore
 	healthProbes           *control.HealthProbeStore
 	canaryUpgrades         *control.CanaryUpgradeStore
@@ -227,6 +228,7 @@ func New(addr, baseDir string) *Server {
 	propertyHarness := control.NewPropertyHarnessStore()
 	modulePolicyHarness := control.NewModulePolicyHarnessStore()
 	styleAnalyzer := control.NewStyleAnalyzer()
+	providerCatalog := control.NewProviderCatalog()
 	providerProtocols := control.NewProviderProtocolStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
@@ -372,6 +374,7 @@ func New(addr, baseDir string) *Server {
 		propertyHarness:        propertyHarness,
 		modulePolicyHarness:    modulePolicyHarness,
 		styleAnalyzer:          styleAnalyzer,
+		providerCatalog:        providerCatalog,
 		providerProtocols:      providerProtocols,
 		healthProbes:           healthProbes,
 		canaryUpgrades:         canaryUpgrades,
@@ -565,6 +568,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
+	mux.HandleFunc("/v1/providers/catalog", s.handleProviderCatalog)
+	mux.HandleFunc("/v1/providers/catalog/validate", s.handleProviderCatalogValidate)
 	mux.HandleFunc("/v1/providers/protocol/descriptors", s.handleProviderProtocolDescriptors)
 	mux.HandleFunc("/v1/providers/protocol/negotiate", s.handleProviderProtocolNegotiate)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
@@ -2876,6 +2881,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/providers/conformance/runs",
 			"POST /v1/providers/conformance/runs",
 			"GET /v1/providers/conformance/runs/{id}",
+			"GET /v1/providers/catalog",
+			"POST /v1/providers/catalog/validate",
 			"GET /v1/providers/protocol/descriptors",
 			"POST /v1/providers/protocol/descriptors",
 			"POST /v1/providers/protocol/negotiate",
