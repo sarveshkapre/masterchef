@@ -27,6 +27,7 @@ type Server struct {
 	queue               *control.Queue
 	runLeases           *control.RunLeaseStore
 	stepSnapshots       *control.StepSnapshotStore
+	executionLocks      *control.ExecutionLockStore
 	scheduler           *control.Scheduler
 	templates           *control.TemplateStore
 	workflows           *control.WorkflowStore
@@ -127,6 +128,7 @@ func New(addr, baseDir string) *Server {
 	queue := control.NewQueue(512)
 	runLeases := control.NewRunLeaseStore()
 	stepSnapshots := control.NewStepSnapshotStore(20_000)
+	executionLocks := control.NewExecutionLockStore()
 	runCtx, runCancel := context.WithCancel(context.Background())
 	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
@@ -223,6 +225,7 @@ func New(addr, baseDir string) *Server {
 		queue:               queue,
 		runLeases:           runLeases,
 		stepSnapshots:       stepSnapshots,
+		executionLocks:      executionLocks,
 		scheduler:           scheduler,
 		templates:           templates,
 		workflows:           workflows,
@@ -317,6 +320,18 @@ func New(addr, baseDir string) *Server {
 	}
 
 	queue.Subscribe(func(job control.Job) {
+		if job.Status == control.JobSucceeded || job.Status == control.JobFailed || job.Status == control.JobCanceled {
+			if released, ok := s.executionLocks.Release(control.ExecutionLockReleaseInput{JobID: job.ID}); ok {
+				s.recordEvent(control.Event{
+					Type:    "execution.lock.released",
+					Message: "execution lock released after job completion",
+					Fields: map[string]any{
+						"job_id":   job.ID,
+						"lock_key": released.Key,
+					},
+				}, true)
+			}
+		}
 		s.recordEvent(control.Event{
 			Type:    "job." + string(job.Status),
 			Message: "job state updated",
@@ -616,6 +631,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/disruption-budgets/evaluate", s.handleDisruptionBudgetEvaluate)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/workers/lifecycle", s.handleWorkerLifecycle)
+	mux.HandleFunc("/v1/control/execution-locks", s.handleExecutionLocks)
+	mux.HandleFunc("/v1/control/execution-locks/release", s.handleExecutionLockRelease)
+	mux.HandleFunc("/v1/control/execution-locks/cleanup", s.handleExecutionLockCleanup)
 	mux.HandleFunc("/v1/control/run-leases", s.handleRunLeases)
 	mux.HandleFunc("/v1/control/run-leases/heartbeat", s.handleRunLeaseHeartbeat)
 	mux.HandleFunc("/v1/control/run-leases/release", s.handleRunLeaseRelease)
@@ -2507,6 +2525,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/queue",
 			"POST /v1/control/workers/lifecycle",
 			"GET /v1/control/workers/lifecycle",
+			"GET /v1/control/execution-locks",
+			"POST /v1/control/execution-locks",
+			"POST /v1/control/execution-locks/release",
+			"POST /v1/control/execution-locks/cleanup",
 			"GET /v1/control/run-leases",
 			"POST /v1/control/run-leases",
 			"POST /v1/control/run-leases/heartbeat",
@@ -2588,8 +2610,11 @@ func currentAPISpec() control.APISpec {
 
 func (s *Server) handleJobs(baseDir string) http.HandlerFunc {
 	type createReq struct {
-		ConfigPath string `json:"config_path"`
-		Priority   string `json:"priority"`
+		ConfigPath     string `json:"config_path"`
+		Priority       string `json:"priority"`
+		LockKey        string `json:"lock_key,omitempty"`
+		LockTTLSeconds int    `json:"lock_ttl_seconds,omitempty"`
+		LockOwner      string `json:"lock_owner,omitempty"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -2618,7 +2643,15 @@ func (s *Server) handleJobs(baseDir string) http.HandlerFunc {
 			if priority == "" {
 				priority = r.Header.Get("X-Queue-Priority")
 			}
-			job, err := s.queue.Enqueue(req.ConfigPath, key, force, priority)
+			lockKey := req.LockKey
+			if strings.TrimSpace(lockKey) == "" {
+				lockKey = r.Header.Get("X-Execution-Lock-Key")
+			}
+			lockOwner := req.LockOwner
+			if strings.TrimSpace(lockOwner) == "" {
+				lockOwner = r.Header.Get("X-Execution-Lock-Owner")
+			}
+			job, err := s.enqueueJobWithOptionalLock(req.ConfigPath, key, force, priority, lockKey, req.LockTTLSeconds, lockOwner)
 			if err != nil {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 				return

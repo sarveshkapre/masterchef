@@ -177,6 +177,7 @@ Short-lived stateless worker execution mode (to reduce long-running process drif
 Long-running run leases with heartbeat and stale-lease recovery are available via `/v1/control/run-leases`, `/v1/control/run-leases/heartbeat`, and `/v1/control/run-leases/recover`.
 Per-step execution snapshots for forensic analysis are available via `/v1/execution/snapshots` with filterable run/job queries and snapshot-by-id retrieval.
 Adaptive concurrency control (host-health and failure-rate aware) is available via `/v1/execution/adaptive-concurrency/policy` and `/v1/execution/adaptive-concurrency/recommend`.
+Distributed execution locks to prevent conflicting runs are available via `/v1/control/execution-locks`, with optional lock binding on `POST /v1/jobs` using `lock_key`.
 Per-tenant rate limits and noisy-neighbor protections are available via `/v1/control/tenancy/policies` and `/v1/control/tenancy/admit-check`.
 Edge relay mode for intermittently connected sites is available via `/v1/edge-relay/sites` and `/v1/edge-relay/messages` with store-and-forward queueing and explicit delivery controls.
 Egress-only execution-node connectivity through hosted hop/ingress relays is available via `/v1/execution/relays/endpoints` and `/v1/execution/relays/sessions`.
