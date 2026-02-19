@@ -94,6 +94,7 @@ Cross-run diff analysis (failed vs successful execution comparison) is available
 Drift trend analytics with suppression/allowlist filtering, root-cause hints/remediations, policy management, safe-mode auto-remediation, and desired-vs-observed diff history are available via `GET /v1/drift/insights`, `GET /v1/drift/history`, `/v1/drift/suppressions`, `/v1/drift/allowlists`, and `POST /v1/drift/remediate`.
 Run-step observability correlation IDs are available via `GET /v1/runs/{id}/correlations`.
 Notification integrations are managed via `/v1/notifications/targets` and `/v1/notifications/deliveries` for ChatOps/incident/ticket routing.
+Report processor plugin registry and post-run dispatch workflows are available via `/v1/reports/processors` and `POST /v1/reports/process`.
 Change records and approval workflows are exposed via `/v1/change-records` to tie execution to ticketed change control.
 Self-service runbook catalog with approval-gated launches is available via `/v1/runbooks`.
 Operator checklist mode for high-risk changes is available via `/v1/control/checklists`.

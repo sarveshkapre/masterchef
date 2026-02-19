@@ -44,6 +44,7 @@ type Server struct {
 	webhooks               *control.WebhookDispatcher
 	alerts                 *control.AlertInbox
 	notifications          *control.NotificationRouter
+	reportProcessors       *control.ReportProcessorStore
 	changeRecords          *control.ChangeRecordStore
 	checklists             *control.ChecklistStore
 	views                  *control.SavedViewStore
@@ -203,6 +204,7 @@ func New(addr, baseDir string) *Server {
 	webhooks := control.NewWebhookDispatcher(5000)
 	alerts := control.NewAlertInbox()
 	notifications := control.NewNotificationRouter(5000)
+	reportProcessors := control.NewReportProcessorStore()
 	changeRecords := control.NewChangeRecordStore()
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
@@ -354,6 +356,7 @@ func New(addr, baseDir string) *Server {
 		webhooks:               webhooks,
 		alerts:                 alerts,
 		notifications:          notifications,
+		reportProcessors:       reportProcessors,
 		changeRecords:          changeRecords,
 		checklists:             checklists,
 		views:                  views,
@@ -847,6 +850,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/notifications/targets", s.handleNotificationTargets)
 	mux.HandleFunc("/v1/notifications/targets/", s.handleNotificationTargetAction)
 	mux.HandleFunc("/v1/notifications/deliveries", s.handleNotificationDeliveries)
+	mux.HandleFunc("/v1/reports/processors", s.handleReportProcessors)
+	mux.HandleFunc("/v1/reports/processors/", s.handleReportProcessorAction)
+	mux.HandleFunc("/v1/reports/process", s.handleReportProcessorDispatch)
 	mux.HandleFunc("/v1/change-records", s.handleChangeRecords)
 	mux.HandleFunc("/v1/change-records/", s.handleChangeRecordAction)
 	mux.HandleFunc("/v1/bulk/preview", s.handleBulkPreview)
@@ -2818,6 +2824,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/notifications/targets/{id}/enable",
 			"POST /v1/notifications/targets/{id}/disable",
 			"GET /v1/notifications/deliveries",
+			"GET /v1/reports/processors",
+			"POST /v1/reports/processors",
+			"GET /v1/reports/processors/{id}",
+			"POST /v1/reports/processors/{id}/enable",
+			"POST /v1/reports/processors/{id}/disable",
+			"POST /v1/reports/process",
 			"GET /v1/change-records",
 			"POST /v1/change-records",
 			"GET /v1/change-records/{id}",
