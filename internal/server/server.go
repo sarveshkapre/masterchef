@@ -75,6 +75,7 @@ type Server struct {
 	abac               *control.ABACStore
 	identity           *control.IdentityStore
 	scim               *control.SCIMStore
+	oidcWorkload       *control.OIDCWorkloadStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -147,6 +148,7 @@ func New(addr, baseDir string) *Server {
 	abac := control.NewABACStore()
 	identity := control.NewIdentityStore()
 	scim := control.NewSCIMStore()
+	oidcWorkload := control.NewOIDCWorkloadStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -211,6 +213,7 @@ func New(addr, baseDir string) *Server {
 		abac:               abac,
 		identity:           identity,
 		scim:               scim,
+		oidcWorkload:       oidcWorkload,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -301,6 +304,11 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/identity/scim/roles/", s.handleSCIMRoleAction)
 	mux.HandleFunc("/v1/identity/scim/teams", s.handleSCIMTeams)
 	mux.HandleFunc("/v1/identity/scim/teams/", s.handleSCIMTeamAction)
+	mux.HandleFunc("/v1/identity/oidc/workload/providers", s.handleOIDCWorkloadProviders)
+	mux.HandleFunc("/v1/identity/oidc/workload/providers/", s.handleOIDCWorkloadProviderAction)
+	mux.HandleFunc("/v1/identity/oidc/workload/exchange", s.handleOIDCWorkloadExchange)
+	mux.HandleFunc("/v1/identity/oidc/workload/credentials", s.handleOIDCWorkloadCredentials)
+	mux.HandleFunc("/v1/identity/oidc/workload/credentials/", s.handleOIDCWorkloadCredentialAction)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -1967,6 +1975,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/identity/scim/teams",
 			"POST /v1/identity/scim/teams",
 			"GET /v1/identity/scim/teams/{id}",
+			"GET /v1/identity/oidc/workload/providers",
+			"POST /v1/identity/oidc/workload/providers",
+			"GET /v1/identity/oidc/workload/providers/{id}",
+			"POST /v1/identity/oidc/workload/exchange",
+			"GET /v1/identity/oidc/workload/credentials",
+			"GET /v1/identity/oidc/workload/credentials/{id}",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",
