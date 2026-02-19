@@ -427,6 +427,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/compat/grains/query", s.handleCompatGrainsQuery)
 	mux.HandleFunc("/v1/inventory/discovery-sources", s.handleDiscoverySources)
 	mux.HandleFunc("/v1/inventory/discovery-sources/sync", s.handleDiscoverySourceSync)
+	mux.HandleFunc("/v1/inventory/cloud-sync", s.handleCloudInventorySync)
 	mux.HandleFunc("/v1/inventory/discovery-sources/", s.handleDiscoverySourceAction)
 	mux.HandleFunc("/v1/inventory/runtime-hosts", s.handleRuntimeHosts)
 	mux.HandleFunc("/v1/inventory/runtime-hosts/", s.handleRuntimeHostAction)
@@ -2224,6 +2225,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/inventory/discovery-sources",
 			"GET /v1/inventory/discovery-sources/{id}",
 			"POST /v1/inventory/discovery-sources/sync",
+			"POST /v1/inventory/cloud-sync",
 			"GET /v1/fleet/health",
 			"GET /v1/inventory/runtime-hosts",
 			"POST /v1/inventory/runtime-hosts",

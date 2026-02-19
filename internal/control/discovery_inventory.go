@@ -12,6 +12,10 @@ const (
 	InventoryDiscoveryConsul     = "consul"
 	InventoryDiscoveryKubernetes = "kubernetes"
 	InventoryDiscoveryCloudTags  = "cloud_tags"
+	InventoryDiscoveryAWS        = "aws"
+	InventoryDiscoveryAzure      = "azure"
+	InventoryDiscoveryGCP        = "gcp"
+	InventoryDiscoveryVSphere    = "vsphere"
 )
 
 type DiscoverySourceInput struct {
@@ -157,7 +161,7 @@ func (s *DiscoveryInventoryStore) PrepareSync(in DiscoverySyncInput) (DiscoveryS
 
 func normalizeDiscoveryKind(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case InventoryDiscoveryConsul, InventoryDiscoveryKubernetes, InventoryDiscoveryCloudTags:
+	case InventoryDiscoveryConsul, InventoryDiscoveryKubernetes, InventoryDiscoveryCloudTags, InventoryDiscoveryAWS, InventoryDiscoveryAzure, InventoryDiscoveryGCP, InventoryDiscoveryVSphere:
 		return strings.ToLower(strings.TrimSpace(kind))
 	default:
 		return ""

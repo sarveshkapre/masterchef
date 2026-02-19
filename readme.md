@@ -174,7 +174,7 @@ Brownfield bootstrap from observed host state into desired-state baselines is av
 Node classification rules based on facts/labels/policy are available via `/v1/inventory/classification-rules` and `POST /v1/inventory/classify`.
 External node classifier (ENC) integration with third-party engines is available via `/v1/inventory/node-classifiers` and `POST /v1/inventory/node-classifiers/classify`.
 Runtime host discovery and auto-enrollment are available via `/v1/inventory/enroll` and `/v1/inventory/runtime-hosts`, including lifecycle actions for bootstrap, activate, quarantine, and decommission.
-Service-discovery-backed inventory sources (Consul, Kubernetes, cloud tags) are available via `/v1/inventory/discovery-sources` with sync-driven runtime host materialization via `POST /v1/inventory/discovery-sources/sync`.
+Service-discovery-backed inventory sources (Consul, Kubernetes, cloud tags) are available via `/v1/inventory/discovery-sources` with sync-driven runtime host materialization via `POST /v1/inventory/discovery-sources/sync`; provider-specific cloud inventory sync for AWS/Azure/GCP/vSphere is available via `POST /v1/inventory/cloud-sync`.
 Agent check-in jitter/splay controls are available via `POST /v1/agents/checkins` with deterministic per-agent splay assignment.
 Message-bus dispatch mode for scalable agent execution is available via `/v1/agents/dispatch-mode` and `/v1/agents/dispatch` (`local` or `event_bus`).
 Hybrid push/pull execution routing per environment is available via `/v1/agents/dispatch-environments`, allowing environment strategy overrides (`push`, `pull`, `hybrid`) while preserving global dispatch defaults.

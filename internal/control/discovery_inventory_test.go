@@ -38,3 +38,27 @@ func TestDiscoveryInventoryStoreCreateAndPrepareSync(t *testing.T) {
 		t.Fatalf("unexpected report %+v", report)
 	}
 }
+
+func TestDiscoveryInventoryStore_AllowsCloudProviderKinds(t *testing.T) {
+	store := NewDiscoveryInventoryStore()
+	providers := []string{
+		InventoryDiscoveryAWS,
+		InventoryDiscoveryAzure,
+		InventoryDiscoveryGCP,
+		InventoryDiscoveryVSphere,
+	}
+	for _, provider := range providers {
+		source, err := store.CreateSource(DiscoverySourceInput{
+			Name:     provider + "-source",
+			Kind:     provider,
+			Endpoint: "https://example.invalid/" + provider,
+			Enabled:  true,
+		})
+		if err != nil {
+			t.Fatalf("expected provider kind %q to be accepted: %v", provider, err)
+		}
+		if source.Kind != provider {
+			t.Fatalf("expected provider kind %q, got %+v", provider, source)
+		}
+	}
+}
