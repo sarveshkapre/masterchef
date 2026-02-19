@@ -278,6 +278,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/fleet/health", s.handleFleetHealth(baseDir))
 	mux.HandleFunc("/v1/agents/checkins", s.handleAgentCheckins)
 	mux.HandleFunc("/v1/agents/dispatch-mode", s.handleAgentDispatchMode)
+	mux.HandleFunc("/v1/agents/dispatch-environments", s.handleAgentDispatchEnvironments)
+	mux.HandleFunc("/v1/agents/dispatch-environments/", s.handleAgentDispatchEnvironmentAction)
 	mux.HandleFunc("/v1/agents/dispatch", s.handleAgentDispatch(baseDir))
 	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
 	mux.HandleFunc("/v1/execution/environments/", s.handleExecutionEnvironmentAction)
@@ -1945,6 +1947,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/agents/checkins",
 			"GET /v1/agents/dispatch-mode",
 			"POST /v1/agents/dispatch-mode",
+			"GET /v1/agents/dispatch-environments",
+			"POST /v1/agents/dispatch-environments",
+			"GET /v1/agents/dispatch-environments/{environment}",
 			"GET /v1/agents/dispatch",
 			"POST /v1/agents/dispatch",
 			"GET /v1/execution/environments",

@@ -54,6 +54,9 @@ resources:
 	if !strings.Contains(rr.Body.String(), `"mode":"local"`) || !strings.Contains(rr.Body.String(), `"job_id"`) {
 		t.Fatalf("unexpected local dispatch response: %s", rr.Body.String())
 	}
+	if !strings.Contains(rr.Body.String(), `"strategy":"hybrid"`) {
+		t.Fatalf("expected hybrid strategy in local dispatch response: %s", rr.Body.String())
+	}
 
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/agents/dispatch-mode", bytes.NewReader([]byte(`{"mode":"event_bus"}`)))
@@ -62,7 +65,21 @@ resources:
 		t.Fatalf("set dispatch mode failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
-	eventBusDispatch := []byte(`{"config_path":"dispatch.yaml","priority":"normal"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/agents/dispatch-environments", bytes.NewReader([]byte(`{"environment":"prod","strategy":"pull"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"strategy":"pull"`) {
+		t.Fatalf("set env strategy failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/agents/dispatch-environments/prod", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"environment":"prod"`) {
+		t.Fatalf("get env strategy failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	eventBusDispatch := []byte(`{"config_path":"dispatch.yaml","environment":"prod","priority":"normal"}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/agents/dispatch", bytes.NewReader(eventBusDispatch))
 	s.httpServer.Handler.ServeHTTP(rr, req)
@@ -71,6 +88,9 @@ resources:
 	}
 	if !strings.Contains(rr.Body.String(), `"mode":"event_bus"`) || !strings.Contains(rr.Body.String(), `"status":"dispatched"`) {
 		t.Fatalf("unexpected event bus dispatch response: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"strategy":"pull"`) {
+		t.Fatalf("expected pull strategy in event bus dispatch response: %s", rr.Body.String())
 	}
 
 	rr = httptest.NewRecorder()

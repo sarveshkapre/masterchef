@@ -40,6 +40,58 @@ func (s *Server) handleAgentDispatchMode(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+func (s *Server) handleAgentDispatchEnvironments(w http.ResponseWriter, r *http.Request) {
+	type reqBody struct {
+		Environment string `json:"environment"`
+		Strategy    string `json:"strategy"`
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.agentDispatch.ListEnvironmentStrategies())
+	case http.MethodPost:
+		var req reqBody
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := s.agentDispatch.SetEnvironmentStrategy(req.Environment, req.Strategy)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.recordEvent(control.Event{
+			Type:    "agent.dispatch.environment.strategy",
+			Message: "agent dispatch strategy set for environment",
+			Fields: map[string]any{
+				"environment": item.Environment,
+				"strategy":    item.Strategy,
+			},
+		}, true)
+		writeJSON(w, http.StatusOK, item)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleAgentDispatchEnvironmentAction(w http.ResponseWriter, r *http.Request) {
+	parts := splitPath(r.URL.Path)
+	// /v1/agents/dispatch-environments/{environment}
+	if len(parts) != 4 || parts[0] != "v1" || parts[1] != "agents" || parts[2] != "dispatch-environments" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	item, ok := s.agentDispatch.GetEnvironmentStrategy(parts[3])
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "dispatch strategy not found for environment"})
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (s *Server) handleAgentDispatch(baseDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -62,7 +114,14 @@ func (s *Server) handleAgentDispatch(baseDir string) http.HandlerFunc {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "config_path is required"})
 				return
 			}
+			strategy := s.agentDispatch.EffectiveStrategy(req.Environment)
 			mode := s.agentDispatch.Mode()
+			switch strategy.Strategy {
+			case control.AgentDispatchStrategyPush:
+				mode = control.AgentDispatchModeLocal
+			case control.AgentDispatchStrategyPull:
+				mode = control.AgentDispatchModeEventBus
+			}
 			switch mode {
 			case control.AgentDispatchModeLocal:
 				resolved := req.ConfigPath
@@ -78,7 +137,7 @@ func (s *Server) handleAgentDispatch(baseDir string) http.HandlerFunc {
 					writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 					return
 				}
-				item := s.agentDispatch.Record(mode, req, "queued", job.ID)
+				item := s.agentDispatch.Record(mode, strategy.Strategy, req, "queued", job.ID)
 				s.recordEvent(control.Event{
 					Type:    "agent.dispatch.queued",
 					Message: "agent dispatch queued locally",
@@ -86,6 +145,8 @@ func (s *Server) handleAgentDispatch(baseDir string) http.HandlerFunc {
 						"dispatch_id": item.ID,
 						"job_id":      item.JobID,
 						"config_path": item.ConfigPath,
+						"environment": item.Environment,
+						"strategy":    item.Strategy,
 					},
 				}, true)
 				writeJSON(w, http.StatusCreated, item)
@@ -95,18 +156,22 @@ func (s *Server) handleAgentDispatch(baseDir string) http.HandlerFunc {
 					Message: "agent dispatch requested over event bus",
 					Fields: map[string]any{
 						"config_path": req.ConfigPath,
+						"environment": strings.TrimSpace(req.Environment),
+						"strategy":    strategy.Strategy,
 						"priority":    strings.ToLower(strings.TrimSpace(req.Priority)),
 						"force":       req.Force,
 					},
 				}
 				_ = s.eventBus.Publish(event)
-				item := s.agentDispatch.Record(mode, req, "dispatched", "")
+				item := s.agentDispatch.Record(mode, strategy.Strategy, req, "dispatched", "")
 				s.recordEvent(control.Event{
 					Type:    "agent.dispatch.dispatched",
 					Message: "agent dispatch published to event bus",
 					Fields: map[string]any{
 						"dispatch_id": item.ID,
 						"config_path": item.ConfigPath,
+						"environment": item.Environment,
+						"strategy":    item.Strategy,
 					},
 				}, true)
 				writeJSON(w, http.StatusCreated, item)
