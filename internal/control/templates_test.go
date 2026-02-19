@@ -53,3 +53,17 @@ func TestRenderTemplateText_NonStrictMode(t *testing.T) {
 		t.Fatalf("expected missing token in non-strict mode, got %#v", missing)
 	}
 }
+
+func TestRenderTemplateText_SafeFunctions(t *testing.T) {
+	rendered, missing := RenderTemplateText(
+		`env={{ upper env }} fallback={{ default "dev" region }} trim={{ trim padded }}`,
+		map[string]string{"env": "prod", "padded": "  ok  "},
+		false,
+	)
+	if rendered != "env=PROD fallback=dev trim=ok" {
+		t.Fatalf("unexpected function render output %q", rendered)
+	}
+	if len(missing) != 1 || missing[0] != "region" {
+		t.Fatalf("expected missing region from default expression, got %#v", missing)
+	}
+}

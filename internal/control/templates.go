@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var templateVariablePattern = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}`)
+var templateVariablePattern = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
 
 type SurveyField struct {
 	Type     string   `json:"type"` // string|int|bool
@@ -184,15 +184,21 @@ func RenderTemplateText(template string, vars map[string]string, strict bool) (s
 		if len(matches) != 2 {
 			return token
 		}
-		key := strings.TrimSpace(matches[1])
-		if value, ok := vars[key]; ok {
-			return value
+		expr := strings.TrimSpace(matches[1])
+		value, unresolved, handled := renderTemplateExpression(expr, vars)
+		for _, key := range unresolved {
+			missing[key] = struct{}{}
 		}
-		missing[key] = struct{}{}
-		if strict {
+		if !handled {
+			if strict {
+				return token
+			}
+			return ""
+		}
+		if len(unresolved) > 0 && strict {
 			return token
 		}
-		return ""
+		return value
 	})
 	missingList := make([]string, 0, len(missing))
 	for key := range missing {
@@ -200,6 +206,121 @@ func RenderTemplateText(template string, vars map[string]string, strict bool) (s
 	}
 	sort.Strings(missingList)
 	return rendered, missingList
+}
+
+func renderTemplateExpression(expr string, vars map[string]string) (string, []string, bool) {
+	fields := splitTemplateExpression(expr)
+	if len(fields) == 0 {
+		return "", nil, false
+	}
+	switch strings.ToLower(fields[0]) {
+	case "upper":
+		if len(fields) != 2 {
+			return "", nil, false
+		}
+		value, missing, ok := resolveTemplateOperand(fields[1], vars)
+		if !ok {
+			return "", missing, true
+		}
+		return strings.ToUpper(value), nil, true
+	case "lower":
+		if len(fields) != 2 {
+			return "", nil, false
+		}
+		value, missing, ok := resolveTemplateOperand(fields[1], vars)
+		if !ok {
+			return "", missing, true
+		}
+		return strings.ToLower(value), nil, true
+	case "trim":
+		if len(fields) != 2 {
+			return "", nil, false
+		}
+		value, missing, ok := resolveTemplateOperand(fields[1], vars)
+		if !ok {
+			return "", missing, true
+		}
+		return strings.TrimSpace(value), nil, true
+	case "default":
+		if len(fields) != 3 {
+			return "", nil, false
+		}
+		fallback, _, fallbackOK := resolveTemplateOperand(fields[1], vars)
+		current, missing, currentOK := resolveTemplateOperand(fields[2], vars)
+		if currentOK && strings.TrimSpace(current) != "" {
+			return current, nil, true
+		}
+		if fallbackOK {
+			return fallback, missing, true
+		}
+		return "", missing, true
+	default:
+		if len(fields) != 1 {
+			return "", nil, false
+		}
+		value, missing, ok := resolveTemplateOperand(fields[0], vars)
+		if !ok {
+			return "", missing, true
+		}
+		return value, nil, true
+	}
+}
+
+func resolveTemplateOperand(token string, vars map[string]string) (string, []string, bool) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", nil, false
+	}
+	if unquoted, ok := unquoteTemplateLiteral(token); ok {
+		return unquoted, nil, true
+	}
+	if value, ok := vars[token]; ok {
+		return value, nil, true
+	}
+	return "", []string{token}, false
+}
+
+func unquoteTemplateLiteral(token string) (string, bool) {
+	if len(token) < 2 {
+		return "", false
+	}
+	if (token[0] == '"' && token[len(token)-1] == '"') || (token[0] == '\'' && token[len(token)-1] == '\'') {
+		return token[1 : len(token)-1], true
+	}
+	return "", false
+}
+
+func splitTemplateExpression(expr string) []string {
+	fields := make([]string, 0)
+	var current strings.Builder
+	var quote rune
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		fields = append(fields, current.String())
+		current.Reset()
+	}
+	for _, r := range strings.TrimSpace(expr) {
+		if quote != 0 {
+			current.WriteRune(r)
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch r {
+		case '"', '\'':
+			quote = r
+			current.WriteRune(r)
+		case ' ', '\t', '\n', '\r':
+			flush()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	flush()
+	return fields
 }
 
 func RenderTemplateFile(path string, vars map[string]string, strict bool) (string, []string, error) {
