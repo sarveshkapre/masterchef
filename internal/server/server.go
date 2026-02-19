@@ -69,6 +69,7 @@ type Server struct {
 	runtimeSecrets     *control.RuntimeSecretStore
 	delegationTokens   *control.DelegationTokenStore
 	accessApprovals    *control.AccessApprovalStore
+	jitGrants          *control.JITAccessGrantStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -135,6 +136,7 @@ func New(addr, baseDir string) *Server {
 	runtimeSecrets := control.NewRuntimeSecretStore()
 	delegationTokens := control.NewDelegationTokenStore()
 	accessApprovals := control.NewAccessApprovalStore()
+	jitGrants := control.NewJITAccessGrantStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -193,6 +195,7 @@ func New(addr, baseDir string) *Server {
 		runtimeSecrets:     runtimeSecrets,
 		delegationTokens:   delegationTokens,
 		accessApprovals:    accessApprovals,
+		jitGrants:          jitGrants,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -264,6 +267,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/access/approval-policies/", s.handleApprovalPolicyAction)
 	mux.HandleFunc("/v1/access/break-glass/requests", s.handleBreakGlassRequests)
 	mux.HandleFunc("/v1/access/break-glass/requests/", s.handleBreakGlassRequestAction)
+	mux.HandleFunc("/v1/access/jit-grants", s.handleJITAccessGrants)
+	mux.HandleFunc("/v1/access/jit-grants/validate", s.handleJITAccessGrantValidate)
+	mux.HandleFunc("/v1/access/jit-grants/", s.handleJITAccessGrantAction)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1892,6 +1898,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/access/break-glass/requests/{id}/approve",
 			"POST /v1/access/break-glass/requests/{id}/reject",
 			"POST /v1/access/break-glass/requests/{id}/revoke",
+			"GET /v1/access/jit-grants",
+			"POST /v1/access/jit-grants",
+			"POST /v1/access/jit-grants/validate",
+			"GET /v1/access/jit-grants/{id}",
+			"POST /v1/access/jit-grants/{id}/revoke",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
