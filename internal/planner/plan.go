@@ -11,6 +11,7 @@ import (
 type Plan struct {
 	Execution config.Execution `json:"execution,omitempty"`
 	Steps     []Step           `json:"steps"`
+	Handlers  map[string]Step  `json:"handlers,omitempty"`
 }
 
 type Step struct {
@@ -103,9 +104,22 @@ func Build(cfg *config.Config) (*Plan, error) {
 			Resource: idToRes[id],
 		})
 	}
+	handlers := map[string]Step{}
+	for i, handler := range cfg.Handlers {
+		execHost := handler.Host
+		if strings.TrimSpace(handler.DelegateTo) != "" {
+			execHost = handler.DelegateTo
+		}
+		handlers[handler.ID] = Step{
+			Order:    len(steps) + i + 1,
+			Host:     hostByName[execHost],
+			Resource: handler,
+		}
+	}
 	return &Plan{
 		Execution: cfg.Execution,
 		Steps:     steps,
+		Handlers:  handlers,
 	}, nil
 }
 

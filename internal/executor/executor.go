@@ -72,6 +72,7 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 	}
 	refreshSources := buildRefreshSourceIndex(steps)
 	changedByResource := map[string]bool{}
+	notifiedHandlers := map[string]struct{}{}
 
 	failedSteps := 0
 	executedSteps := 0
@@ -120,11 +121,46 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 		}
 		run.Results = append(run.Results, res)
 		changedByResource[step.Resource.ID] = res.Changed
+		if res.Changed && !res.Skipped {
+			for _, handlerID := range step.Resource.NotifyHandlers {
+				handlerID = strings.TrimSpace(handlerID)
+				if handlerID == "" {
+					continue
+				}
+				notifiedHandlers[handlerID] = struct{}{}
+			}
+		}
 		executedSteps++
 		if failed {
 			failedSteps++
 			run.Status = state.RunFailed
 			if shouldStop() {
+				break
+			}
+		}
+	}
+	if run.Status == state.RunSucceeded && len(notifiedHandlers) > 0 {
+		handlerIDs := make([]string, 0, len(notifiedHandlers))
+		for id := range notifiedHandlers {
+			handlerIDs = append(handlerIDs, id)
+		}
+		sort.Strings(handlerIDs)
+		for _, id := range handlerIDs {
+			handlerStep, ok := p.Handlers[id]
+			if !ok {
+				run.Status = state.RunFailed
+				run.Results = append(run.Results, state.ResourceRun{
+					ResourceID: id,
+					Type:       "handler",
+					Message:    "notified handler not found in plan",
+				})
+				break
+			}
+			res, failed := e.executeStep(handlerStep)
+			res.Message = appendAuditMessage(res.Message, "handler executed")
+			run.Results = append(run.Results, res)
+			if failed {
+				run.Status = state.RunFailed
 				break
 			}
 		}

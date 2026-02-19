@@ -115,6 +115,7 @@ func mergeConfig(dst *Config, src *Config) {
 	mergeInventory(&dst.Inventory, src.Inventory)
 	mergeExecution(&dst.Execution, src.Execution)
 	mergeResources(&dst.Resources, src.Resources)
+	mergeResources(&dst.Handlers, src.Handlers)
 }
 
 func mergeInventory(dst *Inventory, src Inventory) {
@@ -187,6 +188,10 @@ func cloneConfig(in Config) Config {
 	for _, res := range in.Resources {
 		out.Resources = append(out.Resources, cloneResource(res))
 	}
+	out.Handlers = make([]Resource, 0, len(in.Handlers))
+	for _, handler := range in.Handlers {
+		out.Handlers = append(out.Handlers, cloneResource(handler))
+	}
 	return out
 }
 
@@ -213,6 +218,7 @@ func cloneResource(in Resource) Resource {
 	out.Before = append([]string{}, in.Before...)
 	out.Notify = append([]string{}, in.Notify...)
 	out.Subscribe = append([]string{}, in.Subscribe...)
+	out.NotifyHandlers = append([]string{}, in.NotifyHandlers...)
 	out.Tags = append([]string{}, in.Tags...)
 	return out
 }

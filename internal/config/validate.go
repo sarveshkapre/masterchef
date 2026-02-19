@@ -129,6 +129,7 @@ func Validate(cfg *Config) error {
 	}
 
 	resSet := map[string]struct{}{}
+	handlerSet := map[string]struct{}{}
 	for i := range cfg.Resources {
 		r := &cfg.Resources[i]
 		if strings.TrimSpace(r.ID) == "" {
@@ -204,6 +205,66 @@ func Validate(cfg *Config) error {
 			r.Tags = clean
 		}
 	}
+	for i := range cfg.Handlers {
+		h := &cfg.Handlers[i]
+		if strings.TrimSpace(h.ID) == "" {
+			return fmt.Errorf("handlers[%d].id is required", i)
+		}
+		if _, ok := handlerSet[h.ID]; ok {
+			return fmt.Errorf("duplicate handler id %q", h.ID)
+		}
+		handlerSet[h.ID] = struct{}{}
+		if _, ok := hostSet[h.Host]; !ok {
+			return fmt.Errorf("handler %q references unknown host %q", h.ID, h.Host)
+		}
+		if strings.TrimSpace(h.DelegateTo) != "" {
+			if _, ok := hostSet[h.DelegateTo]; !ok {
+				return fmt.Errorf("handler %q delegate_to references unknown host %q", h.ID, h.DelegateTo)
+			}
+		}
+		h.BecomeUser = strings.TrimSpace(h.BecomeUser)
+		if h.BecomeUser != "" {
+			h.Become = true
+		}
+		if len(h.DependsOn) > 0 || len(h.Require) > 0 || len(h.Before) > 0 || len(h.Notify) > 0 || len(h.Subscribe) > 0 || len(h.NotifyHandlers) > 0 {
+			return fmt.Errorf("handler %q cannot declare resource graph relationships", h.ID)
+		}
+		switch h.Type {
+		case "file":
+			if h.Become {
+				return fmt.Errorf("handler %q privilege escalation is only supported for command resources", h.ID)
+			}
+			if strings.TrimSpace(h.OnlyIf) != "" || strings.TrimSpace(h.Unless) != "" {
+				return fmt.Errorf("handler %q only_if/unless guards are only supported for command resources", h.ID)
+			}
+			if strings.TrimSpace(h.RefreshCommand) != "" {
+				return fmt.Errorf("handler %q refresh_command is only supported for command resources", h.ID)
+			}
+			if strings.TrimSpace(h.RescueCommand) != "" || strings.TrimSpace(h.AlwaysCommand) != "" {
+				return fmt.Errorf("handler %q block/rescue/always hooks are only supported for command resources", h.ID)
+			}
+			if strings.TrimSpace(h.Path) == "" {
+				return fmt.Errorf("handler %q file.path is required", h.ID)
+			}
+		case "command":
+			if strings.TrimSpace(h.Command) == "" {
+				return fmt.Errorf("handler %q command.command is required", h.ID)
+			}
+			h.OnlyIf = strings.TrimSpace(h.OnlyIf)
+			h.Unless = strings.TrimSpace(h.Unless)
+			h.RefreshCommand = strings.TrimSpace(h.RefreshCommand)
+			h.RescueCommand = strings.TrimSpace(h.RescueCommand)
+			h.AlwaysCommand = strings.TrimSpace(h.AlwaysCommand)
+			if h.Retries < 0 {
+				return fmt.Errorf("handler %q command.retries must be >= 0", h.ID)
+			}
+			if h.RetryDelaySeconds < 0 {
+				return fmt.Errorf("handler %q command.retry_delay_seconds must be >= 0", h.ID)
+			}
+		default:
+			return fmt.Errorf("handler %q has unsupported type %q", h.ID, h.Type)
+		}
+	}
 
 	notifiedBy := map[string]struct{}{}
 	for _, r := range cfg.Resources {
@@ -232,6 +293,11 @@ func Validate(cfg *Config) error {
 				return fmt.Errorf("resource %q notify references unknown resource %q", r.ID, target)
 			}
 			notifiedBy[target] = struct{}{}
+		}
+		for _, handler := range r.NotifyHandlers {
+			if _, ok := handlerSet[handler]; !ok {
+				return fmt.Errorf("resource %q notify_handlers references unknown handler %q", r.ID, handler)
+			}
 		}
 	}
 	for _, r := range cfg.Resources {

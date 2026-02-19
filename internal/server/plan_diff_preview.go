@@ -116,6 +116,9 @@ func buildPlanDiffPreview(plan *planner.Plan, baseDir string) ([]planDiffPreview
 			if strings.TrimSpace(step.Resource.Unless) != "" {
 				parts = append(parts, "unless guard: "+strings.TrimSpace(step.Resource.Unless))
 			}
+			if len(step.Resource.NotifyHandlers) > 0 {
+				parts = append(parts, "notify_handlers: "+strings.Join(step.Resource.NotifyHandlers, ","))
+			}
 			item.Preview = strings.Join(parts, " | ")
 		default:
 			item.Changed = true

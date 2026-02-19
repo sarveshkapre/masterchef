@@ -393,3 +393,54 @@ func TestValidate_FileGuardsAndRefreshCommandRejected(t *testing.T) {
 		t.Fatalf("expected file refresh_command to fail validation")
 	}
 }
+
+func TestValidate_HandlersAndNotifyHandlers(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:             "cfg",
+				Type:           "file",
+				Host:           "localhost",
+				Path:           "/tmp/cfg",
+				NotifyHandlers: []string{"restart-app"},
+			},
+		},
+		Handlers: []Resource{
+			{
+				ID:      "restart-app",
+				Type:    "command",
+				Host:    "localhost",
+				Command: "echo restart",
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected handlers+notify_handlers to validate, got %v", err)
+	}
+	cfg.Resources[0].NotifyHandlers = []string{"missing"}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected unknown notify handler validation error")
+	}
+}
+
+func TestValidate_HandlerGraphRelationsRejected(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{ID: "f1", Type: "file", Host: "localhost", Path: "/tmp/x"},
+		},
+		Handlers: []Resource{
+			{ID: "h1", Type: "command", Host: "localhost", Command: "echo hi", DependsOn: []string{"f1"}},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected handler relation validation error")
+	}
+}

@@ -250,6 +250,124 @@ func TestApply_RefreshCommandRunsWhenTriggered(t *testing.T) {
 	}
 }
 
+func TestApply_ExecutesNotifiedHandlersOnce(t *testing.T) {
+	tmp := t.TempDir()
+	cfgA := filepath.Join(tmp, "a.cfg")
+	cfgB := filepath.Join(tmp, "b.cfg")
+	handlerMarker := filepath.Join(tmp, "handler.marker")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:             "cfg-a",
+					Type:           "file",
+					Host:           "localhost",
+					Path:           cfgA,
+					Content:        "a=1\n",
+					NotifyHandlers: []string{"restart-service"},
+				},
+			},
+			{
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:             "cfg-b",
+					Type:           "file",
+					Host:           "localhost",
+					Path:           cfgB,
+					Content:        "b=1\n",
+					NotifyHandlers: []string{"restart-service"},
+				},
+			},
+		},
+		Handlers: map[string]planner.Step{
+			"restart-service": {
+				Order: 3,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "restart-service",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "echo restarted >> " + handlerMarker,
+				},
+			},
+		},
+	}
+
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded {
+		t.Fatalf("expected run success, got %s", run.Status)
+	}
+	if len(run.Results) != 3 {
+		t.Fatalf("expected 3 results including one handler run, got %#v", run.Results)
+	}
+	if run.Results[2].ResourceID != "restart-service" {
+		t.Fatalf("expected handler result as third record, got %#v", run.Results[2])
+	}
+	body, err := os.ReadFile(handlerMarker)
+	if err != nil {
+		t.Fatalf("expected handler marker file, got %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected handler to run once, got marker content %q", string(body))
+	}
+}
+
+func TestApply_SkipsHandlersWhenSourceUnchanged(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "svc.cfg")
+	if err := os.WriteFile(cfg, []byte("stable\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handlerMarker := filepath.Join(tmp, "handler.marker")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:             "cfg",
+					Type:           "file",
+					Host:           "localhost",
+					Path:           cfg,
+					Content:        "stable\n",
+					NotifyHandlers: []string{"restart-service"},
+				},
+			},
+		},
+		Handlers: map[string]planner.Step{
+			"restart-service": {
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "restart-service",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "echo restarted >> " + handlerMarker,
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if len(run.Results) != 1 {
+		t.Fatalf("expected only resource result when no change, got %#v", run.Results)
+	}
+	if _, err := os.Stat(handlerMarker); !os.IsNotExist(err) {
+		t.Fatalf("expected handler not to run when source unchanged, stat err=%v", err)
+	}
+}
+
 func TestApply_FreeStrategyContinuesAfterFailure(t *testing.T) {
 	tmp := t.TempDir()
 	target := filepath.Join(tmp, "after-failure.txt")
