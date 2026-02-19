@@ -65,6 +65,7 @@ type Server struct {
 	scenarioTests         *control.ScenarioTestStore
 	providerConformance   *control.ProviderConformanceStore
 	ephemeralTestEnv      *control.EphemeralEnvironmentStore
+	chaosExperiments      *control.ChaosExperimentStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -191,6 +192,7 @@ func New(addr, baseDir string) *Server {
 	scenarioTests := control.NewScenarioTestStore()
 	providerConformance := control.NewProviderConformanceStore()
 	ephemeralTestEnv := control.NewEphemeralEnvironmentStore()
+	chaosExperiments := control.NewChaosExperimentStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -309,6 +311,7 @@ func New(addr, baseDir string) *Server {
 		scenarioTests:         scenarioTests,
 		providerConformance:   providerConformance,
 		ephemeralTestEnv:      ephemeralTestEnv,
+		chaosExperiments:      chaosExperiments,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -753,6 +756,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/canary-upgrades/", s.handleCanaryUpgradeAction)
 	mux.HandleFunc("/v1/control/failover-drills", s.handleRegionalFailoverDrills)
 	mux.HandleFunc("/v1/control/failover-drills/scorecards", s.handleRegionalFailoverScorecards)
+	mux.HandleFunc("/v1/control/chaos/experiments", s.handleChaosExperiments)
+	mux.HandleFunc("/v1/control/chaos/experiments/", s.handleChaosExperimentAction)
 	mux.HandleFunc("/v1/control/federation/peers", s.handleFederationPeers)
 	mux.HandleFunc("/v1/control/federation/peers/", s.handleFederationPeerAction)
 	mux.HandleFunc("/v1/control/federation/health", s.handleFederationHealth)
@@ -2757,6 +2762,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/failover-drills",
 			"POST /v1/control/failover-drills",
 			"GET /v1/control/failover-drills/scorecards",
+			"GET /v1/control/chaos/experiments",
+			"POST /v1/control/chaos/experiments",
+			"GET /v1/control/chaos/experiments/{id}",
+			"POST /v1/control/chaos/experiments/{id}/complete",
+			"POST /v1/control/chaos/experiments/{id}/abort",
 			"GET /v1/control/federation/peers",
 			"POST /v1/control/federation/peers",
 			"GET /v1/control/federation/peers/{id}",
