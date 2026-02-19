@@ -2055,6 +2055,36 @@ resources:
 	if !strings.Contains(rr.Body.String(), `"incident-view"`) || !strings.Contains(rr.Body.String(), `"active_profile"`) {
 		t.Fatalf("expected incident shortcut and active profile in response: %s", rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/ui/progressive-disclosure", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("progressive disclosure list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"simple"`) || !strings.Contains(rr.Body.String(), `"profiles"`) {
+		t.Fatalf("expected progressive disclosure profiles response: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/ui/progressive-disclosure", bytes.NewReader([]byte(`{"profile_id":"balanced","workflow_hint":"rollout"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("progressive disclosure set profile failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"profile_id":"balanced"`) {
+		t.Fatalf("expected balanced progressive disclosure state: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/ui/progressive-disclosure/reveal", bytes.NewReader([]byte(`{"workflow":"rollout","controls":["blast radius","failure thresholds"]}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("progressive disclosure reveal failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"blast-radius"`) || !strings.Contains(rr.Body.String(), `"revealed_by_flow"`) {
+		t.Fatalf("expected revealed controls in response: %s", rr.Body.String())
+	}
 }
 
 func TestPlanExplainEndpoint(t *testing.T) {
