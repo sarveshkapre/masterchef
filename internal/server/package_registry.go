@@ -253,3 +253,30 @@ func (s *Server) handlePackageProvenanceReport(w http.ResponseWriter, r *http.Re
 	}
 	writeJSON(w, http.StatusOK, s.packageRegistry.ProvenanceReport())
 }
+
+func (s *Server) handlePackageQuality(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	kind := strings.TrimSpace(r.URL.Query().Get("kind"))
+	writeJSON(w, http.StatusOK, s.packageRegistry.ListQuality(kind))
+}
+
+func (s *Server) handlePackageQualityEvaluate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.PackageQualityInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	report, err := s.packageRegistry.EvaluateQuality(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}

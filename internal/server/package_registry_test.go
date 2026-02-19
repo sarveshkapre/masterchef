@@ -129,6 +129,24 @@ resources:
 		t.Fatalf("package provenance report failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
+	qualityEval := []byte(`{"artifact_id":"` + artifact.ID + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/quality/evaluate", bytes.NewReader(qualityEval))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("package quality evaluate failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Contains(rr.Body.Bytes(), []byte(`"craftsmanship_tier"`)) || !bytes.Contains(rr.Body.Bytes(), []byte(`"trust_badge"`)) {
+		t.Fatalf("expected craftsmanship and trust badge fields: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/quality?kind=module", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("package quality list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/v1/packages/artifacts?visibility=public", nil)
 	s.httpServer.Handler.ServeHTTP(rr, req)

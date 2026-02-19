@@ -148,6 +148,27 @@ type PackageProvenanceReportItem struct {
 	UpdatedAt               time.Time `json:"updated_at"`
 }
 
+type PackageQualityInput struct {
+	ArtifactID string `json:"artifact_id,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+}
+
+type PackageQualityReport struct {
+	ArtifactID        string    `json:"artifact_id"`
+	Kind              string    `json:"kind"`
+	Name              string    `json:"name"`
+	Version           string    `json:"version"`
+	Score             int       `json:"score"`
+	CraftsmanshipTier string    `json:"craftsmanship_tier"`
+	TrustBadge        string    `json:"trust_badge"`
+	Certified         bool      `json:"certified"`
+	CertificationTier string    `json:"certification_tier,omitempty"`
+	Maintainer        string    `json:"maintainer,omitempty"`
+	MaintainerTier    string    `json:"maintainer_tier,omitempty"`
+	Reasons           []string  `json:"reasons,omitempty"`
+	EvaluatedAt       time.Time `json:"evaluated_at"`
+}
+
 type PackageRegistryStore struct {
 	mu             sync.RWMutex
 	nextID         int64
@@ -262,6 +283,48 @@ func (s *PackageRegistryStore) ListArtifactsByVisibility(visibility string) []Pa
 		out = append(out, clonePackageArtifact(*item))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+func (s *PackageRegistryStore) EvaluateQuality(in PackageQualityInput) (PackageQualityReport, error) {
+	artifactID := strings.TrimSpace(in.ArtifactID)
+	if artifactID == "" {
+		return PackageQualityReport{}, errors.New("artifact_id is required")
+	}
+	s.mu.RLock()
+	artifact, ok := s.artifacts[artifactID]
+	if !ok {
+		s.mu.RUnlock()
+		return PackageQualityReport{}, errors.New("artifact not found")
+	}
+	cert, hasCert := s.certifications[artifactID]
+	maintainer := strings.ToLower(strings.TrimSpace(artifact.Metadata["maintainer"]))
+	health, hasMaintainer := s.maintainers[maintainer]
+	report := buildPackageQualityReport(*artifact, cert, hasCert, health, hasMaintainer)
+	s.mu.RUnlock()
+	return report, nil
+}
+
+func (s *PackageRegistryStore) ListQuality(kind string) []PackageQualityReport {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	s.mu.RLock()
+	out := make([]PackageQualityReport, 0, len(s.artifacts))
+	for _, artifact := range s.artifacts {
+		if kind != "" && artifact.Kind != kind {
+			continue
+		}
+		cert, hasCert := s.certifications[artifact.ID]
+		maintainer := strings.ToLower(strings.TrimSpace(artifact.Metadata["maintainer"]))
+		health, hasMaintainer := s.maintainers[maintainer]
+		out = append(out, buildPackageQualityReport(*artifact, cert, hasCert, health, hasMaintainer))
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Score != out[j].Score {
+			return out[i].Score > out[j].Score
+		}
+		return out[i].ArtifactID < out[j].ArtifactID
+	})
 	return out
 }
 
@@ -635,4 +698,94 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func buildPackageQualityReport(artifact PackageArtifact, cert *PackageCertificationReport, hasCert bool, maintainer *MaintainerHealthReport, hasMaintainer bool) PackageQualityReport {
+	reasons := make([]string, 0, 8)
+	score := 0
+	if artifact.Signed {
+		score += 20
+	} else {
+		reasons = append(reasons, "artifact is unsigned")
+	}
+	if artifact.Provenance.SBOMDigest != "" {
+		score += 10
+	} else {
+		reasons = append(reasons, "sbom digest missing")
+	}
+	if artifact.Provenance.AttestationDigest != "" {
+		score += 10
+	} else {
+		reasons = append(reasons, "attestation digest missing")
+	}
+	certified := false
+	certTier := ""
+	if hasCert && cert != nil {
+		score += cert.Score / 2
+		certified = cert.Certified
+		certTier = cert.Tier
+		if cert.Certified {
+			score += 20
+		} else {
+			reasons = append(reasons, "artifact certification failed")
+		}
+		switch cert.Tier {
+		case "gold":
+			score += 15
+		case "silver":
+			score += 10
+		case "bronze":
+			score += 5
+		}
+	} else {
+		reasons = append(reasons, "artifact not certified")
+	}
+	maintainerName := strings.ToLower(strings.TrimSpace(artifact.Metadata["maintainer"]))
+	maintainerTier := ""
+	if hasMaintainer && maintainer != nil {
+		score += maintainer.Score / 5
+		maintainerTier = maintainer.Tier
+	} else if maintainerName != "" {
+		reasons = append(reasons, "maintainer health report missing")
+	}
+	if score > 100 {
+		score = 100
+	}
+	if score < 0 {
+		score = 0
+	}
+	tier := "none"
+	switch {
+	case score >= 90:
+		tier = "gold"
+	case score >= 75:
+		tier = "silver"
+	case score >= 60:
+		tier = "bronze"
+	}
+	badge := "internal"
+	switch {
+	case certified && artifact.Signed && certTier == "gold" && artifact.Provenance.SBOMDigest != "" && artifact.Provenance.AttestationDigest != "":
+		badge = "trusted"
+	case certified && artifact.Signed:
+		badge = "verified"
+	case artifact.Visibility == "public":
+		badge = "community"
+	}
+
+	return PackageQualityReport{
+		ArtifactID:        artifact.ID,
+		Kind:              artifact.Kind,
+		Name:              artifact.Name,
+		Version:           artifact.Version,
+		Score:             score,
+		CraftsmanshipTier: tier,
+		TrustBadge:        badge,
+		Certified:         certified,
+		CertificationTier: certTier,
+		Maintainer:        maintainerName,
+		MaintainerTier:    maintainerTier,
+		Reasons:           reasons,
+		EvaluatedAt:       time.Now().UTC(),
+	}
 }

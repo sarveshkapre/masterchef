@@ -216,3 +216,61 @@ func TestPackageRegistryVisibilityFilter(t *testing.T) {
 		t.Fatalf("expected single public artifact, got %+v", publicOnly)
 	}
 }
+
+func TestPackageRegistryQualityScoringAndBadges(t *testing.T) {
+	store := NewPackageRegistryStore()
+	artifact, err := store.Publish(PackageArtifactInput{
+		Kind:       "module",
+		Name:       "quality/module",
+		Version:    "1.0.0",
+		Digest:     "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+		Visibility: "public",
+		Signed:     true,
+		KeyID:      "kq",
+		Signature:  "sq",
+		Metadata: map[string]string{
+			"maintainer": "platform-team",
+		},
+		Provenance: PackageProvenance{
+			SBOMDigest:        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			AttestationDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+	})
+	if err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+	if _, err := store.UpsertMaintainerHealth(MaintainerHealthInput{
+		Maintainer:         "platform-team",
+		TestPassRate:       0.99,
+		IssueLatencyHours:  4,
+		ReleaseCadenceDays: 7,
+		OpenSecurityIssues: 0,
+	}); err != nil {
+		t.Fatalf("maintainer health upsert failed: %v", err)
+	}
+	if _, err := store.Certify(PackageCertificationInput{
+		ArtifactID:              artifact.ID,
+		ConformancePassed:       true,
+		TestPassRate:            0.99,
+		HighVulnerabilities:     0,
+		CriticalVulnerabilities: 0,
+		MaintainerScore:         95,
+	}); err != nil {
+		t.Fatalf("certify failed: %v", err)
+	}
+	report, err := store.EvaluateQuality(PackageQualityInput{ArtifactID: artifact.ID})
+	if err != nil {
+		t.Fatalf("evaluate quality failed: %v", err)
+	}
+	if report.Score <= 0 || report.CraftsmanshipTier == "none" {
+		t.Fatalf("expected positive craftsmanship quality report: %+v", report)
+	}
+	if report.TrustBadge != "trusted" && report.TrustBadge != "verified" {
+		t.Fatalf("expected trusted or verified badge, got %+v", report)
+	}
+
+	list := store.ListQuality("module")
+	if len(list) == 0 {
+		t.Fatalf("expected quality report list for modules")
+	}
+}
