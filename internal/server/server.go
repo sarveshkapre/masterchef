@@ -26,6 +26,7 @@ type Server struct {
 	baseDir             string
 	queue               *control.Queue
 	runLeases           *control.RunLeaseStore
+	stepSnapshots       *control.StepSnapshotStore
 	scheduler           *control.Scheduler
 	templates           *control.TemplateStore
 	workflows           *control.WorkflowStore
@@ -124,6 +125,7 @@ func New(addr, baseDir string) *Server {
 	runner := control.NewRunner(baseDir)
 	queue := control.NewQueue(512)
 	runLeases := control.NewRunLeaseStore()
+	stepSnapshots := control.NewStepSnapshotStore(20_000)
 	runCtx, runCancel := context.WithCancel(context.Background())
 	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
@@ -218,6 +220,7 @@ func New(addr, baseDir string) *Server {
 		baseDir:             baseDir,
 		queue:               queue,
 		runLeases:           runLeases,
+		stepSnapshots:       stepSnapshots,
 		scheduler:           scheduler,
 		templates:           templates,
 		workflows:           workflows,
@@ -384,6 +387,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/portable-runners/select", s.handlePortableRunnerSelect)
 	mux.HandleFunc("/v1/execution/native-schedulers", s.handleNativeSchedulers)
 	mux.HandleFunc("/v1/execution/native-schedulers/select", s.handleNativeSchedulerSelect)
+	mux.HandleFunc("/v1/execution/snapshots", s.handleStepSnapshots)
+	mux.HandleFunc("/v1/execution/snapshots/", s.handleStepSnapshotByID)
 	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
 	mux.HandleFunc("/v1/execution/environments/", s.handleExecutionEnvironmentAction)
 	mux.HandleFunc("/v1/execution/admission-policy", s.handleExecutionAdmissionPolicy)
@@ -2148,6 +2153,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/portable-runners/select",
 			"GET /v1/execution/native-schedulers",
 			"POST /v1/execution/native-schedulers/select",
+			"GET /v1/execution/snapshots",
+			"POST /v1/execution/snapshots",
+			"GET /v1/execution/snapshots/{id}",
 			"GET /v1/execution/environments",
 			"POST /v1/execution/environments",
 			"GET /v1/execution/environments/{id}",
