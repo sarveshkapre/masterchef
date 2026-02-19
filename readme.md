@@ -127,6 +127,7 @@ Signed GitOps plan-artifact workflows are available via `/v1/gitops/plan-artifac
 Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/beacon-reactor/rules` and `/v1/compat/beacon-reactor/emit`.
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.
 Runtime host discovery and auto-enrollment are available via `/v1/inventory/enroll` and `/v1/inventory/runtime-hosts`, including lifecycle actions for bootstrap, activate, quarantine, and decommission.
+Agent check-in jitter/splay controls are available via `POST /v1/agents/checkins` with deterministic per-agent splay assignment.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).
 Per-node execution backend auto-selection is supported via `transport: auto` with host capability and metadata discovery (local/ssh/winrm).

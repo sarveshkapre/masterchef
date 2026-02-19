@@ -60,6 +60,7 @@ type Server struct {
 	gitopsEnvironments *control.GitOpsEnvironmentStore
 	deployments        *control.DeploymentStore
 	fileSync           *control.FileSyncStore
+	agentCheckins      *control.AgentCheckinStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -117,6 +118,7 @@ func New(addr, baseDir string) *Server {
 	gitopsEnvironments := control.NewGitOpsEnvironmentStore()
 	deployments := control.NewDeploymentStore()
 	fileSync := control.NewFileSyncStore()
+	agentCheckins := control.NewAgentCheckinStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -166,6 +168,7 @@ func New(addr, baseDir string) *Server {
 		gitopsEnvironments: gitopsEnvironments,
 		deployments:        deployments,
 		fileSync:           fileSync,
+		agentCheckins:      agentCheckins,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -212,6 +215,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/runtime-hosts", s.handleRuntimeHosts)
 	mux.HandleFunc("/v1/inventory/runtime-hosts/", s.handleRuntimeHostAction)
 	mux.HandleFunc("/v1/inventory/enroll", s.handleRuntimeEnrollAlias)
+	mux.HandleFunc("/v1/agents/checkins", s.handleAgentCheckins)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1794,6 +1798,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/inventory/runtime-hosts/{name}/activate",
 			"POST /v1/inventory/runtime-hosts/{name}/quarantine",
 			"POST /v1/inventory/runtime-hosts/{name}/decommission",
+			"GET /v1/agents/checkins",
+			"POST /v1/agents/checkins",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
