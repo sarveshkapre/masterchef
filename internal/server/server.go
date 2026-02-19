@@ -48,6 +48,7 @@ type Server struct {
 	checklists          *control.ChecklistStore
 	views               *control.SavedViewStore
 	accessibility       *control.AccessibilityStore
+	shortcuts           *control.UIShortcutCatalog
 	bulk                *control.BulkManager
 	actionDocs          *control.ActionDocCatalog
 	migrations          *control.MigrationStore
@@ -164,6 +165,7 @@ func New(addr, baseDir string) *Server {
 	checklists := control.NewChecklistStore()
 	views := control.NewSavedViewStore()
 	accessibility := control.NewAccessibilityStore()
+	shortcuts := control.NewUIShortcutCatalog()
 	bulk := control.NewBulkManager(15 * time.Minute)
 	actionDocs := control.NewActionDocCatalog()
 	migrations := control.NewMigrationStore()
@@ -272,6 +274,7 @@ func New(addr, baseDir string) *Server {
 		checklists:          checklists,
 		views:               views,
 		accessibility:       accessibility,
+		shortcuts:           shortcuts,
 		bulk:                bulk,
 		actionDocs:          actionDocs,
 		migrations:          migrations,
@@ -641,6 +644,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/views/workloads", s.handleWorkloadViews)
 	mux.HandleFunc("/v1/ui/accessibility/profiles", s.handleAccessibilityProfiles)
 	mux.HandleFunc("/v1/ui/accessibility/active", s.handleAccessibilityActive)
+	mux.HandleFunc("/v1/ui/shortcuts", s.handleUIShortcuts)
 	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
 	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
 	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
@@ -2529,6 +2533,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/ui/accessibility/profiles",
 			"GET /v1/ui/accessibility/active",
 			"POST /v1/ui/accessibility/active",
+			"GET /v1/ui/shortcuts",
 			"POST /v1/migrations/assess",
 			"GET /v1/migrations/reports",
 			"GET /v1/migrations/reports/{id}",

@@ -2045,6 +2045,16 @@ resources:
 	if !strings.Contains(rr.Body.String(), `"id":"screenreader-heavy"`) {
 		t.Fatalf("expected custom active profile id in response: %s", rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/ui/shortcuts?q=incident&global_only=true", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("shortcut catalog query failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"incident-view"`) || !strings.Contains(rr.Body.String(), `"active_profile"`) {
+		t.Fatalf("expected incident shortcut and active profile in response: %s", rr.Body.String())
+	}
 }
 
 func TestPlanExplainEndpoint(t *testing.T) {
