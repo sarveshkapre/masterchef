@@ -159,6 +159,7 @@ Hybrid push/pull execution routing per environment is available via `/v1/agents/
 Proxy-minion mode for devices that cannot run full agents is available via `/v1/agents/proxy-minions` and `/v1/agents/proxy-minions/dispatch`.
 Multi-master control mode with centralized job/event cache is available via `/v1/control/multi-master/nodes` and `/v1/control/multi-master/cache` for cross-controller status and replay-oriented cache synchronization.
 Edge relay mode for intermittently connected sites is available via `/v1/edge-relay/sites` and `/v1/edge-relay/messages` with store-and-forward queueing and explicit delivery controls.
+Egress-only execution-node connectivity through hosted hop/ingress relays is available via `/v1/execution/relays/endpoints` and `/v1/execution/relays/sessions`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).
 Per-node execution backend auto-selection is supported via `transport: auto` with host capability and metadata discovery (local/ssh/winrm).

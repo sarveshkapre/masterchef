@@ -66,6 +66,7 @@ type Server struct {
 	disruptionBudgets  *control.DisruptionBudgetStore
 	executionEnvs      *control.ExecutionEnvironmentStore
 	executionCreds     *control.ExecutionCredentialStore
+	hopRelay           *control.HopRelayStore
 	signatureAdmission *control.SignatureAdmissionStore
 	runtimeSecrets     *control.RuntimeSecretStore
 	delegationTokens   *control.DelegationTokenStore
@@ -149,6 +150,7 @@ func New(addr, baseDir string) *Server {
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
+	hopRelay := control.NewHopRelayStore()
 	signatureAdmission := control.NewSignatureAdmissionStore()
 	runtimeSecrets := control.NewRuntimeSecretStore()
 	delegationTokens := control.NewDelegationTokenStore()
@@ -224,6 +226,7 @@ func New(addr, baseDir string) *Server {
 		disruptionBudgets:  disruptionBudgets,
 		executionEnvs:      executionEnvs,
 		executionCreds:     executionCreds,
+		hopRelay:           hopRelay,
 		signatureAdmission: signatureAdmission,
 		runtimeSecrets:     runtimeSecrets,
 		delegationTokens:   delegationTokens,
@@ -313,6 +316,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/credentials", s.handleExecutionCredentials)
 	mux.HandleFunc("/v1/execution/credentials/validate", s.handleExecutionCredentialValidate)
 	mux.HandleFunc("/v1/execution/credentials/", s.handleExecutionCredentialAction)
+	mux.HandleFunc("/v1/execution/relays/endpoints", s.handleRelayEndpoints)
+	mux.HandleFunc("/v1/execution/relays/endpoints/", s.handleRelayEndpointAction)
+	mux.HandleFunc("/v1/execution/relays/sessions", s.handleRelaySessions)
 	mux.HandleFunc("/v1/security/signatures/keyrings", s.handleSignatureKeyrings)
 	mux.HandleFunc("/v1/security/signatures/keyrings/", s.handleSignatureKeyringAction)
 	mux.HandleFunc("/v1/security/signatures/admission-policy", s.handleSignatureAdmissionPolicy)
@@ -2012,6 +2018,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/credentials/validate",
 			"GET /v1/execution/credentials/{id}",
 			"POST /v1/execution/credentials/{id}/revoke",
+			"GET /v1/execution/relays/endpoints",
+			"POST /v1/execution/relays/endpoints",
+			"GET /v1/execution/relays/endpoints/{id}",
+			"GET /v1/execution/relays/sessions",
+			"POST /v1/execution/relays/sessions",
 			"GET /v1/security/signatures/keyrings",
 			"POST /v1/security/signatures/keyrings",
 			"GET /v1/security/signatures/keyrings/{id}",
