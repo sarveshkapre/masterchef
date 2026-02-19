@@ -252,6 +252,7 @@ Flake detection and quarantine workflows for unstable test cases are available v
 Safety-aware test impact analysis for targeted CI runs is available via `POST /v1/release/tests/impact-analysis` with safe fallback recommendations.
 End-to-end scenario test runner APIs for fleet simulations are available via `/v1/release/tests/scenarios` and `/v1/release/tests/scenario-runs`, with golden-run baselines and regression detection via `/v1/release/tests/scenario-baselines` and `/v1/release/tests/scenario-runs/{id}/compare-baseline`.
 Ephemeral test environment runner workflows for integration checks are available via `/v1/release/tests/environments`, including run-check and teardown actions.
+Load and soak test suites for control plane, scheduler, and execution workers are available via `/v1/release/tests/load-soak/suites` and `/v1/release/tests/load-soak/runs`.
 Pinned toolchain reproducibility checks for local/CI pipelines are available via `masterchef release toolchain-check`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters and `GET /v1/activity/audit-timeline` identity/resource categories.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.

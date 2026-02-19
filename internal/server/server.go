@@ -68,6 +68,7 @@ type Server struct {
 	chaosExperiments      *control.ChaosExperimentStore
 	leakDetection         *control.LeakDetectionStore
 	performanceGates      *control.PerformanceGateStore
+	loadSoak              *control.LoadSoakStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -197,6 +198,7 @@ func New(addr, baseDir string) *Server {
 	chaosExperiments := control.NewChaosExperimentStore()
 	leakDetection := control.NewLeakDetectionStore()
 	performanceGates := control.NewPerformanceGateStore()
+	loadSoak := control.NewLoadSoakStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -318,6 +320,7 @@ func New(addr, baseDir string) *Server {
 		chaosExperiments:      chaosExperiments,
 		leakDetection:         leakDetection,
 		performanceGates:      performanceGates,
+		loadSoak:              loadSoak,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -472,6 +475,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/scenario-baselines/", s.handleTestScenarioBaselineAction)
 	mux.HandleFunc("/v1/release/tests/environments", s.handleTestEnvironments)
 	mux.HandleFunc("/v1/release/tests/environments/", s.handleTestEnvironmentAction)
+	mux.HandleFunc("/v1/release/tests/load-soak/suites", s.handleLoadSoakSuites)
+	mux.HandleFunc("/v1/release/tests/load-soak/runs", s.handleLoadSoakRuns)
+	mux.HandleFunc("/v1/release/tests/load-soak/runs/", s.handleLoadSoakRunAction)
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
@@ -2684,6 +2690,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/release/tests/environments/{id}/run-check",
 			"GET /v1/release/tests/environments/{id}/checks",
 			"POST /v1/release/tests/environments/{id}/destroy",
+			"GET /v1/release/tests/load-soak/suites",
+			"POST /v1/release/tests/load-soak/suites",
+			"GET /v1/release/tests/load-soak/runs",
+			"POST /v1/release/tests/load-soak/runs",
+			"GET /v1/release/tests/load-soak/runs/{id}",
 			"GET /v1/providers/conformance/suites",
 			"POST /v1/providers/conformance/suites",
 			"GET /v1/providers/conformance/runs",
