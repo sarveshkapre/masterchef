@@ -160,6 +160,7 @@ Service-discovery-backed inventory sources (Consul, Kubernetes, cloud tags) are 
 Agent check-in jitter/splay controls are available via `POST /v1/agents/checkins` with deterministic per-agent splay assignment.
 Message-bus dispatch mode for scalable agent execution is available via `/v1/agents/dispatch-mode` and `/v1/agents/dispatch` (`local` or `event_bus`).
 Hybrid push/pull execution routing per environment is available via `/v1/agents/dispatch-environments`, allowing environment strategy overrides (`push`, `pull`, `hybrid`) while preserving global dispatch defaults.
+Minimal-footprint and scalable deployment profile guidance is available via `/v1/control/deployment-profiles` and `POST /v1/control/deployment-profiles/evaluate`.
 Proxy-minion mode for devices that cannot run full agents is available via `/v1/agents/proxy-minions` and `/v1/agents/proxy-minions/dispatch`.
 Multi-master control mode with centralized job/event cache is available via `/v1/control/multi-master/nodes` and `/v1/control/multi-master/cache` for cross-controller status and replay-oriented cache synchronization.
 Multi-region control-plane federation is available via `/v1/control/federation/peers` and `/v1/control/federation/health`.
