@@ -77,6 +77,7 @@ type Server struct {
 	scim               *control.SCIMStore
 	oidcWorkload       *control.OIDCWorkloadStore
 	mtls               *control.MTLSStore
+	secretIntegrations *control.SecretsIntegrationStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -151,6 +152,7 @@ func New(addr, baseDir string) *Server {
 	scim := control.NewSCIMStore()
 	oidcWorkload := control.NewOIDCWorkloadStore()
 	mtls := control.NewMTLSStore()
+	secretIntegrations := control.NewSecretsIntegrationStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -217,6 +219,7 @@ func New(addr, baseDir string) *Server {
 		scim:               scim,
 		oidcWorkload:       oidcWorkload,
 		mtls:               mtls,
+		secretIntegrations: secretIntegrations,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -315,6 +318,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/security/mtls/authorities", s.handleMTLSAuthorities)
 	mux.HandleFunc("/v1/security/mtls/policies", s.handleMTLSPolicies)
 	mux.HandleFunc("/v1/security/mtls/handshake-check", s.handleMTLSHandshakeCheck)
+	mux.HandleFunc("/v1/secrets/integrations", s.handleSecretIntegrations)
+	mux.HandleFunc("/v1/secrets/resolve", s.handleSecretResolve)
+	mux.HandleFunc("/v1/secrets/traces", s.handleSecretUsageTraces)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -1992,6 +1998,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/security/mtls/policies",
 			"POST /v1/security/mtls/policies",
 			"POST /v1/security/mtls/handshake-check",
+			"GET /v1/secrets/integrations",
+			"POST /v1/secrets/integrations",
+			"POST /v1/secrets/resolve",
+			"GET /v1/secrets/traces",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",

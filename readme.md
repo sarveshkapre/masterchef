@@ -136,6 +136,7 @@ SSO enterprise identity integration is available via `/v1/identity/sso/providers
 SCIM provisioning for teams and roles is available via `/v1/identity/scim/teams` and `/v1/identity/scim/roles`.
 OIDC workload identity support is available via `/v1/identity/oidc/workload/providers` and `/v1/identity/oidc/workload/exchange`.
 mTLS component trust/policy management with handshake verification is available via `/v1/security/mtls/authorities`, `/v1/security/mtls/policies`, and `/v1/security/mtls/handshake-check`.
+Secrets manager integrations plus secret-usage tracing with redaction-by-default logs are available via `/v1/secrets/integrations`, `/v1/secrets/resolve`, and `/v1/secrets/traces`.
 Branch-based ephemeral environment previews are available via `/v1/gitops/previews` with lifecycle actions for promote/close and queued preview applies.
 Branch-per-environment control-repo materialization is available via `/v1/gitops/environments/materialize` with generated environment configs and optional queued apply.
 Webhook/API deployment triggers are available via `/v1/gitops/deployments/webhook` and `/v1/gitops/deployments/trigger`; CLI deployments are available via `masterchef deploy`.
