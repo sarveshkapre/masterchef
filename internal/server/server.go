@@ -73,6 +73,7 @@ type Server struct {
 	proxyMinions        *control.ProxyMinionStore
 	networkTransports   *control.NetworkTransportCatalog
 	portableRunners     *control.PortableRunnerCatalog
+	nativeSchedulers    *control.NativeSchedulerCatalog
 	disruptionBudgets   *control.DisruptionBudgetStore
 	executionEnvs       *control.ExecutionEnvironmentStore
 	executionCreds      *control.ExecutionCredentialStore
@@ -171,6 +172,7 @@ func New(addr, baseDir string) *Server {
 	proxyMinions := control.NewProxyMinionStore()
 	networkTransports := control.NewNetworkTransportCatalog()
 	portableRunners := control.NewPortableRunnerCatalog()
+	nativeSchedulers := control.NewNativeSchedulerCatalog()
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
@@ -261,6 +263,7 @@ func New(addr, baseDir string) *Server {
 		proxyMinions:        proxyMinions,
 		networkTransports:   networkTransports,
 		portableRunners:     portableRunners,
+		nativeSchedulers:    nativeSchedulers,
 		disruptionBudgets:   disruptionBudgets,
 		executionEnvs:       executionEnvs,
 		executionCreds:      executionCreds,
@@ -375,6 +378,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/network-transports/validate", s.handleNetworkTransportValidate)
 	mux.HandleFunc("/v1/execution/portable-runners", s.handlePortableRunners)
 	mux.HandleFunc("/v1/execution/portable-runners/select", s.handlePortableRunnerSelect)
+	mux.HandleFunc("/v1/execution/native-schedulers", s.handleNativeSchedulers)
+	mux.HandleFunc("/v1/execution/native-schedulers/select", s.handleNativeSchedulerSelect)
 	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
 	mux.HandleFunc("/v1/execution/environments/", s.handleExecutionEnvironmentAction)
 	mux.HandleFunc("/v1/execution/admission-policy", s.handleExecutionAdmissionPolicy)
@@ -2132,6 +2137,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/execution/portable-runners",
 			"POST /v1/execution/portable-runners",
 			"POST /v1/execution/portable-runners/select",
+			"GET /v1/execution/native-schedulers",
+			"POST /v1/execution/native-schedulers/select",
 			"GET /v1/execution/environments",
 			"POST /v1/execution/environments",
 			"GET /v1/execution/environments/{id}",
@@ -3134,6 +3141,8 @@ func (s *Server) handleAssociations(baseDir string) http.HandlerFunc {
 		ConfigPath      string `json:"config_path"`
 		TargetKind      string `json:"target_kind"`
 		TargetName      string `json:"target_name"`
+		OSFamily        string `json:"os_family,omitempty"`
+		Backend         string `json:"scheduler_backend,omitempty"`
 		Priority        string `json:"priority"`
 		IntervalSeconds int    `json:"interval_seconds"`
 		JitterSeconds   int    `json:"jitter_seconds"`
@@ -3163,11 +3172,30 @@ func (s *Server) handleAssociations(baseDir string) http.HandlerFunc {
 			if req.IntervalSeconds <= 0 {
 				req.IntervalSeconds = 60
 			}
+			osFamily := strings.TrimSpace(req.OSFamily)
+			if osFamily == "" {
+				osFamily = "linux"
+			}
+			selection, err := s.nativeSchedulers.Select(control.NativeSchedulerSelectionRequest{
+				OSFamily:         osFamily,
+				IntervalSeconds:  req.IntervalSeconds,
+				JitterSeconds:    req.JitterSeconds,
+				PreferredBackend: req.Backend,
+			})
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			if !selection.Supported {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": selection.Reason})
+				return
+			}
 
 			assoc, err := s.assocs.Create(control.AssociationCreate{
 				ConfigPath: req.ConfigPath,
 				TargetKind: req.TargetKind,
 				TargetName: req.TargetName,
+				Backend:    selection.Backend.Name,
 				Priority:   req.Priority,
 				Interval:   time.Duration(req.IntervalSeconds) * time.Second,
 				Jitter:     time.Duration(req.JitterSeconds) * time.Second,
@@ -3184,6 +3212,7 @@ func (s *Server) handleAssociations(baseDir string) http.HandlerFunc {
 					"association_id": assoc.ID,
 					"target_kind":    assoc.TargetKind,
 					"target_name":    assoc.TargetName,
+					"backend":        assoc.Backend,
 				},
 			})
 			writeJSON(w, http.StatusCreated, assoc)

@@ -14,6 +14,7 @@ type Association struct {
 	TargetKind string        `json:"target_kind"`
 	TargetName string        `json:"target_name"`
 	Priority   string        `json:"priority"`
+	Backend    string        `json:"scheduler_backend,omitempty"`
 	Interval   time.Duration `json:"interval"`
 	Jitter     time.Duration `json:"jitter"`
 	Enabled    bool          `json:"enabled"`
@@ -35,6 +36,7 @@ type AssociationCreate struct {
 	TargetKind string
 	TargetName string
 	Priority   string
+	Backend    string
 	Interval   time.Duration
 	Jitter     time.Duration
 	Enabled    bool
@@ -94,6 +96,7 @@ func (s *AssociationStore) Create(in AssociationCreate) (Association, error) {
 		TargetKind: kind,
 		TargetName: in.TargetName,
 		Priority:   normalizePriority(in.Priority),
+		Backend:    strings.ToLower(strings.TrimSpace(in.Backend)),
 		Interval:   in.Interval,
 		Jitter:     in.Jitter,
 		Enabled:    in.Enabled,
