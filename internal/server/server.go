@@ -77,6 +77,7 @@ type Server struct {
 	providerProtocols      *control.ProviderProtocolStore
 	healthProbes           *control.HealthProbeStore
 	canaryUpgrades         *control.CanaryUpgradeStore
+	upgradeOrchestration   *control.UpgradeOrchestrationStore
 	failoverDrills         *control.RegionalFailoverDrillStore
 	performanceDiagnostics *control.PerformanceDiagnosticsStore
 	federation             *control.FederationStore
@@ -219,6 +220,7 @@ func New(addr, baseDir string) *Server {
 	providerProtocols := control.NewProviderProtocolStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
+	upgradeOrchestration := control.NewUpgradeOrchestrationStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
 	performanceDiagnostics := control.NewPerformanceDiagnosticsStore()
 	federation := control.NewFederationStore()
@@ -353,6 +355,7 @@ func New(addr, baseDir string) *Server {
 		providerProtocols:      providerProtocols,
 		healthProbes:           healthProbes,
 		canaryUpgrades:         canaryUpgrades,
+		upgradeOrchestration:   upgradeOrchestration,
 		failoverDrills:         failoverDrills,
 		performanceDiagnostics: performanceDiagnostics,
 		federation:             federation,
@@ -823,6 +826,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
 	mux.HandleFunc("/v1/control/canary-upgrades", s.handleCanaryUpgrades)
 	mux.HandleFunc("/v1/control/canary-upgrades/", s.handleCanaryUpgradeAction)
+	mux.HandleFunc("/v1/control/upgrade-orchestration/plans", s.handleUpgradeOrchestrationPlans)
+	mux.HandleFunc("/v1/control/upgrade-orchestration/plans/", s.handleUpgradeOrchestrationPlanAction)
 	mux.HandleFunc("/v1/control/failover-drills", s.handleRegionalFailoverDrills)
 	mux.HandleFunc("/v1/control/failover-drills/scorecards", s.handleRegionalFailoverScorecards)
 	mux.HandleFunc("/v1/control/performance/profiles", s.handlePerformanceProfiles)
@@ -2880,6 +2885,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/canary-upgrades",
 			"POST /v1/control/canary-upgrades",
 			"GET /v1/control/canary-upgrades/{id}",
+			"GET /v1/control/upgrade-orchestration/plans",
+			"POST /v1/control/upgrade-orchestration/plans",
+			"GET /v1/control/upgrade-orchestration/plans/{id}",
+			"POST /v1/control/upgrade-orchestration/plans/{id}/advance",
+			"POST /v1/control/upgrade-orchestration/plans/{id}/abort",
 			"GET /v1/control/failover-drills",
 			"POST /v1/control/failover-drills",
 			"GET /v1/control/failover-drills/scorecards",
