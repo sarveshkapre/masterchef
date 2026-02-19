@@ -207,6 +207,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/promotions", s.handleGitOpsPromotions)
 	mux.HandleFunc("/v1/gitops/promotions/", s.handleGitOpsPromotionAction)
+	mux.HandleFunc("/v1/gitops/reconcile", s.handleGitOpsReconcile(baseDir))
 	mux.HandleFunc("/v1/data-bags", s.handleDataBags)
 	mux.HandleFunc("/v1/data-bags/search", s.handleDataBagSearch)
 	mux.HandleFunc("/v1/data-bags/", s.handleDataBagItem)
@@ -1782,6 +1783,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/gitops/promotions",
 			"GET /v1/gitops/promotions/{id}",
 			"POST /v1/gitops/promotions/{id}/advance",
+			"POST /v1/gitops/reconcile",
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
 			"GET /v1/drift/insights",
