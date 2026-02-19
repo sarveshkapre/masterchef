@@ -61,6 +61,7 @@ type Server struct {
 	workspaceTemplates    *control.WorkspaceTemplateCatalog
 	channels              *control.ChannelManager
 	dependencyUpdates     *control.DependencyUpdateStore
+	flakes                *control.FlakeQuarantineStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -183,6 +184,7 @@ func New(addr, baseDir string) *Server {
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
 	dependencyUpdates := control.NewDependencyUpdateStore()
+	flakes := control.NewFlakeQuarantineStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -297,6 +299,7 @@ func New(addr, baseDir string) *Server {
 		workspaceTemplates:    workspaceTemplates,
 		channels:              channels,
 		dependencyUpdates:     dependencyUpdates,
+		flakes:                flakes,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -436,6 +439,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/dependency-bot/policy", s.handleDependencyUpdatePolicy)
 	mux.HandleFunc("/v1/release/dependency-bot/updates", s.handleDependencyUpdates)
 	mux.HandleFunc("/v1/release/dependency-bot/updates/", s.handleDependencyUpdateAction)
+	mux.HandleFunc("/v1/release/tests/flake-policy", s.handleFlakePolicy)
+	mux.HandleFunc("/v1/release/tests/flake-observations", s.handleFlakeObservations)
+	mux.HandleFunc("/v1/release/tests/flake-cases", s.handleFlakeCases)
+	mux.HandleFunc("/v1/release/tests/flake-cases/", s.handleFlakeCaseAction)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/graph", s.handlePlanGraph(baseDir))
 	mux.HandleFunc("/v1/plans/graph/query", s.handlePlanGraphQuery(baseDir))
@@ -2613,6 +2620,13 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/release/dependency-bot/updates",
 			"GET /v1/release/dependency-bot/updates/{id}",
 			"POST /v1/release/dependency-bot/updates/{id}/evaluate",
+			"GET /v1/release/tests/flake-policy",
+			"POST /v1/release/tests/flake-policy",
+			"POST /v1/release/tests/flake-observations",
+			"GET /v1/release/tests/flake-cases",
+			"GET /v1/release/tests/flake-cases/{id}",
+			"POST /v1/release/tests/flake-cases/{id}/quarantine",
+			"POST /v1/release/tests/flake-cases/{id}/unquarantine",
 			"POST /v1/query",
 			"GET /v1/data-bags",
 			"POST /v1/data-bags",
