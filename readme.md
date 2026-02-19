@@ -156,6 +156,7 @@ Runtime host discovery and auto-enrollment are available via `/v1/inventory/enro
 Agent check-in jitter/splay controls are available via `POST /v1/agents/checkins` with deterministic per-agent splay assignment.
 Message-bus dispatch mode for scalable agent execution is available via `/v1/agents/dispatch-mode` and `/v1/agents/dispatch` (`local` or `event_bus`).
 Hybrid push/pull execution routing per environment is available via `/v1/agents/dispatch-environments`, allowing environment strategy overrides (`push`, `pull`, `hybrid`) while preserving global dispatch defaults.
+Proxy-minion mode for devices that cannot run full agents is available via `/v1/agents/proxy-minions` and `/v1/agents/proxy-minions/dispatch`.
 Multi-master control mode with centralized job/event cache is available via `/v1/control/multi-master/nodes` and `/v1/control/multi-master/cache` for cross-controller status and replay-oriented cache synchronization.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).
