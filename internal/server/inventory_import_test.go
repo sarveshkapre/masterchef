@@ -57,4 +57,15 @@ func TestInventoryCMDBImportEndpoint(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `"would_update"`) {
 		t.Fatalf("expected would_update status in dry-run response: %s", rr.Body.String())
 	}
+
+	assistant := []byte(`{"type":"role_hierarchy","source_system":"puppetdb","sample_fields":["group","env_name"]}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/inventory/import/assist", bytes.NewReader(assistant))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("import assistant failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"required_fields"`) {
+		t.Fatalf("expected assistant response details: %s", rr.Body.String())
+	}
 }

@@ -39,3 +39,21 @@ func (s *Server) handleInventoryCMDBImport(w http.ResponseWriter, r *http.Reques
 	}
 	writeJSON(w, code, result)
 }
+
+func (s *Server) handleInventoryImportAssistant(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.ImportAssistantRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	item, err := control.BuildImportAssistant(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
