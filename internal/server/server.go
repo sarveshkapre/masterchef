@@ -63,6 +63,7 @@ type Server struct {
 	agentCheckins      *control.AgentCheckinStore
 	agentDispatch      *control.AgentDispatchStore
 	disruptionBudgets  *control.DisruptionBudgetStore
+	executionEnvs      *control.ExecutionEnvironmentStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -123,6 +124,7 @@ func New(addr, baseDir string) *Server {
 	agentCheckins := control.NewAgentCheckinStore()
 	agentDispatch := control.NewAgentDispatchStore()
 	disruptionBudgets := control.NewDisruptionBudgetStore()
+	executionEnvs := control.NewExecutionEnvironmentStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -175,6 +177,7 @@ func New(addr, baseDir string) *Server {
 		agentCheckins:      agentCheckins,
 		agentDispatch:      agentDispatch,
 		disruptionBudgets:  disruptionBudgets,
+		executionEnvs:      executionEnvs,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -225,6 +228,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/agents/checkins", s.handleAgentCheckins)
 	mux.HandleFunc("/v1/agents/dispatch-mode", s.handleAgentDispatchMode)
 	mux.HandleFunc("/v1/agents/dispatch", s.handleAgentDispatch(baseDir))
+	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
+	mux.HandleFunc("/v1/execution/environments/", s.handleExecutionEnvironmentAction)
+	mux.HandleFunc("/v1/execution/admission-policy", s.handleExecutionAdmissionPolicy)
+	mux.HandleFunc("/v1/execution/admit-check", s.handleExecutionAdmissionCheck)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1817,6 +1824,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/agents/dispatch-mode",
 			"GET /v1/agents/dispatch",
 			"POST /v1/agents/dispatch",
+			"GET /v1/execution/environments",
+			"POST /v1/execution/environments",
+			"GET /v1/execution/environments/{id}",
+			"GET /v1/execution/admission-policy",
+			"POST /v1/execution/admission-policy",
+			"POST /v1/execution/admit-check",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
