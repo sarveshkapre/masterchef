@@ -81,4 +81,28 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("verify package artifact failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	certPolicy := []byte(`{"require_conformance":true,"min_test_pass_rate":0.95,"max_high_vulns":0,"max_critical_vulns":0,"require_signed":true,"min_maintainer_score":80}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/certification-policy", bytes.NewReader(certPolicy))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set certification policy failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	certify := []byte(`{"artifact_id":"` + artifact.ID + `","conformance_passed":true,"test_pass_rate":0.99,"high_vulnerabilities":0,"critical_vulnerabilities":0,"maintainer_score":92}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/certify", bytes.NewReader(certify))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("certify package artifact failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	pubCheck := []byte(`{"artifact_id":"` + artifact.ID + `","target":"public"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/publication/check", bytes.NewReader(pubCheck))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected public gate failure without sbom/attestation digests: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

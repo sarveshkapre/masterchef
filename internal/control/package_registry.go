@@ -61,11 +61,62 @@ type PackageVerificationResult struct {
 	ArtifactID string `json:"artifact_id,omitempty"`
 }
 
+type PackageCertificationPolicy struct {
+	RequireConformance bool      `json:"require_conformance"`
+	MinTestPassRate    float64   `json:"min_test_pass_rate"`
+	MaxHighVulns       int       `json:"max_high_vulns"`
+	MaxCriticalVulns   int       `json:"max_critical_vulns"`
+	RequireSigned      bool      `json:"require_signed"`
+	MinMaintainerScore int       `json:"min_maintainer_score"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+type PackageCertificationInput struct {
+	ArtifactID              string  `json:"artifact_id"`
+	ConformancePassed       bool    `json:"conformance_passed"`
+	TestPassRate            float64 `json:"test_pass_rate"`
+	HighVulnerabilities     int     `json:"high_vulnerabilities"`
+	CriticalVulnerabilities int     `json:"critical_vulnerabilities"`
+	MaintainerScore         int     `json:"maintainer_score"`
+}
+
+type PackageCertificationReport struct {
+	ID                      string    `json:"id"`
+	ArtifactID              string    `json:"artifact_id"`
+	Certified               bool      `json:"certified"`
+	Tier                    string    `json:"tier,omitempty"`
+	Reasons                 []string  `json:"reasons,omitempty"`
+	Score                   int       `json:"score"`
+	ConformancePassed       bool      `json:"conformance_passed"`
+	TestPassRate            float64   `json:"test_pass_rate"`
+	HighVulnerabilities     int       `json:"high_vulnerabilities"`
+	CriticalVulnerabilities int       `json:"critical_vulnerabilities"`
+	MaintainerScore         int       `json:"maintainer_score"`
+	CreatedAt               time.Time `json:"created_at"`
+}
+
+type PackagePublicationCheckInput struct {
+	ArtifactID string `json:"artifact_id"`
+	Target     string `json:"target,omitempty"` // public|private
+}
+
+type PackagePublicationCheckResult struct {
+	Allowed           bool      `json:"allowed"`
+	ArtifactID        string    `json:"artifact_id,omitempty"`
+	Target            string    `json:"target"`
+	Reasons           []string  `json:"reasons,omitempty"`
+	CertificationTier string    `json:"certification_tier,omitempty"`
+	CheckedAt         time.Time `json:"checked_at"`
+}
+
 type PackageRegistryStore struct {
-	mu        sync.RWMutex
-	nextID    int64
-	artifacts map[string]*PackageArtifact
-	policy    PackageSigningPolicy
+	mu             sync.RWMutex
+	nextID         int64
+	nextCertID     int64
+	artifacts      map[string]*PackageArtifact
+	policy         PackageSigningPolicy
+	certPolicy     PackageCertificationPolicy
+	certifications map[string]*PackageCertificationReport
 }
 
 func NewPackageRegistryStore() *PackageRegistryStore {
@@ -75,6 +126,16 @@ func NewPackageRegistryStore() *PackageRegistryStore {
 			RequireSigned: true,
 			UpdatedAt:     time.Now().UTC(),
 		},
+		certPolicy: PackageCertificationPolicy{
+			RequireConformance: true,
+			MinTestPassRate:    0.98,
+			MaxHighVulns:       0,
+			MaxCriticalVulns:   0,
+			RequireSigned:      true,
+			MinMaintainerScore: 80,
+			UpdatedAt:          time.Now().UTC(),
+		},
+		certifications: map[string]*PackageCertificationReport{},
 	}
 }
 
@@ -207,6 +268,186 @@ func (s *PackageRegistryStore) Verify(in PackageVerificationInput) PackageVerifi
 	return PackageVerificationResult{Allowed: true, ArtifactID: artifact.ID}
 }
 
+func (s *PackageRegistryStore) CertificationPolicy() PackageCertificationPolicy {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.certPolicy
+}
+
+func (s *PackageRegistryStore) SetCertificationPolicy(policy PackageCertificationPolicy) (PackageCertificationPolicy, error) {
+	if policy.MinTestPassRate == 0 {
+		policy.MinTestPassRate = 0.98
+	}
+	if policy.MinTestPassRate < 0 || policy.MinTestPassRate > 1 {
+		return PackageCertificationPolicy{}, errors.New("min_test_pass_rate must be between 0 and 1")
+	}
+	if policy.MaxHighVulns < 0 || policy.MaxCriticalVulns < 0 {
+		return PackageCertificationPolicy{}, errors.New("vulnerability thresholds cannot be negative")
+	}
+	if policy.MinMaintainerScore == 0 {
+		policy.MinMaintainerScore = 80
+	}
+	if policy.MinMaintainerScore < 0 || policy.MinMaintainerScore > 100 {
+		return PackageCertificationPolicy{}, errors.New("min_maintainer_score must be between 0 and 100")
+	}
+	policy.UpdatedAt = time.Now().UTC()
+	s.mu.Lock()
+	s.certPolicy = policy
+	s.mu.Unlock()
+	return policy, nil
+}
+
+func (s *PackageRegistryStore) Certify(in PackageCertificationInput) (PackageCertificationReport, error) {
+	artifactID := strings.TrimSpace(in.ArtifactID)
+	if artifactID == "" {
+		return PackageCertificationReport{}, errors.New("artifact_id is required")
+	}
+	if in.TestPassRate < 0 || in.TestPassRate > 1 {
+		return PackageCertificationReport{}, errors.New("test_pass_rate must be between 0 and 1")
+	}
+	if in.HighVulnerabilities < 0 || in.CriticalVulnerabilities < 0 {
+		return PackageCertificationReport{}, errors.New("vulnerability counts cannot be negative")
+	}
+	if in.MaintainerScore < 0 || in.MaintainerScore > 100 {
+		return PackageCertificationReport{}, errors.New("maintainer_score must be between 0 and 100")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	artifact, ok := s.artifacts[artifactID]
+	if !ok {
+		return PackageCertificationReport{}, errors.New("artifact not found")
+	}
+	policy := s.certPolicy
+	reasons := make([]string, 0, 6)
+	if policy.RequireSigned && !artifact.Signed {
+		reasons = append(reasons, "artifact must be signed")
+	}
+	if policy.RequireConformance && !in.ConformancePassed {
+		reasons = append(reasons, "conformance suite must pass")
+	}
+	if in.TestPassRate < policy.MinTestPassRate {
+		reasons = append(reasons, "test pass rate below policy threshold")
+	}
+	if in.HighVulnerabilities > policy.MaxHighVulns {
+		reasons = append(reasons, "high vulnerabilities exceed policy threshold")
+	}
+	if in.CriticalVulnerabilities > policy.MaxCriticalVulns {
+		reasons = append(reasons, "critical vulnerabilities exceed policy threshold")
+	}
+	if in.MaintainerScore < policy.MinMaintainerScore {
+		reasons = append(reasons, "maintainer score below policy threshold")
+	}
+
+	score := 100
+	score -= maxInt(0, int((policy.MinTestPassRate-in.TestPassRate)*100))
+	score -= in.HighVulnerabilities * 5
+	score -= in.CriticalVulnerabilities * 20
+	if in.MaintainerScore < policy.MinMaintainerScore {
+		score -= (policy.MinMaintainerScore - in.MaintainerScore)
+	}
+	if score < 0 {
+		score = 0
+	}
+	tier := ""
+	certified := len(reasons) == 0
+	if certified {
+		switch {
+		case score >= 95:
+			tier = "gold"
+		case score >= 85:
+			tier = "silver"
+		default:
+			tier = "bronze"
+		}
+	}
+
+	s.nextCertID++
+	report := PackageCertificationReport{
+		ID:                      "pkg-cert-" + itoa(s.nextCertID),
+		ArtifactID:              artifact.ID,
+		Certified:               certified,
+		Tier:                    tier,
+		Reasons:                 reasons,
+		Score:                   score,
+		ConformancePassed:       in.ConformancePassed,
+		TestPassRate:            in.TestPassRate,
+		HighVulnerabilities:     in.HighVulnerabilities,
+		CriticalVulnerabilities: in.CriticalVulnerabilities,
+		MaintainerScore:         in.MaintainerScore,
+		CreatedAt:               time.Now().UTC(),
+	}
+	s.certifications[artifact.ID] = &report
+	return clonePackageCertificationReport(report), nil
+}
+
+func (s *PackageRegistryStore) ListCertifications() []PackageCertificationReport {
+	s.mu.RLock()
+	out := make([]PackageCertificationReport, 0, len(s.certifications))
+	for _, item := range s.certifications {
+		out = append(out, clonePackageCertificationReport(*item))
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+func (s *PackageRegistryStore) PublicationGateCheck(in PackagePublicationCheckInput) PackagePublicationCheckResult {
+	artifactID := strings.TrimSpace(in.ArtifactID)
+	target := strings.ToLower(strings.TrimSpace(in.Target))
+	if target == "" {
+		target = "public"
+	}
+	result := PackagePublicationCheckResult{
+		ArtifactID: artifactID,
+		Target:     target,
+		CheckedAt:  time.Now().UTC(),
+	}
+	if artifactID == "" {
+		result.Reasons = append(result.Reasons, "artifact_id is required")
+		return result
+	}
+
+	s.mu.RLock()
+	artifact, ok := s.artifacts[artifactID]
+	policy := clonePackageSigningPolicy(s.policy)
+	certPolicy := s.certPolicy
+	cert, certOK := s.certifications[artifactID]
+	s.mu.RUnlock()
+	if !ok {
+		result.Reasons = append(result.Reasons, "artifact not found")
+		return result
+	}
+
+	verify := s.Verify(PackageVerificationInput{ArtifactID: artifactID})
+	if !verify.Allowed {
+		result.Reasons = append(result.Reasons, verify.Reason)
+	}
+	if target == "public" {
+		if certPolicy.RequireSigned && !artifact.Signed {
+			result.Reasons = append(result.Reasons, "public publication requires signed artifact")
+		}
+		if !certOK || !cert.Certified {
+			result.Reasons = append(result.Reasons, "artifact is not certified")
+		}
+		if artifact.Provenance.SBOMDigest == "" {
+			result.Reasons = append(result.Reasons, "sbom digest is required for public publication")
+		}
+		if artifact.Provenance.AttestationDigest == "" {
+			result.Reasons = append(result.Reasons, "attestation digest is required for public publication")
+		}
+	}
+	if target == "private" && policy.RequireSigned && !artifact.Signed {
+		result.Reasons = append(result.Reasons, "private publication still requires signed artifact by policy")
+	}
+
+	if certOK {
+		result.CertificationTier = cert.Tier
+	}
+	result.Allowed = len(result.Reasons) == 0
+	return result
+}
+
 func clonePackageArtifact(in PackageArtifact) PackageArtifact {
 	out := in
 	out.Metadata = map[string]string{}
@@ -220,4 +461,17 @@ func clonePackageSigningPolicy(in PackageSigningPolicy) PackageSigningPolicy {
 	out := in
 	out.TrustedKeyIDs = append([]string{}, in.TrustedKeyIDs...)
 	return out
+}
+
+func clonePackageCertificationReport(in PackageCertificationReport) PackageCertificationReport {
+	out := in
+	out.Reasons = append([]string{}, in.Reasons...)
+	return out
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

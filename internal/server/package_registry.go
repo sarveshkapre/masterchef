@@ -100,3 +100,94 @@ func (s *Server) handlePackageVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, code, result)
 }
+
+func (s *Server) handlePackageCertificationPolicy(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.packageRegistry.CertificationPolicy())
+	case http.MethodPost:
+		var req control.PackageCertificationPolicy
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		policy, err := s.packageRegistry.SetCertificationPolicy(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.recordEvent(control.Event{
+			Type:    "packages.certification_policy.updated",
+			Message: "package certification policy updated",
+			Fields: map[string]any{
+				"require_conformance": policy.RequireConformance,
+				"min_test_pass_rate":  policy.MinTestPassRate,
+				"max_high_vulns":      policy.MaxHighVulns,
+				"max_critical_vulns":  policy.MaxCriticalVulns,
+				"require_signed":      policy.RequireSigned,
+			},
+		}, true)
+		writeJSON(w, http.StatusOK, policy)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handlePackageCertify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.PackageCertificationInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	report, err := s.packageRegistry.Certify(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordEvent(control.Event{
+		Type:    "packages.certification.evaluated",
+		Message: "package certification report generated",
+		Fields: map[string]any{
+			"report_id":   report.ID,
+			"artifact_id": report.ArtifactID,
+			"certified":   report.Certified,
+			"tier":        report.Tier,
+			"score":       report.Score,
+		},
+	}, true)
+	status := http.StatusCreated
+	if !report.Certified {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, report)
+}
+
+func (s *Server) handlePackageCertifications(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.packageRegistry.ListCertifications())
+}
+
+func (s *Server) handlePackagePublicationCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req control.PackagePublicationCheckInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	result := s.packageRegistry.PublicationGateCheck(req)
+	code := http.StatusOK
+	if !result.Allowed {
+		code = http.StatusConflict
+	}
+	writeJSON(w, code, result)
+}

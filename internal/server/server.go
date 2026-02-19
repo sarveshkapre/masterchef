@@ -415,6 +415,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/artifacts/", s.handlePackageArtifactAction)
 	mux.HandleFunc("/v1/packages/signing-policy", s.handlePackageSigningPolicy)
 	mux.HandleFunc("/v1/packages/verify", s.handlePackageVerify)
+	mux.HandleFunc("/v1/packages/certification-policy", s.handlePackageCertificationPolicy)
+	mux.HandleFunc("/v1/packages/certify", s.handlePackageCertify)
+	mux.HandleFunc("/v1/packages/certifications", s.handlePackageCertifications)
+	mux.HandleFunc("/v1/packages/publication/check", s.handlePackagePublicationCheck)
 	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
 	mux.HandleFunc("/v1/agents/catalogs", s.handleAgentCatalogs(baseDir))
 	mux.HandleFunc("/v1/agents/catalogs/replay", s.handleAgentCatalogReplay(baseDir))
@@ -2184,6 +2188,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/packages/signing-policy",
 			"POST /v1/packages/signing-policy",
 			"POST /v1/packages/verify",
+			"GET /v1/packages/certification-policy",
+			"POST /v1/packages/certification-policy",
+			"POST /v1/packages/certify",
+			"GET /v1/packages/certifications",
+			"POST /v1/packages/publication/check",
 			"GET /v1/agents/cert-policy",
 			"POST /v1/agents/cert-policy",
 			"GET /v1/agents/catalogs",
