@@ -122,7 +122,7 @@ Failure-domain-aware serial orchestration is supported with `execution.failure_d
 Disruption budget definitions and rollout-gating evaluation are available via `/v1/control/disruption-budgets` and `/v1/control/disruption-budgets/evaluate`.
 Privilege escalation controls for command resources are supported via `become` and `become_user`, with explicit run-result audit markers.
 Session recording artifacts for privileged remote command executions are emitted under `.masterchef/sessions` and linked from run output.
-Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-resources`, `-tags`, and `-skip-tags`.
+Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-groups`, `-resources`, `-tags`, and `-skip-tags`.
 Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, and `until_contains`.
 Command resources support `rescue_command` and `always_command` hooks for block/rescue/always-style error handling flows.
 Explicit `require`/`before`/`notify`/`subscribe` resource relationships are supported in config and influence planner dependency ordering for event-driven orchestration.

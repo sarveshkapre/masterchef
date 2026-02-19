@@ -361,6 +361,7 @@ func runCheck(args []string) error {
 	minConfidence := fs.Float64("min-confidence", 1.0, "minimum required simulation confidence [0.0-1.0]")
 	format := fs.String("format", "json", "output format: json|human|patch")
 	hostsFilter := fs.String("hosts", "", "comma-separated host filter for targeted checks")
+	groupsFilter := fs.String("groups", "", "comma-separated host-group filter for targeted checks (role:<name>, label:<k>=<v>, topology:<k>=<v>)")
 	resourcesFilter := fs.String("resources", "", "comma-separated resource-id filter for targeted checks")
 	includeTags := fs.String("tags", "", "comma-separated include-tags filter for targeted checks")
 	skipTags := fs.String("skip-tags", "", "comma-separated skip-tags filter for targeted checks")
@@ -381,6 +382,7 @@ func runCheck(args []string) error {
 	}
 	p = filterPlanBySelectors(p, planSelectors{
 		Hosts:       parseCSVSet(*hostsFilter),
+		Groups:      parseCSVSet(*groupsFilter),
 		Resources:   parseCSVSet(*resourcesFilter),
 		IncludeTags: parseCSVSet(*includeTags),
 		SkipTags:    parseCSVSet(*skipTags),
@@ -439,6 +441,7 @@ func runApply(args []string) error {
 	nonInteractive := fs.Bool("non-interactive", false, "fail instead of prompting for approval")
 	reportPath := fs.String("report", "", "write machine-readable run report json to path")
 	hostsFilter := fs.String("hosts", "", "comma-separated host filter for targeted applies")
+	groupsFilter := fs.String("groups", "", "comma-separated host-group filter for targeted applies (role:<name>, label:<k>=<v>, topology:<k>=<v>)")
 	resourcesFilter := fs.String("resources", "", "comma-separated resource-id filter for targeted applies")
 	includeTags := fs.String("tags", "", "comma-separated include-tags filter for targeted applies")
 	skipTags := fs.String("skip-tags", "", "comma-separated skip-tags filter for targeted applies")
@@ -455,6 +458,7 @@ func runApply(args []string) error {
 	}
 	p = filterPlanBySelectors(p, planSelectors{
 		Hosts:       parseCSVSet(*hostsFilter),
+		Groups:      parseCSVSet(*groupsFilter),
 		Resources:   parseCSVSet(*resourcesFilter),
 		IncludeTags: parseCSVSet(*includeTags),
 		SkipTags:    parseCSVSet(*skipTags),
@@ -824,6 +828,7 @@ func topCountKeys(m map[string]int, limit int) []string {
 
 type planSelectors struct {
 	Hosts       map[string]struct{}
+	Groups      map[string]struct{}
 	Resources   map[string]struct{}
 	IncludeTags map[string]struct{}
 	SkipTags    map[string]struct{}
@@ -853,6 +858,18 @@ func matchesSelectors(step planner.Step, selectors planSelectors) bool {
 	}
 	if len(selectors.Hosts) > 0 {
 		if _, ok := selectors.Hosts[strings.ToLower(host)]; !ok {
+			return false
+		}
+	}
+	if len(selectors.Groups) > 0 {
+		matched := false
+		for selector := range selectors.Groups {
+			if matchesGroupSelector(step.Host, selector) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return false
 		}
 	}
@@ -900,6 +917,83 @@ func parseCSVSet(raw string) map[string]struct{} {
 		out[part] = struct{}{}
 	}
 	return out
+}
+
+func matchesGroupSelector(host config.Host, selector string) bool {
+	selector = strings.ToLower(strings.TrimSpace(selector))
+	if selector == "" {
+		return false
+	}
+	hostName := strings.ToLower(strings.TrimSpace(host.Name))
+	if strings.HasPrefix(selector, "host:") {
+		return hostName == strings.TrimSpace(strings.TrimPrefix(selector, "host:"))
+	}
+
+	roleSet := map[string]struct{}{}
+	for _, role := range host.Roles {
+		item := strings.ToLower(strings.TrimSpace(role))
+		if item != "" {
+			roleSet[item] = struct{}{}
+		}
+	}
+	labelSet := map[string]string{}
+	for k, v := range host.Labels {
+		key := strings.ToLower(strings.TrimSpace(k))
+		val := strings.ToLower(strings.TrimSpace(v))
+		if key != "" {
+			labelSet[key] = val
+		}
+	}
+	topologySet := map[string]string{}
+	for k, v := range host.Topology {
+		key := strings.ToLower(strings.TrimSpace(k))
+		val := strings.ToLower(strings.TrimSpace(v))
+		if key != "" {
+			topologySet[key] = val
+		}
+	}
+
+	if strings.HasPrefix(selector, "role:") || strings.HasPrefix(selector, "roles:") {
+		role := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(selector, "roles:"), "role:"))
+		_, ok := roleSet[role]
+		return ok
+	}
+	if strings.HasPrefix(selector, "label:") {
+		return matchesKVSelector(labelSet, strings.TrimPrefix(selector, "label:"))
+	}
+	if strings.HasPrefix(selector, "topology:") {
+		return matchesKVSelector(topologySet, strings.TrimPrefix(selector, "topology:"))
+	}
+	if _, ok := roleSet[selector]; ok {
+		return true
+	}
+	for _, v := range labelSet {
+		if v == selector {
+			return true
+		}
+	}
+	for _, v := range topologySet {
+		if v == selector {
+			return true
+		}
+	}
+	return hostName == selector
+}
+
+func matchesKVSelector(values map[string]string, selector string) bool {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return false
+	}
+	if !strings.Contains(selector, "=") {
+		_, ok := values[strings.ToLower(selector)]
+		return ok
+	}
+	parts := strings.SplitN(selector, "=", 2)
+	key := strings.ToLower(strings.TrimSpace(parts[0]))
+	want := strings.ToLower(strings.TrimSpace(parts[1]))
+	got, ok := values[key]
+	return ok && got == want
 }
 
 type cliDriftTrend struct {
