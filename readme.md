@@ -153,6 +153,7 @@ Policy pull from control plane or signed Git sources is available via `/v1/polic
 Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/beacon-reactor/rules` and `/v1/compat/beacon-reactor/emit`.
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.
 Runtime host discovery and auto-enrollment are available via `/v1/inventory/enroll` and `/v1/inventory/runtime-hosts`, including lifecycle actions for bootstrap, activate, quarantine, and decommission.
+Service-discovery-backed inventory sources (Consul, Kubernetes, cloud tags) are available via `/v1/inventory/discovery-sources` with sync-driven runtime host materialization via `POST /v1/inventory/discovery-sources/sync`.
 Agent check-in jitter/splay controls are available via `POST /v1/agents/checkins` with deterministic per-agent splay assignment.
 Message-bus dispatch mode for scalable agent execution is available via `/v1/agents/dispatch-mode` and `/v1/agents/dispatch` (`local` or `event_bus`).
 Hybrid push/pull execution routing per environment is available via `/v1/agents/dispatch-environments`, allowing environment strategy overrides (`push`, `pull`, `hybrid`) while preserving global dispatch defaults.

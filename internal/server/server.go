@@ -52,6 +52,7 @@ type Server struct {
 	encryptedVars      *control.EncryptedVariableStore
 	facts              *control.FactCache
 	varSources         *control.VariableSourceRegistry
+	discoveryInventory *control.DiscoveryInventoryStore
 	plugins            *control.PluginExtensionStore
 	eventBus           *control.EventBus
 	nodes              *control.NodeLifecycleStore
@@ -136,6 +137,7 @@ func New(addr, baseDir string) *Server {
 	encryptedVars := control.NewEncryptedVariableStore(baseDir)
 	facts := control.NewFactCache(5 * time.Minute)
 	varSources := control.NewVariableSourceRegistry(baseDir)
+	discoveryInventory := control.NewDiscoveryInventoryStore()
 	plugins := control.NewPluginExtensionStore()
 	eventBus := control.NewEventBus()
 	nodes := control.NewNodeLifecycleStore()
@@ -212,6 +214,7 @@ func New(addr, baseDir string) *Server {
 		encryptedVars:      encryptedVars,
 		facts:              facts,
 		varSources:         varSources,
+		discoveryInventory: discoveryInventory,
 		plugins:            plugins,
 		eventBus:           eventBus,
 		nodes:              nodes,
@@ -297,6 +300,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
+	mux.HandleFunc("/v1/inventory/discovery-sources", s.handleDiscoverySources)
+	mux.HandleFunc("/v1/inventory/discovery-sources/sync", s.handleDiscoverySourceSync)
+	mux.HandleFunc("/v1/inventory/discovery-sources/", s.handleDiscoverySourceAction)
 	mux.HandleFunc("/v1/inventory/runtime-hosts", s.handleRuntimeHosts)
 	mux.HandleFunc("/v1/inventory/runtime-hosts/", s.handleRuntimeHostAction)
 	mux.HandleFunc("/v1/inventory/enroll", s.handleRuntimeEnrollAlias)
@@ -1983,6 +1989,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/policy/pull/execute",
 			"GET /v1/policy/pull/results",
 			"GET /v1/inventory/groups",
+			"GET /v1/inventory/discovery-sources",
+			"POST /v1/inventory/discovery-sources",
+			"GET /v1/inventory/discovery-sources/{id}",
+			"POST /v1/inventory/discovery-sources/sync",
 			"GET /v1/fleet/health",
 			"GET /v1/inventory/runtime-hosts",
 			"POST /v1/inventory/runtime-hosts",
