@@ -193,6 +193,7 @@ Policy simulation and gating checks are available via `POST /v1/policy/simulate`
 Post-run invariant checks with configurable severity are available via `POST /v1/control/invariants/check`.
 Release blocker policy enforcement with craftsmanship tiers is available via `GET/POST /v1/release/blocker-policy`.
 Automated dependency update bot workflows with compatibility/performance verification are available via `/v1/release/dependency-bot/policy` and `/v1/release/dependency-bot/updates`.
+Pinned toolchain reproducibility checks for local/CI pipelines are available via `masterchef release toolchain-check`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
 Solution pack catalog is available via `/v1/solution-packs` and workspace-template catalog/bootstrap flows are available via `/v1/workspace-templates`.
@@ -207,6 +208,7 @@ Curated use-case templates for rollout/patching/DR/migration workflows are avail
 - `masterchef release cve-check -root . -advisories advisories.json -blocked-severities critical,high`
 - `masterchef release attest -root . -o attestation.json -test-cmd "go test ./..."`
 - `masterchef release upgrade-assist -baseline baseline-api.json -current current-api.json -format human`
+- `masterchef release toolchain-check -root . -format human`
 
 ## Repository Documents
 

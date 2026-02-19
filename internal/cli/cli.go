@@ -87,7 +87,7 @@ masterchef commands:
   fmt [-f masterchef.yaml] [-o canonical.yaml] [-format yaml|json]
   doctor [-f masterchef.yaml] [-format json|human]
   test-impact [-changes file1,file2,...] [-format json|human]
-  release [sbom|sign|verify|cve-check|attest|upgrade-assist] ...
+  release [sbom|sign|verify|cve-check|attest|upgrade-assist|toolchain-check] ...
   plan [-f masterchef.yaml] [-o plan.json] [-snapshot plan.snapshot.json] [-update-snapshot]
   check [-f masterchef.yaml] [-min-confidence 1.0]
   apply [-f masterchef.yaml]
@@ -1203,7 +1203,7 @@ func runPolicy(args []string) error {
 
 func runRelease(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("release subcommand required: sbom|sign|verify|cve-check|attest|upgrade-assist")
+		return fmt.Errorf("release subcommand required: sbom|sign|verify|cve-check|attest|upgrade-assist|toolchain-check")
 	}
 	switch args[0] {
 	case "sbom":
@@ -1394,6 +1394,37 @@ func runRelease(args []string) error {
 		}
 		if !report.DeprecationLifecyclePass {
 			return ExitError{Code: 8, Msg: "upgrade assistant detected deprecation lifecycle violations"}
+		}
+		return nil
+	case "toolchain-check":
+		fs := flag.NewFlagSet("release toolchain-check", flag.ContinueOnError)
+		root := fs.String("root", ".", "repository root path containing go.mod")
+		format := fs.String("format", "human", "output format: human|json")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		report, err := release.CheckToolchain(*root)
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(strings.TrimSpace(*format), "json") {
+			b, _ := json.MarshalIndent(report, "", "  ")
+			fmt.Println(string(b))
+		} else {
+			fmt.Printf("runtime=%s go=%s toolchain=%s pinned=%t match=%t\n",
+				report.RuntimeGoVersion, report.GoDirective, report.ToolchainDirective, report.Pinned, report.Match)
+			if report.Reason != "" {
+				fmt.Printf("reason: %s\n", report.Reason)
+			}
+			if len(report.SuggestedPipeline) > 0 {
+				fmt.Println("suggested_pipeline:")
+				for _, line := range report.SuggestedPipeline {
+					fmt.Printf("- %s\n", line)
+				}
+			}
+		}
+		if !report.Match {
+			return ExitError{Code: 10, Msg: "toolchain check failed: runtime does not match pinned directives"}
 		}
 		return nil
 	default:

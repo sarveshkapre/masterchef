@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -162,6 +163,39 @@ func TestRunReleaseUpgradeAssistPass(t *testing.T) {
 
 	if err := runRelease([]string{"upgrade-assist", "-baseline", baselinePath, "-current", currentPath}); err != nil {
 		t.Fatalf("expected upgrade-assist pass, got %v", err)
+	}
+}
+
+func TestRunReleaseToolchainCheck(t *testing.T) {
+	tmp := t.TempDir()
+	runtimeVer := strings.TrimPrefix(runtime.Version(), "go")
+	goDirective := runtimeVer
+	parts := strings.Split(runtimeVer, ".")
+	if len(parts) >= 2 {
+		goDirective = parts[0] + "." + parts[1]
+	}
+	mod := "module example.com/test\n\ngo " + goDirective + "\ntoolchain go" + runtimeVer + "\n"
+	if err := os.WriteFile(filepath.Join(tmp, "go.mod"), []byte(mod), 0o644); err != nil {
+		t.Fatalf("write go.mod failed: %v", err)
+	}
+	if err := runRelease([]string{"toolchain-check", "-root", tmp, "-format", "json"}); err != nil {
+		t.Fatalf("toolchain-check expected pass, got %v", err)
+	}
+}
+
+func TestRunReleaseToolchainCheckFail(t *testing.T) {
+	tmp := t.TempDir()
+	mod := "module example.com/test\n\ngo 1.22\ntoolchain go0.0.1\n"
+	if err := os.WriteFile(filepath.Join(tmp, "go.mod"), []byte(mod), 0o644); err != nil {
+		t.Fatalf("write go.mod failed: %v", err)
+	}
+	err := runRelease([]string{"toolchain-check", "-root", tmp})
+	if err == nil {
+		t.Fatalf("expected toolchain-check failure")
+	}
+	ec, ok := err.(ExitError)
+	if !ok || ec.Code != 10 {
+		t.Fatalf("expected ExitError code 10, got %v", err)
 	}
 }
 
