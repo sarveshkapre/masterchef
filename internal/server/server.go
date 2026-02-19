@@ -71,6 +71,7 @@ type Server struct {
 	accessApprovals    *control.AccessApprovalStore
 	jitGrants          *control.JITAccessGrantStore
 	compliance         *control.ComplianceStore
+	rbac               *control.RBACStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -139,6 +140,7 @@ func New(addr, baseDir string) *Server {
 	accessApprovals := control.NewAccessApprovalStore()
 	jitGrants := control.NewJITAccessGrantStore()
 	compliance := control.NewComplianceStore()
+	rbac := control.NewRBACStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -199,6 +201,7 @@ func New(addr, baseDir string) *Server {
 		accessApprovals:    accessApprovals,
 		jitGrants:          jitGrants,
 		compliance:         compliance,
+		rbac:               rbac,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -273,6 +276,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/access/jit-grants", s.handleJITAccessGrants)
 	mux.HandleFunc("/v1/access/jit-grants/validate", s.handleJITAccessGrantValidate)
 	mux.HandleFunc("/v1/access/jit-grants/", s.handleJITAccessGrantAction)
+	mux.HandleFunc("/v1/access/rbac/roles", s.handleRBACRoles)
+	mux.HandleFunc("/v1/access/rbac/roles/", s.handleRBACRoleAction)
+	mux.HandleFunc("/v1/access/rbac/bindings", s.handleRBACBindings)
+	mux.HandleFunc("/v1/access/rbac/check", s.handleRBACAccessCheck)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -1915,6 +1922,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/access/jit-grants/validate",
 			"GET /v1/access/jit-grants/{id}",
 			"POST /v1/access/jit-grants/{id}/revoke",
+			"GET /v1/access/rbac/roles",
+			"POST /v1/access/rbac/roles",
+			"GET /v1/access/rbac/roles/{id}",
+			"GET /v1/access/rbac/bindings",
+			"POST /v1/access/rbac/bindings",
+			"POST /v1/access/rbac/check",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",
