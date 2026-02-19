@@ -63,6 +63,7 @@ type Server struct {
 	facts               *control.FactCache
 	varSources          *control.VariableSourceRegistry
 	discoveryInventory  *control.DiscoveryInventoryStore
+	encProviders        *control.ENCProviderStore
 	plugins             *control.PluginExtensionStore
 	eventBus            *control.EventBus
 	nodes               *control.NodeLifecycleStore
@@ -166,6 +167,7 @@ func New(addr, baseDir string) *Server {
 	facts := control.NewFactCache(5 * time.Minute)
 	varSources := control.NewVariableSourceRegistry(baseDir)
 	discoveryInventory := control.NewDiscoveryInventoryStore()
+	encProviders := control.NewENCProviderStore()
 	plugins := control.NewPluginExtensionStore()
 	eventBus := control.NewEventBus()
 	nodes := control.NewNodeLifecycleStore()
@@ -261,6 +263,7 @@ func New(addr, baseDir string) *Server {
 		facts:               facts,
 		varSources:          varSources,
 		discoveryInventory:  discoveryInventory,
+		encProviders:        encProviders,
 		plugins:             plugins,
 		eventBus:            eventBus,
 		nodes:               nodes,
@@ -383,6 +386,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/import/cmdb", s.handleInventoryCMDBImport)
 	mux.HandleFunc("/v1/inventory/import/assist", s.handleInventoryImportAssistant)
 	mux.HandleFunc("/v1/inventory/import/brownfield-bootstrap", s.handleInventoryBrownfieldBootstrap)
+	mux.HandleFunc("/v1/inventory/node-classifiers", s.handleENCProviders)
+	mux.HandleFunc("/v1/inventory/node-classifiers/classify", s.handleENCClassify)
+	mux.HandleFunc("/v1/inventory/node-classifiers/", s.handleENCProviderAction)
 	mux.HandleFunc("/v1/compat/grains", s.handleCompatGrains)
 	mux.HandleFunc("/v1/compat/grains/query", s.handleCompatGrainsQuery)
 	mux.HandleFunc("/v1/inventory/discovery-sources", s.handleDiscoverySources)
@@ -2139,6 +2145,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/inventory/import/cmdb",
 			"POST /v1/inventory/import/assist",
 			"POST /v1/inventory/import/brownfield-bootstrap",
+			"GET /v1/inventory/node-classifiers",
+			"POST /v1/inventory/node-classifiers",
+			"GET /v1/inventory/node-classifiers/{id}",
+			"POST /v1/inventory/node-classifiers/{id}/enable",
+			"POST /v1/inventory/node-classifiers/{id}/disable",
+			"POST /v1/inventory/node-classifiers/classify",
 			"GET /v1/compat/grains",
 			"POST /v1/compat/grains/query",
 			"GET /v1/inventory/discovery-sources",
