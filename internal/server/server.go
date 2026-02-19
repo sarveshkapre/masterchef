@@ -85,6 +85,7 @@ type Server struct {
 	agentAttestation   *control.AgentAttestationStore
 	policyPull         *control.PolicyPullStore
 	multiMaster        *control.MultiMasterStore
+	edgeRelay          *control.EdgeRelayStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -167,6 +168,7 @@ func New(addr, baseDir string) *Server {
 	agentAttestation := control.NewAgentAttestationStore()
 	policyPull := control.NewPolicyPullStore()
 	multiMaster := control.NewMultiMasterStore()
+	edgeRelay := control.NewEdgeRelayStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -241,6 +243,7 @@ func New(addr, baseDir string) *Server {
 		agentAttestation:   agentAttestation,
 		policyPull:         policyPull,
 		multiMaster:        multiMaster,
+		edgeRelay:          edgeRelay,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -272,6 +275,9 @@ func New(addr, baseDir string) *Server {
 
 	mux.HandleFunc("/healthz", s.handleHealth)
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
+	mux.HandleFunc("/v1/edge-relay/sites", s.handleEdgeRelaySites)
+	mux.HandleFunc("/v1/edge-relay/sites/", s.handleEdgeRelaySiteAction)
+	mux.HandleFunc("/v1/edge-relay/messages", s.handleEdgeRelayMessages)
 	mux.HandleFunc("/v1/docs/actions", s.handleActionDocs)
 	mux.HandleFunc("/v1/docs/actions/", s.handleActionDocByID)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
@@ -1958,6 +1964,13 @@ func currentAPISpec() control.APISpec {
 			"GET /healthz",
 			"GET /v1/activity",
 			"GET /v1/search",
+			"GET /v1/edge-relay/sites",
+			"POST /v1/edge-relay/sites",
+			"GET /v1/edge-relay/sites/{id}",
+			"POST /v1/edge-relay/sites/{id}/heartbeat",
+			"POST /v1/edge-relay/sites/{id}/deliver",
+			"GET /v1/edge-relay/messages",
+			"POST /v1/edge-relay/messages",
 			"GET /v1/policy/pull/sources",
 			"POST /v1/policy/pull/sources",
 			"GET /v1/policy/pull/sources/{id}",
