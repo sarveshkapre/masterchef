@@ -118,6 +118,7 @@ Command resources support `rescue_command` and `always_command` hooks for block/
 Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.
 Event bus integrations for webhook, Kafka, and NATS targets are available via `/v1/event-bus/targets`, `/v1/event-bus/publish`, and `/v1/event-bus/deliveries`.
 Branch-based ephemeral environment previews are available via `/v1/gitops/previews` with lifecycle actions for promote/close and queued preview applies.
+Promotion pipelines with immutable artifact pinning are available via `/v1/gitops/promotions` with stage-advance enforcement against digest drift.
 Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/beacon-reactor/rules` and `/v1/compat/beacon-reactor/emit`.
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.
 Runtime host discovery and auto-enrollment are available via `/v1/inventory/enroll` and `/v1/inventory/runtime-hosts`, including lifecycle actions for bootstrap, activate, quarantine, and decommission.

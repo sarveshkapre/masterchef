@@ -56,6 +56,7 @@ type Server struct {
 	eventBus           *control.EventBus
 	nodes              *control.NodeLifecycleStore
 	gitopsPreviews     *control.GitOpsPreviewStore
+	gitopsPromotions   *control.GitOpsPromotionStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -109,6 +110,7 @@ func New(addr, baseDir string) *Server {
 	eventBus := control.NewEventBus()
 	nodes := control.NewNodeLifecycleStore()
 	gitopsPreviews := control.NewGitOpsPreviewStore()
+	gitopsPromotions := control.NewGitOpsPromotionStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -154,6 +156,7 @@ func New(addr, baseDir string) *Server {
 		eventBus:           eventBus,
 		nodes:              nodes,
 		gitopsPreviews:     gitopsPreviews,
+		gitopsPromotions:   gitopsPromotions,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -202,6 +205,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/enroll", s.handleRuntimeEnrollAlias)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
+	mux.HandleFunc("/v1/gitops/promotions", s.handleGitOpsPromotions)
+	mux.HandleFunc("/v1/gitops/promotions/", s.handleGitOpsPromotionAction)
 	mux.HandleFunc("/v1/data-bags", s.handleDataBags)
 	mux.HandleFunc("/v1/data-bags/search", s.handleDataBagSearch)
 	mux.HandleFunc("/v1/data-bags/", s.handleDataBagItem)
@@ -1773,6 +1778,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/gitops/previews/{id}",
 			"POST /v1/gitops/previews/{id}/promote",
 			"POST /v1/gitops/previews/{id}/close",
+			"GET /v1/gitops/promotions",
+			"POST /v1/gitops/promotions",
+			"GET /v1/gitops/promotions/{id}",
+			"POST /v1/gitops/promotions/{id}/advance",
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
 			"GET /v1/drift/insights",
