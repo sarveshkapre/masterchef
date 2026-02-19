@@ -14,6 +14,7 @@ import (
 type RoleDefinition struct {
 	Name               string         `json:"name"`
 	Description        string         `json:"description,omitempty"`
+	Profiles           []string       `json:"profiles,omitempty"`
 	RunList            []string       `json:"run_list,omitempty"`
 	PolicyGroup        string         `json:"policy_group,omitempty"`
 	DefaultAttributes  map[string]any `json:"default_attributes,omitempty"`
@@ -75,6 +76,7 @@ func (s *RoleEnvironmentStore) UpsertRole(role RoleDefinition) (RoleDefinition, 
 		return RoleDefinition{}, errors.New("name is required")
 	}
 	role.Name = name
+	role.Profiles = normalizeRoleProfiles(role.Profiles)
 	role.RunList = normalizeRunList(role.RunList)
 	role.PolicyGroup = strings.TrimSpace(role.PolicyGroup)
 	role.DefaultAttributes = cloneRoleEnvMap(role.DefaultAttributes)
@@ -186,7 +188,8 @@ func (s *RoleEnvironmentStore) DeleteEnvironment(name string) bool {
 
 func (s *RoleEnvironmentStore) Resolve(roleName, envName string) (RoleEnvironmentResolution, error) {
 	s.mu.RLock()
-	role, ok := s.roles[normalizeRoleEnvName(roleName)]
+	roleName = normalizeRoleEnvName(roleName)
+	role, ok := s.roles[roleName]
 	if !ok {
 		s.mu.RUnlock()
 		return RoleEnvironmentResolution{}, errors.New("role not found")
@@ -196,22 +199,25 @@ func (s *RoleEnvironmentStore) Resolve(roleName, envName string) (RoleEnvironmen
 		s.mu.RUnlock()
 		return RoleEnvironmentResolution{}, errors.New("environment not found")
 	}
+	hier, err := s.resolveRoleHierarchyLocked(role.Name, map[string]struct{}{}, map[string]roleHierarchy{})
 	s.mu.RUnlock()
-
-	runList := append([]string{}, role.RunList...)
+	if err != nil {
+		return RoleEnvironmentResolution{}, err
+	}
+	runList := append([]string{}, hier.RunList...)
 	if override := env.RunListOverrides[role.Name]; len(override) > 0 {
 		runList = append([]string{}, override...)
 	}
 	attrs := map[string]any{}
-	mergeRoleEnvMap(attrs, role.DefaultAttributes)
+	mergeRoleEnvMap(attrs, hier.DefaultAttributes)
 	mergeRoleEnvMap(attrs, env.DefaultAttributes)
-	mergeRoleEnvMap(attrs, role.OverrideAttributes)
+	mergeRoleEnvMap(attrs, hier.OverrideAttributes)
 	mergeRoleEnvMap(attrs, env.OverrideAttributes)
 	mergeRoleEnvMap(attrs, env.PolicyOverrides)
 
 	policyGroup := strings.TrimSpace(env.PolicyGroup)
 	if policyGroup == "" {
-		policyGroup = strings.TrimSpace(role.PolicyGroup)
+		policyGroup = strings.TrimSpace(hier.PolicyGroup)
 	}
 	return RoleEnvironmentResolution{
 		Role:        role.Name,
@@ -219,13 +225,11 @@ func (s *RoleEnvironmentStore) Resolve(roleName, envName string) (RoleEnvironmen
 		RunList:     runList,
 		Attributes:  attrs,
 		PolicyGroup: policyGroup,
-		Precedence: []string{
-			"role.default_attributes",
+		Precedence: append(append([]string{}, hier.Precedence...),
 			"environment.default_attributes",
-			"role.override_attributes",
 			"environment.override_attributes",
 			"environment.policy_overrides",
-		},
+		),
 		ResolvedAt: time.Now().UTC(),
 	}, nil
 }
@@ -245,6 +249,7 @@ func (s *RoleEnvironmentStore) loadFromDisk() {
 			if role.Name == "" {
 				continue
 			}
+			role.Profiles = normalizeRoleProfiles(role.Profiles)
 			role.RunList = normalizeRunList(role.RunList)
 			role.DefaultAttributes = cloneRoleEnvMap(role.DefaultAttributes)
 			role.OverrideAttributes = cloneRoleEnvMap(role.OverrideAttributes)
@@ -303,6 +308,7 @@ func readRoleEnvJSON(path string, v any) bool {
 
 func cloneRole(in RoleDefinition) RoleDefinition {
 	out := in
+	out.Profiles = append([]string{}, in.Profiles...)
 	out.RunList = append([]string{}, in.RunList...)
 	out.DefaultAttributes = cloneRoleEnvMap(in.DefaultAttributes)
 	out.OverrideAttributes = cloneRoleEnvMap(in.OverrideAttributes)
@@ -343,6 +349,91 @@ func normalizeRunListOverrides(in map[string][]string) map[string][]string {
 		}
 		out[roleName] = normalizeRunList(runList)
 	}
+	return out
+}
+
+func normalizeRoleProfiles(profiles []string) []string {
+	out := make([]string, 0, len(profiles))
+	seen := map[string]struct{}{}
+	for _, profile := range profiles {
+		name := normalizeRoleEnvName(profile)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out
+}
+
+type roleHierarchy struct {
+	RunList            []string
+	DefaultAttributes  map[string]any
+	OverrideAttributes map[string]any
+	PolicyGroup        string
+	Precedence         []string
+}
+
+func (s *RoleEnvironmentStore) resolveRoleHierarchyLocked(name string, visiting map[string]struct{}, cache map[string]roleHierarchy) (roleHierarchy, error) {
+	name = normalizeRoleEnvName(name)
+	if cached, ok := cache[name]; ok {
+		return cloneRoleHierarchy(cached), nil
+	}
+	if _, ok := visiting[name]; ok {
+		return roleHierarchy{}, errors.New("role profile inheritance cycle detected")
+	}
+	role, ok := s.roles[name]
+	if !ok {
+		return roleHierarchy{}, errors.New("role not found")
+	}
+	visiting[name] = struct{}{}
+
+	out := roleHierarchy{
+		RunList:            []string{},
+		DefaultAttributes:  map[string]any{},
+		OverrideAttributes: map[string]any{},
+		PolicyGroup:        "",
+		Precedence:         []string{},
+	}
+	for _, parent := range role.Profiles {
+		parentResolved, err := s.resolveRoleHierarchyLocked(parent, visiting, cache)
+		if err != nil {
+			delete(visiting, name)
+			return roleHierarchy{}, err
+		}
+		out.RunList = append(out.RunList, parentResolved.RunList...)
+		mergeRoleEnvMap(out.DefaultAttributes, parentResolved.DefaultAttributes)
+		mergeRoleEnvMap(out.OverrideAttributes, parentResolved.OverrideAttributes)
+		if out.PolicyGroup == "" {
+			out.PolicyGroup = strings.TrimSpace(parentResolved.PolicyGroup)
+		}
+		out.Precedence = append(out.Precedence, parentResolved.Precedence...)
+	}
+	out.RunList = append(out.RunList, role.RunList...)
+	mergeRoleEnvMap(out.DefaultAttributes, role.DefaultAttributes)
+	mergeRoleEnvMap(out.OverrideAttributes, role.OverrideAttributes)
+	if strings.TrimSpace(role.PolicyGroup) != "" {
+		out.PolicyGroup = strings.TrimSpace(role.PolicyGroup)
+	}
+	out.Precedence = append(out.Precedence,
+		"role["+role.Name+"].default_attributes",
+		"role["+role.Name+"].override_attributes",
+	)
+
+	cache[name] = cloneRoleHierarchy(out)
+	delete(visiting, name)
+	return out, nil
+}
+
+func cloneRoleHierarchy(in roleHierarchy) roleHierarchy {
+	out := in
+	out.RunList = append([]string{}, in.RunList...)
+	out.DefaultAttributes = cloneRoleEnvMap(in.DefaultAttributes)
+	out.OverrideAttributes = cloneRoleEnvMap(in.OverrideAttributes)
+	out.Precedence = append([]string{}, in.Precedence...)
 	return out
 }
 

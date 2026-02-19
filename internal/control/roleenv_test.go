@@ -140,3 +140,78 @@ func TestRoleEnvironmentDelete(t *testing.T) {
 		t.Fatalf("expected second environment delete to return false")
 	}
 }
+
+func TestRoleEnvironmentResolveProfileInheritance(t *testing.T) {
+	baseDir := t.TempDir()
+	store := NewRoleEnvironmentStore(baseDir)
+	_, err := store.UpsertRole(RoleDefinition{
+		Name:        "base",
+		RunList:     []string{"recipe[base]"},
+		PolicyGroup: "candidate",
+		DefaultAttributes: map[string]any{
+			"tier": "base-default",
+		},
+		OverrideAttributes: map[string]any{
+			"merged": map[string]any{"a": "base"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert base role failed: %v", err)
+	}
+	_, err = store.UpsertRole(RoleDefinition{
+		Name:        "app",
+		Profiles:    []string{"base"},
+		RunList:     []string{"recipe[app]"},
+		PolicyGroup: "stable",
+		DefaultAttributes: map[string]any{
+			"tier": "app-default",
+		},
+		OverrideAttributes: map[string]any{
+			"merged": map[string]any{"b": "app"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert app role failed: %v", err)
+	}
+	_, err = store.UpsertEnvironment(EnvironmentDefinition{Name: "prod"})
+	if err != nil {
+		t.Fatalf("upsert env failed: %v", err)
+	}
+	res, err := store.Resolve("app", "prod")
+	if err != nil {
+		t.Fatalf("resolve with profile inheritance failed: %v", err)
+	}
+	if len(res.RunList) != 2 || res.RunList[0] != "recipe[base]" || res.RunList[1] != "recipe[app]" {
+		t.Fatalf("expected inherited run list, got %#v", res.RunList)
+	}
+	if res.PolicyGroup != "stable" {
+		t.Fatalf("expected child policy group to override parent, got %q", res.PolicyGroup)
+	}
+	merged, ok := res.Attributes["merged"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected merged map in attributes, got %#v", res.Attributes)
+	}
+	if merged["a"] != "base" || merged["b"] != "app" {
+		t.Fatalf("expected inherited+child override attributes, got %#v", merged)
+	}
+}
+
+func TestRoleEnvironmentResolveProfileCycle(t *testing.T) {
+	baseDir := t.TempDir()
+	store := NewRoleEnvironmentStore(baseDir)
+	_, err := store.UpsertRole(RoleDefinition{Name: "a", Profiles: []string{"b"}, RunList: []string{"recipe[a]"}})
+	if err != nil {
+		t.Fatalf("upsert role a failed: %v", err)
+	}
+	_, err = store.UpsertRole(RoleDefinition{Name: "b", Profiles: []string{"a"}, RunList: []string{"recipe[b]"}})
+	if err != nil {
+		t.Fatalf("upsert role b failed: %v", err)
+	}
+	_, err = store.UpsertEnvironment(EnvironmentDefinition{Name: "prod"})
+	if err != nil {
+		t.Fatalf("upsert env failed: %v", err)
+	}
+	if _, err := store.Resolve("a", "prod"); err == nil {
+		t.Fatalf("expected role profile cycle detection error")
+	}
+}

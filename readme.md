@@ -104,6 +104,7 @@ Fleet health SLO/error-budget views are available via `GET /v1/fleet/health`.
 Universal command-palette search across hosts, services, runs, policies, and modules is available via `GET /v1/search`.
 Data bag/global object store with encrypted item support and structured search is available via `/v1/data-bags` and `/v1/data-bags/search`.
 Chef-style role and environment objects with deterministic per-environment resolution are available via `/v1/roles`, `/v1/environments`, and `GET /v1/roles/{name}/resolve`.
+Role/profile/environment inheritance is supported via role `profiles`, with parent-role run-list and attribute resolution plus cycle detection in `GET /v1/roles/{name}/resolve`.
 Open schema model registry and validation (YAML/CUE/JSON Schema) are available via `/v1/schema/models` and `POST /v1/schema/validate`.
 Configuration composition with recursive `includes`, `imports`, and `overlays` is supported by the config loader with deterministic precedence and cycle detection.
 Configuration conditionals and matrix expansion are supported on resources via `when` and `matrix`, with deterministic cartesian expansion during config load.
