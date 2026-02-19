@@ -73,6 +73,8 @@ type Server struct {
 	compliance         *control.ComplianceStore
 	rbac               *control.RBACStore
 	abac               *control.ABACStore
+	identity           *control.IdentityStore
+	scim               *control.SCIMStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -143,6 +145,8 @@ func New(addr, baseDir string) *Server {
 	compliance := control.NewComplianceStore()
 	rbac := control.NewRBACStore()
 	abac := control.NewABACStore()
+	identity := control.NewIdentityStore()
+	scim := control.NewSCIMStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -205,6 +209,8 @@ func New(addr, baseDir string) *Server {
 		compliance:         compliance,
 		rbac:               rbac,
 		abac:               abac,
+		identity:           identity,
+		scim:               scim,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -285,6 +291,16 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/access/rbac/check", s.handleRBACAccessCheck)
 	mux.HandleFunc("/v1/access/abac/policies", s.handleABACPolicies)
 	mux.HandleFunc("/v1/access/abac/check", s.handleABACCheck)
+	mux.HandleFunc("/v1/identity/sso/providers", s.handleSSOProviders)
+	mux.HandleFunc("/v1/identity/sso/providers/", s.handleSSOProviderAction)
+	mux.HandleFunc("/v1/identity/sso/login/start", s.handleSSOLoginStart)
+	mux.HandleFunc("/v1/identity/sso/login/callback", s.handleSSOLoginCallback)
+	mux.HandleFunc("/v1/identity/sso/sessions", s.handleSSOSessions)
+	mux.HandleFunc("/v1/identity/sso/sessions/", s.handleSSOSessionAction)
+	mux.HandleFunc("/v1/identity/scim/roles", s.handleSCIMRoles)
+	mux.HandleFunc("/v1/identity/scim/roles/", s.handleSCIMRoleAction)
+	mux.HandleFunc("/v1/identity/scim/teams", s.handleSCIMTeams)
+	mux.HandleFunc("/v1/identity/scim/teams/", s.handleSCIMTeamAction)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -1936,6 +1952,21 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/access/abac/policies",
 			"POST /v1/access/abac/policies",
 			"POST /v1/access/abac/check",
+			"GET /v1/identity/sso/providers",
+			"POST /v1/identity/sso/providers",
+			"GET /v1/identity/sso/providers/{id}",
+			"POST /v1/identity/sso/providers/{id}/enable",
+			"POST /v1/identity/sso/providers/{id}/disable",
+			"POST /v1/identity/sso/login/start",
+			"POST /v1/identity/sso/login/callback",
+			"GET /v1/identity/sso/sessions",
+			"GET /v1/identity/sso/sessions/{id}",
+			"GET /v1/identity/scim/roles",
+			"POST /v1/identity/scim/roles",
+			"GET /v1/identity/scim/roles/{id}",
+			"GET /v1/identity/scim/teams",
+			"POST /v1/identity/scim/teams",
+			"GET /v1/identity/scim/teams/{id}",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",
