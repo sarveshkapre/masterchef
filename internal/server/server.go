@@ -80,6 +80,7 @@ type Server struct {
 	federation            *control.FederationStore
 	schedulerPartitions   *control.SchedulerPartitionStore
 	workerAutoscaling     *control.WorkerAutoscalingStore
+	costScheduling        *control.CostSchedulingStore
 	tenantLimits          *control.TenantLimitStore
 	schemaMigs            *control.SchemaMigrationManager
 	openSchemas           *control.OpenSchemaStore
@@ -215,6 +216,7 @@ func New(addr, baseDir string) *Server {
 	federation := control.NewFederationStore()
 	schedulerPartitions := control.NewSchedulerPartitionStore()
 	workerAutoscaling := control.NewWorkerAutoscalingStore()
+	costScheduling := control.NewCostSchedulingStore()
 	tenantLimits := control.NewTenantLimitStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	openSchemas := control.NewOpenSchemaStore()
@@ -342,6 +344,7 @@ func New(addr, baseDir string) *Server {
 		federation:            federation,
 		schedulerPartitions:   schedulerPartitions,
 		workerAutoscaling:     workerAutoscaling,
+		costScheduling:        costScheduling,
 		tenantLimits:          tenantLimits,
 		schemaMigs:            schemaMigs,
 		openSchemas:           openSchemas,
@@ -814,6 +817,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/scheduler/partition-decision", s.handleSchedulerPartitionDecision)
 	mux.HandleFunc("/v1/control/autoscaling/policy", s.handleWorkerAutoscalingPolicy)
 	mux.HandleFunc("/v1/control/autoscaling/recommend", s.handleWorkerAutoscalingRecommend)
+	mux.HandleFunc("/v1/control/cost-scheduling/policies", s.handleCostSchedulingPolicies)
+	mux.HandleFunc("/v1/control/cost-scheduling/admit", s.handleCostSchedulingAdmit)
 	mux.HandleFunc("/v1/control/tenancy/policies", s.handleTenantPolicies)
 	mux.HandleFunc("/v1/control/tenancy/admit-check", s.handleTenantAdmissionCheck)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
@@ -2862,6 +2867,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/autoscaling/policy",
 			"POST /v1/control/autoscaling/policy",
 			"POST /v1/control/autoscaling/recommend",
+			"GET /v1/control/cost-scheduling/policies",
+			"POST /v1/control/cost-scheduling/policies",
+			"POST /v1/control/cost-scheduling/admit",
 			"GET /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/admit-check",

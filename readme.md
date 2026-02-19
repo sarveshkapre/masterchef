@@ -197,6 +197,7 @@ Multi-master control mode with centralized job/event cache is available via `/v1
 Multi-region control-plane federation is available via `/v1/control/federation/peers` and `/v1/control/federation/health`.
 Fleet sharding and tenancy-aware scheduler partitioning are available via `/v1/control/scheduler/partitions` and `/v1/control/scheduler/partition-decision`.
 Adaptive worker autoscaling recommendations based on queue depth and p95 latency are available via `/v1/control/autoscaling/policy` and `/v1/control/autoscaling/recommend`.
+Cost-aware scheduling and throttling controls are available via `/v1/control/cost-scheduling/policies` and `/v1/control/cost-scheduling/admit`.
 Short-lived stateless worker execution mode (to reduce long-running process drift) is configurable via `GET/POST /v1/control/workers/lifecycle`, including max jobs per worker and restart delay controls.
 Long-running run leases with heartbeat and stale-lease recovery are available via `/v1/control/run-leases`, `/v1/control/run-leases/heartbeat`, and `/v1/control/run-leases/recover`.
 Per-step execution snapshots for forensic analysis are available via `/v1/execution/snapshots` with filterable run/job queries and snapshot-by-id retrieval.
