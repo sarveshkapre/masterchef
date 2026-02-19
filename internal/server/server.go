@@ -72,6 +72,7 @@ type Server struct {
 	readinessScorecards    *control.ReadinessScorecardStore
 	mutationTests          *control.MutationStore
 	propertyHarness        *control.PropertyHarnessStore
+	modulePolicyHarness    *control.ModulePolicyHarnessStore
 	styleAnalyzer          *control.StyleAnalyzer
 	providerProtocols      *control.ProviderProtocolStore
 	healthProbes           *control.HealthProbeStore
@@ -213,6 +214,7 @@ func New(addr, baseDir string) *Server {
 	readinessScorecards := control.NewReadinessScorecardStore()
 	mutationTests := control.NewMutationStore()
 	propertyHarness := control.NewPropertyHarnessStore()
+	modulePolicyHarness := control.NewModulePolicyHarnessStore()
 	styleAnalyzer := control.NewStyleAnalyzer()
 	providerProtocols := control.NewProviderProtocolStore()
 	healthProbes := control.NewHealthProbeStore()
@@ -346,6 +348,7 @@ func New(addr, baseDir string) *Server {
 		readinessScorecards:    readinessScorecards,
 		mutationTests:          mutationTests,
 		propertyHarness:        propertyHarness,
+		modulePolicyHarness:    modulePolicyHarness,
 		styleAnalyzer:          styleAnalyzer,
 		providerProtocols:      providerProtocols,
 		healthProbes:           healthProbes,
@@ -523,6 +526,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/property-harness/cases", s.handlePropertyHarnessCases)
 	mux.HandleFunc("/v1/release/tests/property-harness/runs", s.handlePropertyHarnessRuns)
 	mux.HandleFunc("/v1/release/tests/property-harness/runs/", s.handlePropertyHarnessRunAction)
+	mux.HandleFunc("/v1/release/tests/harness/cases", s.handleModulePolicyHarnessCases)
+	mux.HandleFunc("/v1/release/tests/harness/runs", s.handleModulePolicyHarnessRuns)
+	mux.HandleFunc("/v1/release/tests/harness/runs/", s.handleModulePolicyHarnessRunAction)
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
@@ -2775,6 +2781,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/tests/property-harness/runs",
 			"POST /v1/release/tests/property-harness/runs",
 			"GET /v1/release/tests/property-harness/runs/{id}",
+			"GET /v1/release/tests/harness/cases",
+			"POST /v1/release/tests/harness/cases",
+			"GET /v1/release/tests/harness/runs",
+			"POST /v1/release/tests/harness/runs",
+			"GET /v1/release/tests/harness/runs/{id}",
 			"GET /v1/providers/conformance/suites",
 			"POST /v1/providers/conformance/suites",
 			"GET /v1/providers/conformance/runs",

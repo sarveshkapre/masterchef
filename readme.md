@@ -266,6 +266,7 @@ Ephemeral test environment runner workflows for integration checks are available
 Load and soak test suites for control plane, scheduler, and execution workers are available via `/v1/release/tests/load-soak/suites` and `/v1/release/tests/load-soak/runs`.
 Mutation testing support for critical provider logic is available via `/v1/release/tests/mutation/policy`, `/v1/release/tests/mutation/suites`, and `/v1/release/tests/mutation/runs`.
 Property-based testing harness for idempotency and convergence invariants is available via `/v1/release/tests/property-harness/cases` and `/v1/release/tests/property-harness/runs`.
+Built-in module/policy test harness workflows are available via `/v1/release/tests/harness/cases`, `/v1/release/tests/harness/runs`, and `/v1/release/tests/harness/runs/{id}`.
 Pinned toolchain reproducibility checks for local/CI pipelines are available via `masterchef release toolchain-check`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters and `GET /v1/activity/audit-timeline` identity/resource categories.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
