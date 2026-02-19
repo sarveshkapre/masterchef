@@ -316,6 +316,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/freeze", s.handleFreeze)
 	mux.HandleFunc("/v1/control/maintenance", s.handleMaintenance)
 	mux.HandleFunc("/v1/control/handoff", s.handleHandoff)
+	mux.HandleFunc("/v1/control/topology-advisor", s.handleTopologyAdvisor(baseDir))
 	mux.HandleFunc("/v1/control/checklists", s.handleChecklists)
 	mux.HandleFunc("/v1/control/checklists/", s.handleChecklistAction)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
@@ -1951,6 +1952,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/maintenance",
 			"GET /v1/control/maintenance",
 			"GET /v1/control/handoff",
+			"GET /v1/control/topology-advisor",
 			"GET /v1/control/checklists",
 			"POST /v1/control/checklists",
 			"GET /v1/control/checklists/{id}",
