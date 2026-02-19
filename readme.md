@@ -171,6 +171,7 @@ Hierarchical relay/syndic topology modeling for segmented mega-fleet routing is 
 Offline and air-gapped operation controls with signed offline bundle creation/verification are available via `/v1/offline/mode`, `/v1/offline/bundles`, and `/v1/offline/bundles/verify`.
 Offline registry mirroring and synchronization workflows are available via `/v1/offline/mirrors` and `POST /v1/offline/mirrors/sync`.
 FIPS-compatible cryptography mode controls and validation are available via `/v1/security/crypto/fips-mode` and `/v1/security/crypto/fips/validate`.
+Masterless execution mode with local state/pillar rendering is available via `/v1/execution/masterless/mode` and `POST /v1/execution/masterless/render`.
 Control-plane canary upgrade workflow with automatic rollback on regression is available via `/v1/control/canary-upgrades`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).

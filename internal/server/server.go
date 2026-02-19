@@ -73,6 +73,7 @@ type Server struct {
 	disruptionBudgets   *control.DisruptionBudgetStore
 	executionEnvs       *control.ExecutionEnvironmentStore
 	executionCreds      *control.ExecutionCredentialStore
+	masterless          *control.MasterlessStore
 	hopRelay            *control.HopRelayStore
 	syndic              *control.SyndicStore
 	fipsMode            *control.FIPSModeStore
@@ -167,6 +168,7 @@ func New(addr, baseDir string) *Server {
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
+	masterless := control.NewMasterlessStore()
 	hopRelay := control.NewHopRelayStore()
 	syndic := control.NewSyndicStore()
 	fipsMode := control.NewFIPSModeStore()
@@ -253,6 +255,7 @@ func New(addr, baseDir string) *Server {
 		disruptionBudgets:   disruptionBudgets,
 		executionEnvs:       executionEnvs,
 		executionCreds:      executionCreds,
+		masterless:          masterless,
 		hopRelay:            hopRelay,
 		syndic:              syndic,
 		fipsMode:            fipsMode,
@@ -355,6 +358,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/credentials", s.handleExecutionCredentials)
 	mux.HandleFunc("/v1/execution/credentials/validate", s.handleExecutionCredentialValidate)
 	mux.HandleFunc("/v1/execution/credentials/", s.handleExecutionCredentialAction)
+	mux.HandleFunc("/v1/execution/masterless/mode", s.handleMasterlessMode)
+	mux.HandleFunc("/v1/execution/masterless/render", s.handleMasterlessRender)
 	mux.HandleFunc("/v1/execution/relays/endpoints", s.handleRelayEndpoints)
 	mux.HandleFunc("/v1/execution/relays/endpoints/", s.handleRelayEndpointAction)
 	mux.HandleFunc("/v1/execution/relays/sessions", s.handleRelaySessions)
@@ -2089,6 +2094,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/credentials/validate",
 			"GET /v1/execution/credentials/{id}",
 			"POST /v1/execution/credentials/{id}/revoke",
+			"GET /v1/execution/masterless/mode",
+			"POST /v1/execution/masterless/mode",
+			"POST /v1/execution/masterless/render",
 			"GET /v1/execution/relays/endpoints",
 			"POST /v1/execution/relays/endpoints",
 			"GET /v1/execution/relays/endpoints/{id}",
