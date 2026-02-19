@@ -111,6 +111,7 @@ Interactive CLI TUI inspection is available via `masterchef tui` with run browsi
 Ansible-compatible plugin extension points (`callback`, `lookup`, `filter`, `vars`, `strategy`) are available via `/v1/plugins/extensions`.
 Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds (`max_fail_percentage`, `any_errors_fatal`) are supported in config and executor runtime.
 Failure-domain-aware serial orchestration is supported with `execution.failure_domain` (`rack|zone|region`) to interleave hosts across domains.
+Disruption budget definitions and rollout-gating evaluation are available via `/v1/control/disruption-budgets` and `/v1/control/disruption-budgets/evaluate`.
 Privilege escalation controls for command resources are supported via `become` and `become_user`, with explicit run-result audit markers.
 Session recording artifacts for privileged remote command executions are emitted under `.masterchef/sessions` and linked from run output.
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-resources`, `-tags`, and `-skip-tags`.

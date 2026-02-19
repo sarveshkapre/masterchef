@@ -62,6 +62,7 @@ type Server struct {
 	fileSync           *control.FileSyncStore
 	agentCheckins      *control.AgentCheckinStore
 	agentDispatch      *control.AgentDispatchStore
+	disruptionBudgets  *control.DisruptionBudgetStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -121,6 +122,7 @@ func New(addr, baseDir string) *Server {
 	fileSync := control.NewFileSyncStore()
 	agentCheckins := control.NewAgentCheckinStore()
 	agentDispatch := control.NewAgentDispatchStore()
+	disruptionBudgets := control.NewDisruptionBudgetStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -172,6 +174,7 @@ func New(addr, baseDir string) *Server {
 		fileSync:           fileSync,
 		agentCheckins:      agentCheckins,
 		agentDispatch:      agentDispatch,
+		disruptionBudgets:  disruptionBudgets,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -322,6 +325,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/preflight", s.handlePreflight)
 	mux.HandleFunc("/v1/control/invariants/check", s.handleInvariantChecks)
 	mux.HandleFunc("/v1/control/blast-radius-map", s.handleBlastRadiusMap(baseDir))
+	mux.HandleFunc("/v1/control/disruption-budgets", s.handleDisruptionBudgets)
+	mux.HandleFunc("/v1/control/disruption-budgets/evaluate", s.handleDisruptionBudgetEvaluate)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
@@ -1960,6 +1965,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/preflight",
 			"POST /v1/control/invariants/check",
 			"POST /v1/control/blast-radius-map",
+			"GET /v1/control/disruption-budgets",
+			"POST /v1/control/disruption-budgets",
+			"POST /v1/control/disruption-budgets/evaluate",
 			"POST /v1/control/queue",
 			"GET /v1/control/queue",
 			"POST /v1/control/recover-stuck",
