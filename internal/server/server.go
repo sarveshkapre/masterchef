@@ -94,6 +94,7 @@ type Server struct {
 	policyPull          *control.PolicyPullStore
 	multiMaster         *control.MultiMasterStore
 	edgeRelay           *control.EdgeRelayStore
+	offline             *control.OfflineStore
 	objectStore         storage.ObjectStore
 	events              *control.EventStore
 	runCancel           context.CancelFunc
@@ -185,6 +186,7 @@ func New(addr, baseDir string) *Server {
 	policyPull := control.NewPolicyPullStore()
 	multiMaster := control.NewMultiMasterStore()
 	edgeRelay := control.NewEdgeRelayStore()
+	offline := control.NewOfflineStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -268,6 +270,7 @@ func New(addr, baseDir string) *Server {
 		policyPull:          policyPull,
 		multiMaster:         multiMaster,
 		edgeRelay:           edgeRelay,
+		offline:             offline,
 		objectStore:         objectStore,
 		events:              events,
 		metrics:             map[string]int64{},
@@ -302,6 +305,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/edge-relay/sites", s.handleEdgeRelaySites)
 	mux.HandleFunc("/v1/edge-relay/sites/", s.handleEdgeRelaySiteAction)
 	mux.HandleFunc("/v1/edge-relay/messages", s.handleEdgeRelayMessages)
+	mux.HandleFunc("/v1/offline/mode", s.handleOfflineMode)
+	mux.HandleFunc("/v1/offline/bundles", s.handleOfflineBundles(baseDir))
+	mux.HandleFunc("/v1/offline/bundles/verify", s.handleOfflineBundleVerify(baseDir))
 	mux.HandleFunc("/v1/docs/actions", s.handleActionDocs)
 	mux.HandleFunc("/v1/docs/actions/", s.handleActionDocByID)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
@@ -2016,6 +2022,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/edge-relay/sites/{id}/deliver",
 			"GET /v1/edge-relay/messages",
 			"POST /v1/edge-relay/messages",
+			"GET /v1/offline/mode",
+			"POST /v1/offline/mode",
+			"GET /v1/offline/bundles",
+			"POST /v1/offline/bundles",
+			"POST /v1/offline/bundles/verify",
 			"GET /v1/policy/pull/sources",
 			"POST /v1/policy/pull/sources",
 			"GET /v1/policy/pull/sources/{id}",

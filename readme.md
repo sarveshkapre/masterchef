@@ -167,6 +167,7 @@ Adaptive worker autoscaling recommendations based on queue depth and p95 latency
 Per-tenant rate limits and noisy-neighbor protections are available via `/v1/control/tenancy/policies` and `/v1/control/tenancy/admit-check`.
 Edge relay mode for intermittently connected sites is available via `/v1/edge-relay/sites` and `/v1/edge-relay/messages` with store-and-forward queueing and explicit delivery controls.
 Egress-only execution-node connectivity through hosted hop/ingress relays is available via `/v1/execution/relays/endpoints` and `/v1/execution/relays/sessions`.
+Offline and air-gapped operation controls with signed offline bundle creation/verification are available via `/v1/offline/mode`, `/v1/offline/bundles`, and `/v1/offline/bundles/verify`.
 Control-plane canary upgrade workflow with automatic rollback on regression is available via `/v1/control/canary-upgrades`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).
