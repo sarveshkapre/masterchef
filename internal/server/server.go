@@ -75,6 +75,7 @@ type Server struct {
 	executionCreds      *control.ExecutionCredentialStore
 	hopRelay            *control.HopRelayStore
 	syndic              *control.SyndicStore
+	fipsMode            *control.FIPSModeStore
 	signatureAdmission  *control.SignatureAdmissionStore
 	runtimeSecrets      *control.RuntimeSecretStore
 	delegationTokens    *control.DelegationTokenStore
@@ -168,6 +169,7 @@ func New(addr, baseDir string) *Server {
 	executionCreds := control.NewExecutionCredentialStore()
 	hopRelay := control.NewHopRelayStore()
 	syndic := control.NewSyndicStore()
+	fipsMode := control.NewFIPSModeStore()
 	signatureAdmission := control.NewSignatureAdmissionStore()
 	runtimeSecrets := control.NewRuntimeSecretStore()
 	delegationTokens := control.NewDelegationTokenStore()
@@ -253,6 +255,7 @@ func New(addr, baseDir string) *Server {
 		executionCreds:      executionCreds,
 		hopRelay:            hopRelay,
 		syndic:              syndic,
+		fipsMode:            fipsMode,
 		signatureAdmission:  signatureAdmission,
 		runtimeSecrets:      runtimeSecrets,
 		delegationTokens:    delegationTokens,
@@ -354,6 +357,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/relays/sessions", s.handleRelaySessions)
 	mux.HandleFunc("/v1/control/syndic/nodes", s.handleSyndicNodes)
 	mux.HandleFunc("/v1/control/syndic/route", s.handleSyndicRoute)
+	mux.HandleFunc("/v1/security/crypto/fips-mode", s.handleFIPSMode)
+	mux.HandleFunc("/v1/security/crypto/fips/validate", s.handleFIPSValidate)
 	mux.HandleFunc("/v1/security/signatures/keyrings", s.handleSignatureKeyrings)
 	mux.HandleFunc("/v1/security/signatures/keyrings/", s.handleSignatureKeyringAction)
 	mux.HandleFunc("/v1/security/signatures/admission-policy", s.handleSignatureAdmissionPolicy)
@@ -2086,6 +2091,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/syndic/nodes",
 			"GET /v1/control/syndic/route",
 			"POST /v1/control/syndic/route",
+			"GET /v1/security/crypto/fips-mode",
+			"POST /v1/security/crypto/fips-mode",
+			"POST /v1/security/crypto/fips/validate",
 			"GET /v1/security/signatures/keyrings",
 			"POST /v1/security/signatures/keyrings",
 			"GET /v1/security/signatures/keyrings/{id}",
