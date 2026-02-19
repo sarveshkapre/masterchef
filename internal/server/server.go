@@ -54,6 +54,7 @@ type Server struct {
 	varSources         *control.VariableSourceRegistry
 	plugins            *control.PluginExtensionStore
 	eventBus           *control.EventBus
+	nodes              *control.NodeLifecycleStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -105,6 +106,7 @@ func New(addr, baseDir string) *Server {
 	varSources := control.NewVariableSourceRegistry(baseDir)
 	plugins := control.NewPluginExtensionStore()
 	eventBus := control.NewEventBus()
+	nodes := control.NewNodeLifecycleStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -148,6 +150,7 @@ func New(addr, baseDir string) *Server {
 		varSources:         varSources,
 		plugins:            plugins,
 		eventBus:           eventBus,
+		nodes:              nodes,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -191,6 +194,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
+	mux.HandleFunc("/v1/inventory/runtime-hosts", s.handleRuntimeHosts)
+	mux.HandleFunc("/v1/inventory/runtime-hosts/", s.handleRuntimeHostAction)
+	mux.HandleFunc("/v1/inventory/enroll", s.handleRuntimeEnrollAlias)
 	mux.HandleFunc("/v1/data-bags", s.handleDataBags)
 	mux.HandleFunc("/v1/data-bags/search", s.handleDataBagSearch)
 	mux.HandleFunc("/v1/data-bags/", s.handleDataBagItem)
@@ -1748,6 +1754,15 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/activity",
 			"GET /v1/search",
 			"GET /v1/inventory/groups",
+			"GET /v1/inventory/runtime-hosts",
+			"POST /v1/inventory/runtime-hosts",
+			"POST /v1/inventory/enroll",
+			"GET /v1/inventory/runtime-hosts/{name}",
+			"POST /v1/inventory/runtime-hosts/{name}/heartbeat",
+			"POST /v1/inventory/runtime-hosts/{name}/bootstrap",
+			"POST /v1/inventory/runtime-hosts/{name}/activate",
+			"POST /v1/inventory/runtime-hosts/{name}/quarantine",
+			"POST /v1/inventory/runtime-hosts/{name}/decommission",
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
 			"GET /v1/drift/insights",
