@@ -58,6 +58,7 @@ type Server struct {
 	workerAutoscaling   *control.WorkerAutoscalingStore
 	tenantLimits        *control.TenantLimitStore
 	schemaMigs          *control.SchemaMigrationManager
+	openSchemas         *control.OpenSchemaStore
 	dataBags            *control.DataBagStore
 	roleEnv             *control.RoleEnvironmentStore
 	encryptedVars       *control.EncryptedVariableStore
@@ -163,6 +164,7 @@ func New(addr, baseDir string) *Server {
 	workerAutoscaling := control.NewWorkerAutoscalingStore()
 	tenantLimits := control.NewTenantLimitStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
+	openSchemas := control.NewOpenSchemaStore()
 	dataBags := control.NewDataBagStore()
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
 	encryptedVars := control.NewEncryptedVariableStore(baseDir)
@@ -260,6 +262,7 @@ func New(addr, baseDir string) *Server {
 		workerAutoscaling:   workerAutoscaling,
 		tenantLimits:        tenantLimits,
 		schemaMigs:          schemaMigs,
+		openSchemas:         openSchemas,
 		dataBags:            dataBags,
 		roleEnv:             roleEnv,
 		encryptedVars:       encryptedVars,
@@ -637,6 +640,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
 	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
 	mux.HandleFunc("/v1/control/schema-migrations", s.handleSchemaMigrations)
+	mux.HandleFunc("/v1/schema/models", s.handleOpenSchemas)
+	mux.HandleFunc("/v1/schema/models/", s.handleOpenSchemaByID)
+	mux.HandleFunc("/v1/schema/validate", s.handleOpenSchemaValidate)
 	mux.HandleFunc("/v1/control/preflight", s.handlePreflight)
 	mux.HandleFunc("/v1/control/invariants/check", s.handleInvariantChecks)
 	mux.HandleFunc("/v1/control/blast-radius-map", s.handleBlastRadiusMap(baseDir))
@@ -2539,6 +2545,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/multi-master/cache",
 			"POST /v1/control/schema-migrations",
 			"GET /v1/control/schema-migrations",
+			"GET /v1/schema/models",
+			"POST /v1/schema/models",
+			"GET /v1/schema/models/{id}",
+			"POST /v1/schema/validate",
 			"POST /v1/control/preflight",
 			"POST /v1/control/invariants/check",
 			"POST /v1/control/blast-radius-map",
