@@ -1,6 +1,9 @@
 package control
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestAgentPKIAutoApproveAndRotate(t *testing.T) {
 	store := NewAgentPKIStore()
@@ -73,5 +76,33 @@ func TestAgentPKIManualApproveRejectAndRevoke(t *testing.T) {
 	}
 	if rejected.Status != "rejected" {
 		t.Fatalf("expected rejected csr, got %+v", rejected)
+	}
+}
+
+func TestAgentPKIExpiryReportAndRenew(t *testing.T) {
+	store := NewAgentPKIStore()
+	csr, err := store.SubmitCSR(AgentCSRInput{AgentID: "agent-exp"})
+	if err != nil {
+		t.Fatalf("submit csr failed: %v", err)
+	}
+	issued, err := store.DecideCSR(csr.ID, "approve", "")
+	if err != nil {
+		t.Fatalf("approve csr failed: %v", err)
+	}
+	store.mu.Lock()
+	cert := store.certs[issued.CertID]
+	cert.ExpiresAt = time.Now().UTC().Add(2 * time.Hour)
+	store.mu.Unlock()
+
+	report := store.ExpiryReport(4)
+	if report.ExpiringCount != 1 {
+		t.Fatalf("expected one expiring cert, got %+v", report)
+	}
+	renewed, err := store.RenewExpiring(4)
+	if err != nil {
+		t.Fatalf("renew expiring failed: %v", err)
+	}
+	if renewed.RenewedCount != 1 {
+		t.Fatalf("expected one renewed cert, got %+v", renewed)
 	}
 }

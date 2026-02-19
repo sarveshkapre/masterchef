@@ -87,4 +87,19 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("revoke cert failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/agents/certificates/expiry-report?within_hours=7200", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expiry report failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	renew := []byte(`{"within_hours":7200}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/agents/certificates/renew-expiring", bytes.NewReader(renew))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("renew expiring failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

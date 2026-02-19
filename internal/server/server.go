@@ -335,6 +335,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/agents/csrs", s.handleAgentCSRs)
 	mux.HandleFunc("/v1/agents/csrs/", s.handleAgentCSRAction)
 	mux.HandleFunc("/v1/agents/certificates", s.handleAgentCertificates)
+	mux.HandleFunc("/v1/agents/certificates/expiry-report", s.handleAgentCertificateExpiryReport)
+	mux.HandleFunc("/v1/agents/certificates/renew-expiring", s.handleAgentCertificateRenewExpiring)
 	mux.HandleFunc("/v1/agents/certificates/", s.handleAgentCertificateAction)
 	mux.HandleFunc("/v1/agents/certificates/rotate", s.handleAgentCertificateRotate)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
@@ -2033,6 +2035,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/agents/certificates",
 			"POST /v1/agents/certificates/{id}/revoke",
 			"POST /v1/agents/certificates/rotate",
+			"GET /v1/agents/certificates/expiry-report",
+			"POST /v1/agents/certificates/renew-expiring",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",

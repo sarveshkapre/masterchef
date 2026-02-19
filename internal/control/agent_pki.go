@@ -41,6 +41,19 @@ type AgentCertificate struct {
 	RotatedBy string     `json:"rotated_by,omitempty"`
 }
 
+type AgentCertificateExpiryReport struct {
+	GeneratedAt   time.Time          `json:"generated_at"`
+	WithinHours   int                `json:"within_hours"`
+	ExpiringCount int                `json:"expiring_count"`
+	Items         []AgentCertificate `json:"items"`
+}
+
+type AgentCertificateRenewalResult struct {
+	RequestedWithinHours int                `json:"requested_within_hours"`
+	RenewedCount         int                `json:"renewed_count"`
+	Renewed              []AgentCertificate `json:"renewed"`
+}
+
 type AgentPKIStore struct {
 	mu       sync.RWMutex
 	nextCSR  int64
@@ -216,6 +229,60 @@ func (s *AgentPKIStore) RotateAgentCertificate(agentID string) (AgentCertificate
 		latest.RotatedBy = newCert.ID
 	}
 	return cloneAgentCert(newCert), nil
+}
+
+func (s *AgentPKIStore) ExpiryReport(withinHours int) AgentCertificateExpiryReport {
+	if withinHours <= 0 {
+		withinHours = 72
+	}
+	now := time.Now().UTC()
+	threshold := now.Add(time.Duration(withinHours) * time.Hour)
+	s.mu.RLock()
+	items := make([]AgentCertificate, 0)
+	for _, cert := range s.certs {
+		if cert.Status != "active" {
+			continue
+		}
+		if cert.ExpiresAt.Before(threshold) || cert.ExpiresAt.Equal(threshold) {
+			items = append(items, cloneAgentCert(*cert))
+		}
+	}
+	s.mu.RUnlock()
+	sort.Slice(items, func(i, j int) bool { return items[i].ExpiresAt.Before(items[j].ExpiresAt) })
+	return AgentCertificateExpiryReport{
+		GeneratedAt:   now,
+		WithinHours:   withinHours,
+		ExpiringCount: len(items),
+		Items:         items,
+	}
+}
+
+func (s *AgentPKIStore) RenewExpiring(withinHours int) (AgentCertificateRenewalResult, error) {
+	if withinHours <= 0 {
+		withinHours = 72
+	}
+	now := time.Now().UTC()
+	threshold := now.Add(time.Duration(withinHours) * time.Hour)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	renewed := make([]AgentCertificate, 0)
+	for _, cert := range s.certs {
+		if cert.Status != "active" {
+			continue
+		}
+		if cert.ExpiresAt.After(threshold) {
+			continue
+		}
+		cert.Status = "rotated"
+		newCert := s.issueCertificateLocked(cert.AgentID)
+		cert.RotatedBy = newCert.ID
+		renewed = append(renewed, cloneAgentCert(newCert))
+	}
+	return AgentCertificateRenewalResult{
+		RequestedWithinHours: withinHours,
+		RenewedCount:         len(renewed),
+		Renewed:              renewed,
+	}, nil
 }
 
 func (s *AgentPKIStore) issueCertificateLocked(agentID string) AgentCertificate {

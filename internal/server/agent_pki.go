@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/masterchef/masterchef/internal/control"
 )
@@ -146,4 +148,47 @@ func (s *Server) handleAgentCertificateRotate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleAgentCertificateExpiryReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	withinHours := 72
+	if raw := strings.TrimSpace(r.URL.Query().Get("within_hours")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			withinHours = n
+		}
+	}
+	report := s.agentPKI.ExpiryReport(withinHours)
+	writeJSON(w, http.StatusOK, report)
+}
+
+func (s *Server) handleAgentCertificateRenewExpiring(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		WithinHours int `json:"within_hours"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	result, err := s.agentPKI.RenewExpiring(req.WithinHours)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordEvent(control.Event{
+		Type:    "agents.pki.renew_expiring",
+		Message: "expiring certificates renewed",
+		Fields: map[string]any{
+			"within_hours":  req.WithinHours,
+			"renewed_count": result.RenewedCount,
+		},
+	}, true)
+	writeJSON(w, http.StatusOK, result)
 }
