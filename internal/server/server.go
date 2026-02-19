@@ -498,6 +498,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/topology-advisor", s.handleTopologyAdvisor(baseDir))
 	mux.HandleFunc("/v1/control/checklists", s.handleChecklists)
 	mux.HandleFunc("/v1/control/checklists/", s.handleChecklistAction)
+	mux.HandleFunc("/v1/control/bootstrap/ha", s.handleHABootstrap)
 	mux.HandleFunc("/v1/control/capacity", s.handleCapacity)
 	mux.HandleFunc("/v1/control/canary-health", s.handleCanaryHealth)
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
@@ -2295,6 +2296,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/checklists",
 			"GET /v1/control/checklists/{id}",
 			"POST /v1/control/checklists/{id}/complete",
+			"POST /v1/control/bootstrap/ha",
 			"POST /v1/control/capacity",
 			"GET /v1/control/capacity",
 			"GET /v1/control/canary-health",

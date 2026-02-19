@@ -94,6 +94,7 @@ Change records and approval workflows are exposed via `/v1/change-records` to ti
 Self-service runbook catalog with approval-gated launches is available via `/v1/runbooks`.
 Operator checklist mode for high-risk changes is available via `/v1/control/checklists`.
 Guided topology advisor for scaling from small teams to large fleets is available via `GET /v1/control/topology-advisor`.
+One-command bootstrap planning for single-region HA control planes is available via `POST /v1/control/bootstrap/ha`.
 Saved views with share tokens and dashboard pinning are available via `/v1/views`.
 Bulk operation staging with preview/conflict detection/confirmed execution is available via `/v1/bulk/preview` and `/v1/bulk/execute`.
 Persona-based home views for SRE/platform/release/service-owner workflows are available via `GET /v1/views/home`.
