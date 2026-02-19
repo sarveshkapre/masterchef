@@ -69,6 +69,7 @@ type Server struct {
 	leakDetection         *control.LeakDetectionStore
 	performanceGates      *control.PerformanceGateStore
 	loadSoak              *control.LoadSoakStore
+	readinessScorecards   *control.ReadinessScorecardStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -199,6 +200,7 @@ func New(addr, baseDir string) *Server {
 	leakDetection := control.NewLeakDetectionStore()
 	performanceGates := control.NewPerformanceGateStore()
 	loadSoak := control.NewLoadSoakStore()
+	readinessScorecards := control.NewReadinessScorecardStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -321,6 +323,7 @@ func New(addr, baseDir string) *Server {
 		leakDetection:         leakDetection,
 		performanceGates:      performanceGates,
 		loadSoak:              loadSoak,
+		readinessScorecards:   readinessScorecards,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -454,6 +457,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/docs/examples/verify", s.handleDocsExampleVerify)
 	mux.HandleFunc("/v1/docs/api/version-diff", s.handleDocsAPIVersionDiff)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
+	mux.HandleFunc("/v1/release/readiness/scorecards", s.handleReadinessScorecards)
+	mux.HandleFunc("/v1/release/readiness/scorecards/", s.handleReadinessScorecardAction)
 	mux.HandleFunc("/v1/release/blocker-policy", s.handleReleaseBlockerPolicy)
 	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
 	mux.HandleFunc("/v1/release/upgrade-assistant", s.handleUpgradeAssistant)
@@ -2651,6 +2656,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/workspace-templates/{id}/bootstrap",
 			"POST /v1/release/readiness",
 			"GET /v1/release/readiness",
+			"GET /v1/release/readiness/scorecards",
+			"POST /v1/release/readiness/scorecards",
+			"GET /v1/release/readiness/scorecards/{id}",
 			"POST /v1/release/blocker-policy",
 			"GET /v1/release/blocker-policy",
 			"GET /v1/release/api-contract",
