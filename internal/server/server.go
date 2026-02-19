@@ -47,6 +47,7 @@ type Server struct {
 	workspaceTemplates *control.WorkspaceTemplateCatalog
 	channels           *control.ChannelManager
 	canaryUpgrades     *control.CanaryUpgradeStore
+	failoverDrills     *control.RegionalFailoverDrillStore
 	schemaMigs         *control.SchemaMigrationManager
 	dataBags           *control.DataBagStore
 	roleEnv            *control.RoleEnvironmentStore
@@ -133,6 +134,7 @@ func New(addr, baseDir string) *Server {
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
+	failoverDrills := control.NewRegionalFailoverDrillStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	dataBags := control.NewDataBagStore()
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
@@ -211,6 +213,7 @@ func New(addr, baseDir string) *Server {
 		workspaceTemplates: workspaceTemplates,
 		channels:           channels,
 		canaryUpgrades:     canaryUpgrades,
+		failoverDrills:     failoverDrills,
 		schemaMigs:         schemaMigs,
 		dataBags:           dataBags,
 		roleEnv:            roleEnv,
@@ -500,6 +503,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/channels", s.handleChannels)
 	mux.HandleFunc("/v1/control/canary-upgrades", s.handleCanaryUpgrades)
 	mux.HandleFunc("/v1/control/canary-upgrades/", s.handleCanaryUpgradeAction)
+	mux.HandleFunc("/v1/control/failover-drills", s.handleRegionalFailoverDrills)
+	mux.HandleFunc("/v1/control/failover-drills/scorecards", s.handleRegionalFailoverScorecards)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
 	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
 	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
@@ -2298,6 +2303,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/canary-upgrades",
 			"POST /v1/control/canary-upgrades",
 			"GET /v1/control/canary-upgrades/{id}",
+			"GET /v1/control/failover-drills",
+			"POST /v1/control/failover-drills",
+			"GET /v1/control/failover-drills/scorecards",
 			"GET /v1/control/multi-master/nodes",
 			"POST /v1/control/multi-master/nodes",
 			"GET /v1/control/multi-master/nodes/{id}",
