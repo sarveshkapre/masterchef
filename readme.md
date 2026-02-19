@@ -161,6 +161,7 @@ Message-bus dispatch mode for scalable agent execution is available via `/v1/age
 Hybrid push/pull execution routing per environment is available via `/v1/agents/dispatch-environments`, allowing environment strategy overrides (`push`, `pull`, `hybrid`) while preserving global dispatch defaults.
 Proxy-minion mode for devices that cannot run full agents is available via `/v1/agents/proxy-minions` and `/v1/agents/proxy-minions/dispatch`.
 Multi-master control mode with centralized job/event cache is available via `/v1/control/multi-master/nodes` and `/v1/control/multi-master/cache` for cross-controller status and replay-oriented cache synchronization.
+Multi-region control-plane federation is available via `/v1/control/federation/peers` and `/v1/control/federation/health`.
 Edge relay mode for intermittently connected sites is available via `/v1/edge-relay/sites` and `/v1/edge-relay/messages` with store-and-forward queueing and explicit delivery controls.
 Egress-only execution-node connectivity through hosted hop/ingress relays is available via `/v1/execution/relays/endpoints` and `/v1/execution/relays/sessions`.
 Control-plane canary upgrade workflow with automatic rollback on regression is available via `/v1/control/canary-upgrades`.
