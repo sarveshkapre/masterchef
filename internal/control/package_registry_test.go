@@ -28,6 +28,9 @@ func TestPackageRegistryPublishAndVerify(t *testing.T) {
 	if artifact.ID == "" {
 		t.Fatalf("expected artifact id")
 	}
+	if artifact.Visibility != "private" {
+		t.Fatalf("expected default private visibility, got %q", artifact.Visibility)
+	}
 
 	store.SetPolicy(PackageSigningPolicy{
 		RequireSigned: true,
@@ -62,13 +65,14 @@ func TestPackageRegistryVerificationFailure(t *testing.T) {
 func TestPackageRegistryCertificationAndPublicationGates(t *testing.T) {
 	store := NewPackageRegistryStore()
 	artifact, err := store.Publish(PackageArtifactInput{
-		Kind:      "module",
-		Name:      "core/security",
-		Version:   "2.0.0",
-		Digest:    "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-		Signed:    true,
-		KeyID:     "sigkey-2",
-		Signature: "sig",
+		Kind:       "module",
+		Name:       "core/security",
+		Version:    "2.0.0",
+		Digest:     "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+		Visibility: "public",
+		Signed:     true,
+		KeyID:      "sigkey-2",
+		Signature:  "sig",
 		Provenance: PackageProvenance{
 			SourceRepo:        "github.com/masterchef/security",
 			SourceRef:         "refs/tags/v2.0.0",
@@ -178,5 +182,37 @@ func TestPackageRegistryProvenanceReport(t *testing.T) {
 	}
 	if report[0].ArtifactID != artifact.ID || report[0].SourceRepo == "" {
 		t.Fatalf("unexpected provenance report item %+v", report[0])
+	}
+}
+
+func TestPackageRegistryVisibilityFilter(t *testing.T) {
+	store := NewPackageRegistryStore()
+	if _, err := store.Publish(PackageArtifactInput{
+		Kind:       "module",
+		Name:       "public/pkg",
+		Version:    "1.0.0",
+		Digest:     "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+		Visibility: "public",
+		Signed:     true,
+		KeyID:      "k1",
+		Signature:  "s1",
+	}); err != nil {
+		t.Fatalf("publish public artifact failed: %v", err)
+	}
+	if _, err := store.Publish(PackageArtifactInput{
+		Kind:       "module",
+		Name:       "private/pkg",
+		Version:    "1.0.0",
+		Digest:     "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+		Visibility: "private",
+		Signed:     true,
+		KeyID:      "k2",
+		Signature:  "s2",
+	}); err != nil {
+		t.Fatalf("publish private artifact failed: %v", err)
+	}
+	publicOnly := store.ListArtifactsByVisibility("public")
+	if len(publicOnly) != 1 || publicOnly[0].Visibility != "public" {
+		t.Fatalf("expected single public artifact, got %+v", publicOnly)
 	}
 }

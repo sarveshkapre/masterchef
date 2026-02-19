@@ -24,6 +24,7 @@ type PackageArtifact struct {
 	Name       string            `json:"name"`
 	Version    string            `json:"version"`
 	Digest     string            `json:"digest"`
+	Visibility string            `json:"visibility"` // public|private
 	Signed     bool              `json:"signed"`
 	KeyID      string            `json:"key_id,omitempty"`
 	Signature  string            `json:"signature,omitempty"`
@@ -38,6 +39,7 @@ type PackageArtifactInput struct {
 	Name       string            `json:"name"`
 	Version    string            `json:"version"`
 	Digest     string            `json:"digest"`
+	Visibility string            `json:"visibility,omitempty"`
 	Signed     bool              `json:"signed"`
 	KeyID      string            `json:"key_id,omitempty"`
 	Signature  string            `json:"signature,omitempty"`
@@ -194,6 +196,13 @@ func (s *PackageRegistryStore) Publish(in PackageArtifactInput) (PackageArtifact
 	if !packageDigestPattern.MatchString(digest) {
 		return PackageArtifact{}, errors.New("digest must be immutable sha256:<64-hex>")
 	}
+	visibility := strings.ToLower(strings.TrimSpace(in.Visibility))
+	if visibility == "" {
+		visibility = "private"
+	}
+	if visibility != "public" && visibility != "private" {
+		return PackageArtifact{}, errors.New("visibility must be public or private")
+	}
 	if in.Signed {
 		if strings.TrimSpace(in.KeyID) == "" || strings.TrimSpace(in.Signature) == "" {
 			return PackageArtifact{}, errors.New("key_id and signature are required for signed artifact")
@@ -220,6 +229,7 @@ func (s *PackageRegistryStore) Publish(in PackageArtifactInput) (PackageArtifact
 		Name:       name,
 		Version:    version,
 		Digest:     digest,
+		Visibility: visibility,
 		Signed:     in.Signed,
 		KeyID:      strings.TrimSpace(in.KeyID),
 		Signature:  strings.TrimSpace(in.Signature),
@@ -237,10 +247,18 @@ func (s *PackageRegistryStore) Publish(in PackageArtifactInput) (PackageArtifact
 }
 
 func (s *PackageRegistryStore) ListArtifacts() []PackageArtifact {
+	return s.ListArtifactsByVisibility("")
+}
+
+func (s *PackageRegistryStore) ListArtifactsByVisibility(visibility string) []PackageArtifact {
+	visibility = strings.ToLower(strings.TrimSpace(visibility))
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]PackageArtifact, 0, len(s.artifacts))
 	for _, item := range s.artifacts {
+		if visibility != "" && item.Visibility != visibility {
+			continue
+		}
 		out = append(out, clonePackageArtifact(*item))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
@@ -463,6 +481,9 @@ func (s *PackageRegistryStore) PublicationGateCheck(in PackagePublicationCheckIn
 		result.Reasons = append(result.Reasons, verify.Reason)
 	}
 	if target == "public" {
+		if artifact.Visibility != "public" {
+			result.Reasons = append(result.Reasons, "artifact visibility must be public for public publication")
+		}
 		if certPolicy.RequireSigned && !artifact.Signed {
 			result.Reasons = append(result.Reasons, "public publication requires signed artifact")
 		}

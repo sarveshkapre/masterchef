@@ -50,6 +50,7 @@ resources:
   "name":"core/network",
   "version":"1.2.3",
   "digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "visibility":"public",
   "signed":true,
   "key_id":"sigkey-1",
   "signature":"sig",
@@ -126,5 +127,12 @@ resources:
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("package provenance report failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/artifacts?visibility=public", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("package artifacts visibility filter failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }

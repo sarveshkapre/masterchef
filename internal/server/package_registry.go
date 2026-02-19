@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/masterchef/masterchef/internal/control"
 )
@@ -10,7 +11,8 @@ import (
 func (s *Server) handlePackageArtifacts(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.packageRegistry.ListArtifacts())
+		visibility := strings.TrimSpace(r.URL.Query().Get("visibility"))
+		writeJSON(w, http.StatusOK, s.packageRegistry.ListArtifactsByVisibility(visibility))
 	case http.MethodPost:
 		var req control.PackageArtifactInput
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
