@@ -125,6 +125,8 @@ Short-lived execution credentials are available via `/v1/execution/credentials` 
 Signed collection/image admission with client-side verification keyrings is available via `/v1/security/signatures/keyrings` and `/v1/security/signatures/admit-check`.
 Runtime secret materialization with in-memory session lifecycle and consume-time zeroization is available via `/v1/secrets/runtime/sessions` and `/v1/secrets/runtime/consume`.
 Time-bound delegation tokens for automated run pipelines are available via `/v1/access/delegation-tokens` with validation and revoke endpoints.
+Multi-stage approval policies with quorum rules are available via `/v1/access/approval-policies`.
+Break-glass workflows with audited approvals are available via `/v1/access/break-glass/requests` including approve/reject/revoke actions.
 Branch-based ephemeral environment previews are available via `/v1/gitops/previews` with lifecycle actions for promote/close and queued preview applies.
 Branch-per-environment control-repo materialization is available via `/v1/gitops/environments/materialize` with generated environment configs and optional queued apply.
 Webhook/API deployment triggers are available via `/v1/gitops/deployments/webhook` and `/v1/gitops/deployments/trigger`; CLI deployments are available via `masterchef deploy`.

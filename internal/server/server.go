@@ -68,6 +68,7 @@ type Server struct {
 	signatureAdmission *control.SignatureAdmissionStore
 	runtimeSecrets     *control.RuntimeSecretStore
 	delegationTokens   *control.DelegationTokenStore
+	accessApprovals    *control.AccessApprovalStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -133,6 +134,7 @@ func New(addr, baseDir string) *Server {
 	signatureAdmission := control.NewSignatureAdmissionStore()
 	runtimeSecrets := control.NewRuntimeSecretStore()
 	delegationTokens := control.NewDelegationTokenStore()
+	accessApprovals := control.NewAccessApprovalStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -190,6 +192,7 @@ func New(addr, baseDir string) *Server {
 		signatureAdmission: signatureAdmission,
 		runtimeSecrets:     runtimeSecrets,
 		delegationTokens:   delegationTokens,
+		accessApprovals:    accessApprovals,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -257,6 +260,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/access/delegation-tokens", s.handleDelegationTokens)
 	mux.HandleFunc("/v1/access/delegation-tokens/validate", s.handleDelegationTokenValidate)
 	mux.HandleFunc("/v1/access/delegation-tokens/", s.handleDelegationTokenAction)
+	mux.HandleFunc("/v1/access/approval-policies", s.handleApprovalPolicies)
+	mux.HandleFunc("/v1/access/approval-policies/", s.handleApprovalPolicyAction)
+	mux.HandleFunc("/v1/access/break-glass/requests", s.handleBreakGlassRequests)
+	mux.HandleFunc("/v1/access/break-glass/requests/", s.handleBreakGlassRequestAction)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1876,6 +1883,15 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/access/delegation-tokens/validate",
 			"GET /v1/access/delegation-tokens/{id}",
 			"POST /v1/access/delegation-tokens/{id}/revoke",
+			"GET /v1/access/approval-policies",
+			"POST /v1/access/approval-policies",
+			"GET /v1/access/approval-policies/{id}",
+			"GET /v1/access/break-glass/requests",
+			"POST /v1/access/break-glass/requests",
+			"GET /v1/access/break-glass/requests/{id}",
+			"POST /v1/access/break-glass/requests/{id}/approve",
+			"POST /v1/access/break-glass/requests/{id}/reject",
+			"POST /v1/access/break-glass/requests/{id}/revoke",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",
