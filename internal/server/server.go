@@ -108,6 +108,7 @@ type Server struct {
 	gitopsPromotions       *control.GitOpsPromotionStore
 	gitopsEnvironments     *control.GitOpsEnvironmentStore
 	deployments            *control.DeploymentStore
+	rolloutControls        *control.RolloutControlStore
 	fileSync               *control.FileSyncStore
 	agentCheckins          *control.AgentCheckinStore
 	agentDispatch          *control.AgentDispatchStore
@@ -258,6 +259,7 @@ func New(addr, baseDir string) *Server {
 	gitopsPromotions := control.NewGitOpsPromotionStore()
 	gitopsEnvironments := control.NewGitOpsEnvironmentStore()
 	deployments := control.NewDeploymentStore()
+	rolloutControls := control.NewRolloutControlStore()
 	fileSync := control.NewFileSyncStore()
 	agentCheckins := control.NewAgentCheckinStore()
 	agentDispatch := control.NewAgentDispatchStore()
@@ -400,6 +402,7 @@ func New(addr, baseDir string) *Server {
 		gitopsPromotions:       gitopsPromotions,
 		gitopsEnvironments:     gitopsEnvironments,
 		deployments:            deployments,
+		rolloutControls:        rolloutControls,
 		fileSync:               fileSync,
 		agentCheckins:          agentCheckins,
 		agentDispatch:          agentDispatch,
@@ -743,6 +746,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/gitops/deployments/trigger", s.handleGitOpsDeploymentTriggerAlias(baseDir, "api"))
 	mux.HandleFunc("/v1/gitops/deployments/webhook", s.handleGitOpsDeploymentTriggerAlias(baseDir, "webhook"))
 	mux.HandleFunc("/v1/gitops/deployments/", s.handleGitOpsDeploymentAction)
+	mux.HandleFunc("/v1/deployments/rollout/policies", s.handleRolloutPolicies)
+	mux.HandleFunc("/v1/deployments/rollout/plan", s.handleRolloutPlan)
 	mux.HandleFunc("/v1/gitops/filesync/pipelines", s.handleGitOpsFileSyncPipelines)
 	mux.HandleFunc("/v1/gitops/filesync/pipelines/", s.handleGitOpsFileSyncPipelineAction)
 	mux.HandleFunc("/v1/gitops/promotions", s.handleGitOpsPromotions)
@@ -2689,6 +2694,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/gitops/deployments/trigger",
 			"POST /v1/gitops/deployments/webhook",
 			"GET /v1/gitops/deployments/{id}",
+			"GET /v1/deployments/rollout/policies",
+			"POST /v1/deployments/rollout/policies",
+			"POST /v1/deployments/rollout/plan",
 			"GET /v1/gitops/filesync/pipelines",
 			"POST /v1/gitops/filesync/pipelines",
 			"GET /v1/gitops/filesync/pipelines/{id}",
