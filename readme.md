@@ -192,6 +192,7 @@ Human-readable pre-apply risk summaries are available via `POST /v1/plans/risk-s
 Policy simulation and gating checks are available via `POST /v1/policy/simulate`.
 Post-run invariant checks with configurable severity are available via `POST /v1/control/invariants/check`.
 Release blocker policy enforcement with craftsmanship tiers is available via `GET/POST /v1/release/blocker-policy`.
+Automated dependency update bot workflows with compatibility/performance verification are available via `/v1/release/dependency-bot/policy` and `/v1/release/dependency-bot/updates`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
 Solution pack catalog is available via `/v1/solution-packs` and workspace-template catalog/bootstrap flows are available via `/v1/workspace-templates`.

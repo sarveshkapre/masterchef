@@ -46,6 +46,7 @@ type Server struct {
 	useCaseTemplates    *control.UseCaseTemplateCatalog
 	workspaceTemplates  *control.WorkspaceTemplateCatalog
 	channels            *control.ChannelManager
+	dependencyUpdates   *control.DependencyUpdateStore
 	canaryUpgrades      *control.CanaryUpgradeStore
 	failoverDrills      *control.RegionalFailoverDrillStore
 	federation          *control.FederationStore
@@ -141,6 +142,7 @@ func New(addr, baseDir string) *Server {
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
 	channels := control.NewChannelManager()
+	dependencyUpdates := control.NewDependencyUpdateStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
 	federation := control.NewFederationStore()
@@ -228,6 +230,7 @@ func New(addr, baseDir string) *Server {
 		useCaseTemplates:    useCaseTemplates,
 		workspaceTemplates:  workspaceTemplates,
 		channels:            channels,
+		dependencyUpdates:   dependencyUpdates,
 		canaryUpgrades:      canaryUpgrades,
 		failoverDrills:      failoverDrills,
 		federation:          federation,
@@ -329,6 +332,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/blocker-policy", s.handleReleaseBlockerPolicy)
 	mux.HandleFunc("/v1/release/api-contract", s.handleAPIContract)
 	mux.HandleFunc("/v1/release/upgrade-assistant", s.handleUpgradeAssistant)
+	mux.HandleFunc("/v1/release/dependency-bot/policy", s.handleDependencyUpdatePolicy)
+	mux.HandleFunc("/v1/release/dependency-bot/updates", s.handleDependencyUpdates)
+	mux.HandleFunc("/v1/release/dependency-bot/updates/", s.handleDependencyUpdateAction)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/risk-summary", s.handlePlanRiskSummary(baseDir))
 	mux.HandleFunc("/v1/policy/simulate", s.handlePolicySimulation(baseDir))
@@ -2320,6 +2326,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/release/api-contract",
 			"GET /v1/release/upgrade-assistant",
 			"POST /v1/release/upgrade-assistant",
+			"GET /v1/release/dependency-bot/policy",
+			"POST /v1/release/dependency-bot/policy",
+			"GET /v1/release/dependency-bot/updates",
+			"POST /v1/release/dependency-bot/updates",
+			"GET /v1/release/dependency-bot/updates/{id}",
+			"POST /v1/release/dependency-bot/updates/{id}/evaluate",
 			"POST /v1/query",
 			"GET /v1/data-bags",
 			"POST /v1/data-bags",
