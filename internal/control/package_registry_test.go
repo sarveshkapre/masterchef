@@ -140,3 +140,43 @@ func TestPackageRegistryMaintainerHealthMetrics(t *testing.T) {
 		t.Fatalf("unexpected maintainer lookup %+v", got)
 	}
 }
+
+func TestPackageRegistryProvenanceReport(t *testing.T) {
+	store := NewPackageRegistryStore()
+	artifact, err := store.Publish(PackageArtifactInput{
+		Kind:      "module",
+		Name:      "core/base",
+		Version:   "1.0.0",
+		Digest:    "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+		Signed:    true,
+		KeyID:     "sigkey-1",
+		Signature: "sig",
+		Provenance: PackageProvenance{
+			SourceRepo:        "github.com/masterchef/core",
+			SourceRef:         "refs/tags/v1.0.0",
+			Builder:           "gha://build/44",
+			SBOMDigest:        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			AttestationDigest: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+	})
+	if err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+	if _, err := store.Certify(PackageCertificationInput{
+		ArtifactID:              artifact.ID,
+		ConformancePassed:       true,
+		TestPassRate:            0.99,
+		HighVulnerabilities:     1,
+		CriticalVulnerabilities: 0,
+		MaintainerScore:         88,
+	}); err != nil {
+		t.Fatalf("certify failed: %v", err)
+	}
+	report := store.ProvenanceReport()
+	if len(report) != 1 {
+		t.Fatalf("expected one provenance report row")
+	}
+	if report[0].ArtifactID != artifact.ID || report[0].SourceRepo == "" {
+		t.Fatalf("unexpected provenance report item %+v", report[0])
+	}
+}

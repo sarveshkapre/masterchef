@@ -120,4 +120,11 @@ resources:
 	if rr.Code != http.StatusOK {
 		t.Fatalf("maintainer health get failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/provenance/report", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("package provenance report failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }

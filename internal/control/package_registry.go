@@ -128,6 +128,24 @@ type MaintainerHealthReport struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
+type PackageProvenanceReportItem struct {
+	ArtifactID              string    `json:"artifact_id"`
+	Kind                    string    `json:"kind"`
+	Name                    string    `json:"name"`
+	Version                 string    `json:"version"`
+	Digest                  string    `json:"digest"`
+	SourceRepo              string    `json:"source_repo,omitempty"`
+	SourceRef               string    `json:"source_ref,omitempty"`
+	Builder                 string    `json:"builder,omitempty"`
+	SBOMDigest              string    `json:"sbom_digest,omitempty"`
+	AttestationDigest       string    `json:"attestation_digest,omitempty"`
+	Certified               bool      `json:"certified"`
+	CertificationTier       string    `json:"certification_tier,omitempty"`
+	HighVulnerabilities     int       `json:"high_vulnerabilities"`
+	CriticalVulnerabilities int       `json:"critical_vulnerabilities"`
+	UpdatedAt               time.Time `json:"updated_at"`
+}
+
 type PackageRegistryStore struct {
 	mu             sync.RWMutex
 	nextID         int64
@@ -535,6 +553,39 @@ func (s *PackageRegistryStore) GetMaintainerHealth(maintainer string) (Maintaine
 		return MaintainerHealthReport{}, false
 	}
 	return *item, true
+}
+
+func (s *PackageRegistryStore) ProvenanceReport() []PackageProvenanceReportItem {
+	s.mu.RLock()
+	out := make([]PackageProvenanceReportItem, 0, len(s.artifacts))
+	for _, artifact := range s.artifacts {
+		item := PackageProvenanceReportItem{
+			ArtifactID:        artifact.ID,
+			Kind:              artifact.Kind,
+			Name:              artifact.Name,
+			Version:           artifact.Version,
+			Digest:            artifact.Digest,
+			SourceRepo:        artifact.Provenance.SourceRepo,
+			SourceRef:         artifact.Provenance.SourceRef,
+			Builder:           artifact.Provenance.Builder,
+			SBOMDigest:        artifact.Provenance.SBOMDigest,
+			AttestationDigest: artifact.Provenance.AttestationDigest,
+			UpdatedAt:         artifact.UpdatedAt,
+		}
+		if cert, ok := s.certifications[artifact.ID]; ok {
+			item.Certified = cert.Certified
+			item.CertificationTier = cert.Tier
+			item.HighVulnerabilities = cert.HighVulnerabilities
+			item.CriticalVulnerabilities = cert.CriticalVulnerabilities
+			if cert.CreatedAt.After(item.UpdatedAt) {
+				item.UpdatedAt = cert.CreatedAt
+			}
+		}
+		out = append(out, item)
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	return out
 }
 
 func clonePackageArtifact(in PackageArtifact) PackageArtifact {

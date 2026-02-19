@@ -243,3 +243,11 @@ func (s *Server) handlePackageMaintainerHealthAction(w http.ResponseWriter, r *h
 	}
 	writeJSON(w, http.StatusOK, item)
 }
+
+func (s *Server) handlePackageProvenanceReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.packageRegistry.ProvenanceReport())
+}

@@ -141,6 +141,7 @@ OIDC workload identity support is available via `/v1/identity/oidc/workload/prov
 mTLS component trust/policy management with handshake verification is available via `/v1/security/mtls/authorities`, `/v1/security/mtls/policies`, and `/v1/security/mtls/handshake-check`.
 Secrets manager integrations plus secret-usage tracing with redaction-by-default logs are available via `/v1/secrets/integrations`, `/v1/secrets/resolve`, and `/v1/secrets/traces`.
 Signed module/provider package artifacts with provenance metadata and policy-driven verification are available via `/v1/packages/artifacts`, `/v1/packages/signing-policy`, and `/v1/packages/verify`.
+Module/provider provenance and vulnerability reports are available via `GET /v1/packages/provenance/report`.
 Agent certificate issuance, policy-based autosigning/manual approval fallback, rotation, and revocation workflows are available via `/v1/agents/cert-policy`, `/v1/agents/csrs`, and `/v1/agents/certificates`.
 Catalog compile/distribute flows with cached artifacts and signed replay for disconnected nodes are available via `/v1/agents/catalogs`, `POST /v1/agents/catalogs/replay`, and `/v1/agents/catalogs/replays`.
 Certificate expiry SLO visibility and automatic renewal workflows are available via `/v1/agents/certificates/expiry-report` and `/v1/agents/certificates/renew-expiring`.
