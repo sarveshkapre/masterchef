@@ -1,8 +1,12 @@
 package executor
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -27,6 +31,13 @@ type Executor struct {
 }
 
 type transportApplyFunc func(step planner.Step, r config.Resource) (bool, bool, string, error)
+
+type filebucketSnapshot struct {
+	Eligible bool
+	Path     string
+	Content  []byte
+	Checksum string
+}
 
 func New(baseDir string) *Executor {
 	e := &Executor{
@@ -175,6 +186,7 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 }
 
 func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
+	filebucket := e.captureFilebucketSnapshot(step)
 	attempts := 1
 	if step.Resource.Retries > 0 {
 		attempts = step.Resource.Retries + 1
@@ -197,6 +209,13 @@ func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
 			}
 		}
 		if !failed {
+			if filebucket.Eligible && !last.Skipped && last.Changed {
+				if msg, err := e.persistFilebucketBackup(step, filebucket); err != nil {
+					last.Message = appendAuditMessage(last.Message, "filebucket backup failed: "+err.Error())
+				} else {
+					last.Message = appendAuditMessage(last.Message, msg)
+				}
+			}
 			if attempt > 1 {
 				last.Message = strings.TrimSpace(last.Message + " (succeeded after " + strconv.Itoa(attempt) + " attempts)")
 			}
@@ -417,6 +436,75 @@ func appendAuditMessage(message, audit string) string {
 		return audit
 	}
 	return message + "; " + audit
+}
+
+func (e *Executor) captureFilebucketSnapshot(step planner.Step) filebucketSnapshot {
+	r := step.Resource
+	if r.Type != "file" || strings.TrimSpace(r.Path) == "" || strings.TrimSpace(e.baseDir) == "" {
+		return filebucketSnapshot{}
+	}
+	transport := strings.ToLower(strings.TrimSpace(step.Host.Transport))
+	if transport == "winrm" && isLocalWinRMHost(step.Host) {
+		transport = "local"
+	}
+	if transport != "local" {
+		return filebucketSnapshot{}
+	}
+	full := filepath.Clean(r.Path)
+	current, err := os.ReadFile(full)
+	if err != nil {
+		return filebucketSnapshot{}
+	}
+	if bytes.Equal(current, []byte(r.Content)) {
+		return filebucketSnapshot{}
+	}
+	sum := sha256.Sum256(current)
+	return filebucketSnapshot{
+		Eligible: true,
+		Path:     full,
+		Content:  current,
+		Checksum: "sha256:" + hex.EncodeToString(sum[:]),
+	}
+}
+
+func (e *Executor) persistFilebucketBackup(step planner.Step, snap filebucketSnapshot) (string, error) {
+	if !snap.Eligible {
+		return "", nil
+	}
+	base := filepath.Join(e.baseDir, ".masterchef", "filebucket")
+	objectsDir := filepath.Join(base, "objects")
+	if err := os.MkdirAll(objectsDir, 0o755); err != nil {
+		return "", fmt.Errorf("create objects dir: %w", err)
+	}
+	objectKey := strings.ReplaceAll(snap.Checksum, ":", "-")
+	objectPath := filepath.Join(objectsDir, objectKey)
+	if _, err := os.Stat(objectPath); errors.Is(err, os.ErrNotExist) {
+		if err := os.WriteFile(objectPath, snap.Content, 0o644); err != nil {
+			return "", fmt.Errorf("write object: %w", err)
+		}
+	}
+	history := map[string]any{
+		"time":        time.Now().UTC(),
+		"resource_id": step.Resource.ID,
+		"host":        step.Resource.Host,
+		"path":        snap.Path,
+		"checksum":    snap.Checksum,
+		"size_bytes":  len(snap.Content),
+	}
+	line, err := json.Marshal(history)
+	if err != nil {
+		return "", fmt.Errorf("marshal history: %w", err)
+	}
+	historyPath := filepath.Join(base, "history.ndjson")
+	f, err := os.OpenFile(historyPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return "", fmt.Errorf("open history: %w", err)
+	}
+	defer f.Close()
+	if _, err := f.Write(append(line, '\n')); err != nil {
+		return "", fmt.Errorf("append history: %w", err)
+	}
+	return "filebucket backup: " + snap.Checksum, nil
 }
 
 func normalizeRetryBackoff(mode string) string {

@@ -1,6 +1,8 @@
 package executor
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -52,6 +54,67 @@ func TestApply_FileIsIdempotent(t *testing.T) {
 	}
 	if r2.Results[0].Changed {
 		t.Fatalf("expected idempotent second run, got changed=true")
+	}
+}
+
+func TestApply_FilebucketBackupAndHistory(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "managed.txt")
+	oldContent := "previous\n"
+	if err := os.WriteFile(target, []byte(oldContent), 0o644); err != nil {
+		t.Fatalf("seed file failed: %v", err)
+	}
+
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host: config.Host{
+					Name:      "localhost",
+					Transport: "local",
+				},
+				Resource: config.Resource{
+					ID:      "f-bucket",
+					Type:    "file",
+					Host:    "localhost",
+					Path:    target,
+					Content: "next\n",
+				},
+			},
+		},
+	}
+
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded || len(run.Results) != 1 || !run.Results[0].Changed {
+		t.Fatalf("unexpected run result: %#v", run)
+	}
+	if !strings.Contains(run.Results[0].Message, "filebucket backup: sha256:") {
+		t.Fatalf("expected filebucket message in result: %q", run.Results[0].Message)
+	}
+
+	sum := sha256.Sum256([]byte(oldContent))
+	checksum := "sha256-" + hex.EncodeToString(sum[:])
+	objectPath := filepath.Join(tmp, ".masterchef", "filebucket", "objects", checksum)
+	objectContent, err := os.ReadFile(objectPath)
+	if err != nil {
+		t.Fatalf("expected filebucket object %s: %v", objectPath, err)
+	}
+	if string(objectContent) != oldContent {
+		t.Fatalf("unexpected filebucket object content: %q", string(objectContent))
+	}
+
+	historyPath := filepath.Join(tmp, ".masterchef", "filebucket", "history.ndjson")
+	historyRaw, err := os.ReadFile(historyPath)
+	if err != nil {
+		t.Fatalf("expected filebucket history file: %v", err)
+	}
+	history := string(historyRaw)
+	if !strings.Contains(history, `"resource_id":"f-bucket"`) || !strings.Contains(history, `"checksum":"sha256:`) {
+		t.Fatalf("unexpected filebucket history: %s", history)
 	}
 }
 

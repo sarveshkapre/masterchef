@@ -76,6 +76,7 @@ See `FEATURES.md`, `agents.md`, and `ROADMAP.md` for detailed scope.
 Active implementation phase.
 
 Current control-plane DR surface includes backup, point-in-time restore, and automated restore-verification drills.
+Managed file resources now emit filebucket-style backups under `.masterchef/filebucket` with checksum-addressed objects and append-only history records.
 Regional failover drills with recovery-time scorecards are available via `/v1/control/failover-drills` and `/v1/control/failover-drills/scorecards`.
 API contract governance includes deprecation lifecycle checks plus an upgrade-assistant endpoint for migration guidance.
 Schema evolution controls enforce migration plans and stepwise compatibility for control-plane state model upgrades.
