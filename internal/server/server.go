@@ -642,6 +642,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/content-channels/remotes/", s.handleContentChannelRemoteAction)
 	mux.HandleFunc("/v1/packages/scaffold/templates", s.handleModuleScaffoldTemplates)
 	mux.HandleFunc("/v1/packages/scaffold/generate", s.handleModuleScaffoldGenerate(baseDir))
+	mux.HandleFunc("/v1/packages/interface-compat/analyze", s.handleInterfaceCompatAnalyze)
 	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
 	mux.HandleFunc("/v1/agents/catalogs", s.handleAgentCatalogs(baseDir))
 	mux.HandleFunc("/v1/agents/catalogs/replay", s.handleAgentCatalogReplay(baseDir))
@@ -2535,6 +2536,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/packages/content-channels/remotes/{id}/rotate-token",
 			"GET /v1/packages/scaffold/templates",
 			"POST /v1/packages/scaffold/generate",
+			"POST /v1/packages/interface-compat/analyze",
 			"GET /v1/agents/cert-policy",
 			"POST /v1/agents/cert-policy",
 			"GET /v1/agents/catalogs",

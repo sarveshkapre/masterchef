@@ -217,6 +217,7 @@ Module/provider quality scoring with craftsmanship tiers (`gold`/`silver`/`bronz
 Continuous conformance suites for built-in providers are available via `/v1/providers/conformance/suites` and `/v1/providers/conformance/runs`.
 Curated content channels (`certified`, `validated`, `community`) with controlled sync policies and per-organization sync remotes secured by API tokens are available via `/v1/packages/content-channels`, `/v1/packages/content-channels/sync-policy`, and `/v1/packages/content-channels/remotes`.
 Module/provider scaffolding generator with best-practice templates is available via `GET /v1/packages/scaffold/templates` and `POST /v1/packages/scaffold/generate`.
+Breaking-change detection for module/provider interface updates is available via `POST /v1/packages/interface-compat/analyze`.
 Control-plane canary upgrade workflow with automatic rollback on regression is available via `/v1/control/canary-upgrades`.
 Health probe integrations for promotion/rollback gating are available via `/v1/control/health-probes`, `/v1/control/health-probes/checks`, and `/v1/control/health-probes/evaluate`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
