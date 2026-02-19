@@ -164,6 +164,7 @@ Secrets manager integrations plus secret-usage tracing with redaction-by-default
 Signed module/provider package artifacts with provenance metadata and policy-driven verification are available via `/v1/packages/artifacts`, `/v1/packages/signing-policy`, and `/v1/packages/verify`.
 Private/public registry visibility controls are available via package artifact `visibility` and `GET /v1/packages/artifacts?visibility=public|private`.
 Module/provider provenance and vulnerability reports are available via `GET /v1/packages/provenance/report`.
+Package version pinning with hold/unhold and drift enforcement decisions is available via `/v1/packages/pinning/policies` and `POST /v1/packages/pinning/evaluate`.
 Agent certificate issuance, policy-based autosigning/manual approval fallback, rotation, and revocation workflows are available via `/v1/agents/cert-policy`, `/v1/agents/csrs`, and `/v1/agents/certificates`.
 Catalog compile/distribute flows with cached artifacts and signed replay for disconnected nodes are available via `/v1/agents/catalogs`, `POST /v1/agents/catalogs/replay`, and `/v1/agents/catalogs/replays`.
 Certificate expiry SLO visibility and automatic renewal workflows are available via `/v1/agents/certificates/expiry-report` and `/v1/agents/certificates/renew-expiring`.

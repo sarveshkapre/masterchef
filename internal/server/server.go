@@ -139,6 +139,7 @@ type Server struct {
 	oidcWorkload           *control.OIDCWorkloadStore
 	mtls                   *control.MTLSStore
 	secretIntegrations     *control.SecretsIntegrationStore
+	packagePinning         *control.PackagePinStore
 	packageRegistry        *control.PackageRegistryStore
 	contentChannels        *control.ContentChannelStore
 	agentPKI               *control.AgentPKIStore
@@ -286,6 +287,7 @@ func New(addr, baseDir string) *Server {
 	oidcWorkload := control.NewOIDCWorkloadStore()
 	mtls := control.NewMTLSStore()
 	secretIntegrations := control.NewSecretsIntegrationStore()
+	packagePinning := control.NewPackagePinStore()
 	packageRegistry := control.NewPackageRegistryStore()
 	contentChannels := control.NewContentChannelStore()
 	agentPKI := control.NewAgentPKIStore()
@@ -425,6 +427,7 @@ func New(addr, baseDir string) *Server {
 		oidcWorkload:           oidcWorkload,
 		mtls:                   mtls,
 		secretIntegrations:     secretIntegrations,
+		packagePinning:         packagePinning,
 		packageRegistry:        packageRegistry,
 		contentChannels:        contentChannels,
 		agentPKI:               agentPKI,
@@ -694,6 +697,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/scaffold/templates", s.handleModuleScaffoldTemplates)
 	mux.HandleFunc("/v1/packages/scaffold/generate", s.handleModuleScaffoldGenerate(baseDir))
 	mux.HandleFunc("/v1/packages/interface-compat/analyze", s.handleInterfaceCompatAnalyze)
+	mux.HandleFunc("/v1/packages/pinning/policies", s.handlePackagePinPolicies)
+	mux.HandleFunc("/v1/packages/pinning/evaluate", s.handlePackagePinEvaluate)
 	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
 	mux.HandleFunc("/v1/agents/catalogs", s.handleAgentCatalogs(baseDir))
 	mux.HandleFunc("/v1/agents/catalogs/replay", s.handleAgentCatalogReplay(baseDir))
@@ -2614,6 +2619,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/packages/scaffold/templates",
 			"POST /v1/packages/scaffold/generate",
 			"POST /v1/packages/interface-compat/analyze",
+			"GET /v1/packages/pinning/policies",
+			"POST /v1/packages/pinning/policies",
+			"POST /v1/packages/pinning/evaluate",
 			"GET /v1/agents/cert-policy",
 			"POST /v1/agents/cert-policy",
 			"GET /v1/agents/catalogs",
