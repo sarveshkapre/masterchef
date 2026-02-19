@@ -71,6 +71,7 @@ type Server struct {
 	loadSoak              *control.LoadSoakStore
 	readinessScorecards   *control.ReadinessScorecardStore
 	mutationTests         *control.MutationStore
+	propertyHarness       *control.PropertyHarnessStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -203,6 +204,7 @@ func New(addr, baseDir string) *Server {
 	loadSoak := control.NewLoadSoakStore()
 	readinessScorecards := control.NewReadinessScorecardStore()
 	mutationTests := control.NewMutationStore()
+	propertyHarness := control.NewPropertyHarnessStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -327,6 +329,7 @@ func New(addr, baseDir string) *Server {
 		loadSoak:              loadSoak,
 		readinessScorecards:   readinessScorecards,
 		mutationTests:         mutationTests,
+		propertyHarness:       propertyHarness,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -490,6 +493,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/mutation/suites", s.handleMutationSuites)
 	mux.HandleFunc("/v1/release/tests/mutation/runs", s.handleMutationRuns)
 	mux.HandleFunc("/v1/release/tests/mutation/runs/", s.handleMutationRunAction)
+	mux.HandleFunc("/v1/release/tests/property-harness/cases", s.handlePropertyHarnessCases)
+	mux.HandleFunc("/v1/release/tests/property-harness/runs", s.handlePropertyHarnessRuns)
+	mux.HandleFunc("/v1/release/tests/property-harness/runs/", s.handlePropertyHarnessRunAction)
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
@@ -2717,6 +2723,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/tests/mutation/runs",
 			"POST /v1/release/tests/mutation/runs",
 			"GET /v1/release/tests/mutation/runs/{id}",
+			"GET /v1/release/tests/property-harness/cases",
+			"POST /v1/release/tests/property-harness/cases",
+			"GET /v1/release/tests/property-harness/runs",
+			"POST /v1/release/tests/property-harness/runs",
+			"GET /v1/release/tests/property-harness/runs/{id}",
 			"GET /v1/providers/conformance/suites",
 			"POST /v1/providers/conformance/suites",
 			"GET /v1/providers/conformance/runs",
