@@ -229,3 +229,89 @@ func TestTaskFrameworkStore_AsyncExecutionTimeout(t *testing.T) {
 		t.Fatalf("expected timed out execution, got %+v", final)
 	}
 }
+
+func TestTaskFrameworkStore_ExecutionTagFilters(t *testing.T) {
+	store := NewTaskFrameworkStore()
+	task, err := store.RegisterTask(TaskDefinitionInput{
+		Name:   "Deploy",
+		Module: "packs/web",
+		Action: "deploy",
+		Parameters: []TaskParameterSpec{
+			{Name: "service", Type: "string", Required: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("register task failed: %v", err)
+	}
+	plan, err := store.RegisterPlan(TaskPlanInput{
+		Name: "tagged-rollout",
+		Steps: []TaskPlanStep{
+			{
+				Name:   "deploy-api",
+				TaskID: task.ID,
+				Tags:   []string{"web", "prod"},
+				Parameters: map[string]any{
+					"service": "api",
+				},
+			},
+			{
+				Name:   "deploy-worker",
+				TaskID: task.ID,
+				Tags:   []string{"web", "canary"},
+				Parameters: map[string]any{
+					"service": "worker",
+				},
+			},
+			{
+				Name:   "migrate-db",
+				TaskID: task.ID,
+				Tags:   []string{"db", "prod"},
+				Parameters: map[string]any{
+					"service": "db",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("register plan failed: %v", err)
+	}
+	exec, err := store.StartExecution(TaskExecutionInput{
+		PlanID:      plan.ID,
+		IncludeTags: []string{"WEB"},
+		ExcludeTags: []string{"canary"},
+	})
+	if err != nil {
+		t.Fatalf("start execution failed: %v", err)
+	}
+
+	var final TaskExecution
+	for i := 0; i < 50; i++ {
+		current, ok := store.GetExecution(exec.ID)
+		if !ok {
+			t.Fatalf("execution disappeared")
+		}
+		if current.Status == TaskExecutionSucceeded {
+			final = current
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if final.Status != TaskExecutionSucceeded {
+		t.Fatalf("expected execution to succeed, got %+v", final)
+	}
+	if len(final.IncludeTags) != 1 || final.IncludeTags[0] != "web" {
+		t.Fatalf("expected normalized include tags, got %#v", final.IncludeTags)
+	}
+	if len(final.ExcludeTags) != 1 || final.ExcludeTags[0] != "canary" {
+		t.Fatalf("expected normalized exclude tags, got %#v", final.ExcludeTags)
+	}
+	if final.StepCount != 1 || final.CompletedSteps != 1 || len(final.Steps) != 1 {
+		t.Fatalf("expected one filtered step execution, got %+v", final)
+	}
+	if final.Steps[0].Name != "deploy-api" {
+		t.Fatalf("expected deploy-api to run, got %+v", final.Steps[0])
+	}
+	if len(final.Steps[0].Tags) != 2 || final.Steps[0].Tags[0] != "prod" || final.Steps[0].Tags[1] != "web" {
+		t.Fatalf("expected normalized step tags, got %#v", final.Steps[0].Tags)
+	}
+}

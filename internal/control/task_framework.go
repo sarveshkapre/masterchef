@@ -44,6 +44,7 @@ type TaskPlanStep struct {
 	Name            string         `json:"name"`
 	TaskID          string         `json:"task_id"`
 	Parameters      map[string]any `json:"parameters,omitempty"`
+	Tags            []string       `json:"tags,omitempty"`
 	ContinueOnError bool           `json:"continue_on_error,omitempty"`
 }
 
@@ -77,6 +78,7 @@ type TaskPlanPreviewStep struct {
 	Module          string         `json:"module"`
 	Action          string         `json:"action"`
 	Primitive       string         `json:"primitive"`
+	Tags            []string       `json:"tags,omitempty"`
 	ContinueOnError bool           `json:"continue_on_error,omitempty"`
 	SensitiveFields []string       `json:"sensitive_fields,omitempty"`
 	Parameters      map[string]any `json:"parameters,omitempty"`
@@ -99,6 +101,7 @@ type TaskExecutionStep struct {
 	Module          string              `json:"module"`
 	Action          string              `json:"action"`
 	Primitive       string              `json:"primitive"`
+	Tags            []string            `json:"tags,omitempty"`
 	ContinueOnError bool                `json:"continue_on_error,omitempty"`
 	Status          TaskExecutionStatus `json:"status"`
 	Parameters      map[string]any      `json:"parameters,omitempty"`
@@ -112,6 +115,8 @@ type TaskExecution struct {
 	PlanID         string              `json:"plan_id"`
 	PlanName       string              `json:"plan_name,omitempty"`
 	Status         TaskExecutionStatus `json:"status"`
+	IncludeTags    []string            `json:"include_tags,omitempty"`
+	ExcludeTags    []string            `json:"exclude_tags,omitempty"`
 	PollIntervalMS int                 `json:"poll_interval_ms"`
 	TimeoutSeconds int                 `json:"timeout_seconds"`
 	CreatedAt      time.Time           `json:"created_at"`
@@ -126,6 +131,8 @@ type TaskExecution struct {
 type TaskExecutionInput struct {
 	PlanID         string                    `json:"plan_id"`
 	Overrides      map[string]map[string]any `json:"overrides,omitempty"`
+	IncludeTags    []string                  `json:"include_tags,omitempty"`
+	ExcludeTags    []string                  `json:"exclude_tags,omitempty"`
 	PollIntervalMS int                       `json:"poll_interval_ms,omitempty"`
 	TimeoutSeconds int                       `json:"timeout_seconds,omitempty"`
 }
@@ -306,6 +313,7 @@ func (s *TaskFrameworkStore) PreviewPlan(planID string, in TaskPlanPreviewInput)
 			Module:          task.Module,
 			Action:          task.Action,
 			Primitive:       task.Primitive,
+			Tags:            append([]string{}, step.Tags...),
 			ContinueOnError: step.ContinueOnError,
 			SensitiveFields: sensitiveParameterNames(task),
 			Parameters:      maskTaskParameters(task, resolved),
@@ -344,6 +352,8 @@ func (s *TaskFrameworkStore) StartExecution(in TaskExecutionInput) (TaskExecutio
 	for k, v := range in.Overrides {
 		overrides[strings.TrimSpace(k)] = cloneTaskAnyMap(v)
 	}
+	includeTags := normalizeTaskTags(in.IncludeTags)
+	excludeTags := normalizeTaskTags(in.ExcludeTags)
 
 	s.mu.Lock()
 	plan, ok := s.plans[planID]
@@ -351,24 +361,28 @@ func (s *TaskFrameworkStore) StartExecution(in TaskExecutionInput) (TaskExecutio
 		s.mu.Unlock()
 		return TaskExecution{}, errors.New("task plan not found")
 	}
+	filteredPlan := cloneTaskPlan(plan)
+	filteredPlan.Steps = filterTaskPlanStepsByTags(filteredPlan.Steps, includeTags, excludeTags)
 	s.nextExecution++
 	execID := "taskexec-" + itoa(s.nextExecution)
 	exec := TaskExecution{
 		ID:             execID,
-		PlanID:         plan.ID,
-		PlanName:       plan.Name,
+		PlanID:         filteredPlan.ID,
+		PlanName:       filteredPlan.Name,
 		Status:         TaskExecutionPending,
+		IncludeTags:    append([]string{}, includeTags...),
+		ExcludeTags:    append([]string{}, excludeTags...),
 		PollIntervalMS: poll,
 		TimeoutSeconds: timeout,
 		CreatedAt:      time.Now().UTC(),
-		StepCount:      len(plan.Steps),
+		StepCount:      len(filteredPlan.Steps),
 		CompletedSteps: 0,
-		Steps:          make([]TaskExecutionStep, 0, len(plan.Steps)),
+		Steps:          make([]TaskExecutionStep, 0, len(filteredPlan.Steps)),
 	}
 	s.executions[execID] = cloneTaskExecution(exec)
 	s.mu.Unlock()
 
-	go s.runExecution(execID, plan, overrides, timeout)
+	go s.runExecution(execID, filteredPlan, overrides, timeout)
 	return cloneTaskExecution(exec), nil
 }
 
@@ -474,6 +488,7 @@ func (s *TaskFrameworkStore) runExecution(execID string, plan TaskPlan, override
 				Module:          task.Module,
 				Action:          task.Action,
 				Primitive:       task.Primitive,
+				Tags:            append([]string{}, step.Tags...),
 				ContinueOnError: step.ContinueOnError,
 				Status:          status,
 				Parameters:      maskTaskParameters(task, params),
@@ -497,6 +512,7 @@ func (s *TaskFrameworkStore) runExecution(execID string, plan TaskPlan, override
 			Module:          task.Module,
 			Action:          task.Action,
 			Primitive:       task.Primitive,
+			Tags:            append([]string{}, step.Tags...),
 			ContinueOnError: step.ContinueOnError,
 			Status:          TaskExecutionSucceeded,
 			Parameters:      maskTaskParameters(task, resolved),
@@ -542,10 +558,12 @@ func (s *TaskFrameworkStore) resolveStepLocked(step TaskPlanStep, idx int) (Task
 	if err != nil {
 		return TaskPlanStep{}, fmt.Errorf("step %q: %w", name, err)
 	}
+	tags := normalizeTaskTags(step.Tags)
 	return TaskPlanStep{
 		Name:            name,
 		TaskID:          taskID,
 		Parameters:      resolvedParams,
+		Tags:            tags,
 		ContinueOnError: step.ContinueOnError,
 	}, nil
 }
@@ -759,6 +777,70 @@ func sensitiveParameterNames(task TaskDefinition) []string {
 	return out
 }
 
+func normalizeTaskTags(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		tag := strings.ToLower(strings.TrimSpace(raw))
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func filterTaskPlanStepsByTags(steps []TaskPlanStep, includeTags, excludeTags []string) []TaskPlanStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	include := map[string]struct{}{}
+	for _, tag := range includeTags {
+		include[tag] = struct{}{}
+	}
+	exclude := map[string]struct{}{}
+	for _, tag := range excludeTags {
+		exclude[tag] = struct{}{}
+	}
+	filtered := make([]TaskPlanStep, 0, len(steps))
+	for _, step := range steps {
+		if len(exclude) > 0 {
+			skip := false
+			for _, tag := range step.Tags {
+				if _, ok := exclude[tag]; ok {
+					skip = true
+					break
+				}
+			}
+			if skip {
+				continue
+			}
+		}
+		if len(include) > 0 {
+			includeMatch := false
+			for _, tag := range step.Tags {
+				if _, ok := include[tag]; ok {
+					includeMatch = true
+					break
+				}
+			}
+			if !includeMatch {
+				continue
+			}
+		}
+		filtered = append(filtered, step)
+	}
+	return filtered
+}
+
 func cloneTaskDefinition(in TaskDefinition) TaskDefinition {
 	out := in
 	out.Parameters = make([]TaskParameterSpec, 0, len(in.Parameters))
@@ -779,6 +861,7 @@ func cloneTaskPlan(in TaskPlan) TaskPlan {
 			TaskID:          step.TaskID,
 			ContinueOnError: step.ContinueOnError,
 			Parameters:      cloneTaskAnyMap(step.Parameters),
+			Tags:            append([]string{}, step.Tags...),
 		})
 	}
 	return out
@@ -786,6 +869,8 @@ func cloneTaskPlan(in TaskPlan) TaskPlan {
 
 func cloneTaskExecution(in TaskExecution) TaskExecution {
 	out := in
+	out.IncludeTags = append([]string{}, in.IncludeTags...)
+	out.ExcludeTags = append([]string{}, in.ExcludeTags...)
 	out.Steps = make([]TaskExecutionStep, 0, len(in.Steps))
 	for _, step := range in.Steps {
 		out.Steps = append(out.Steps, cloneTaskExecutionStep(step))
@@ -795,6 +880,7 @@ func cloneTaskExecution(in TaskExecution) TaskExecution {
 
 func cloneTaskExecutionStep(in TaskExecutionStep) TaskExecutionStep {
 	out := in
+	out.Tags = append([]string{}, in.Tags...)
 	out.Parameters = cloneTaskAnyMap(in.Parameters)
 	return out
 }

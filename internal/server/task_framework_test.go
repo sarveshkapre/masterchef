@@ -283,3 +283,114 @@ resources:
 		t.Fatalf("expected redacted marker in execution output: %s", finalBody)
 	}
 }
+
+func TestTaskFrameworkExecutionTagFiltersEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: marker
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "marker.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(":0", tmp)
+	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
+
+	taskReq := []byte(`{"name":"Deploy","module":"packs/web","action":"deploy","parameters":[{"name":"service","type":"string","required":true}]}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/definitions", bytes.NewReader(taskReq))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("task create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var task struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &task); err != nil {
+		t.Fatalf("decode task failed: %v", err)
+	}
+
+	planReq := []byte(`{
+  "name":"prod",
+  "steps":[
+    {"name":"deploy-api","task_id":"` + task.ID + `","tags":["web","prod"],"parameters":{"service":"api"}},
+    {"name":"deploy-worker","task_id":"` + task.ID + `","tags":["web","canary"],"parameters":{"service":"worker"}},
+    {"name":"migrate-db","task_id":"` + task.ID + `","tags":["db","prod"],"parameters":{"service":"db"}}
+  ]
+}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/tasks/plans", bytes.NewReader(planReq))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("plan create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var plan struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil {
+		t.Fatalf("decode plan failed: %v", err)
+	}
+
+	execReq := []byte(`{"plan_id":"` + plan.ID + `","include_tags":["web"],"exclude_tags":["canary"]}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/tasks/executions", bytes.NewReader(execReq))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("execution start failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var exec struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &exec); err != nil {
+		t.Fatalf("decode execution failed: %v", err)
+	}
+
+	var finalBody string
+	for i := 0; i < 60; i++ {
+		rr = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/v1/tasks/executions/"+exec.ID, nil)
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("execution get failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+		finalBody = rr.Body.String()
+		if strings.Contains(finalBody, `"status":"succeeded"`) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(finalBody, `"status":"succeeded"`) {
+		t.Fatalf("expected execution to succeed, got %s", finalBody)
+	}
+	if !strings.Contains(finalBody, `"step_count":1`) {
+		t.Fatalf("expected one filtered step, got %s", finalBody)
+	}
+	if !strings.Contains(finalBody, `"name":"deploy-api"`) {
+		t.Fatalf("expected deploy-api step in execution, got %s", finalBody)
+	}
+	if strings.Contains(finalBody, `"name":"deploy-worker"`) || strings.Contains(finalBody, `"name":"migrate-db"`) {
+		t.Fatalf("expected filtered execution to exclude non-matching steps, got %s", finalBody)
+	}
+	if !strings.Contains(finalBody, `"include_tags":["web"]`) || !strings.Contains(finalBody, `"exclude_tags":["canary"]`) {
+		t.Fatalf("expected execution tag filters in response, got %s", finalBody)
+	}
+}
