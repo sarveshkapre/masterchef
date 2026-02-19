@@ -33,3 +33,23 @@ func TestValidateSurveyAnswers(t *testing.T) {
 		t.Fatalf("expected unknown field validation error")
 	}
 }
+
+func TestRenderTemplateText_StrictMode(t *testing.T) {
+	rendered, missing := RenderTemplateText("env={{ env }} token={{token}}", map[string]string{"env": "prod"}, true)
+	if rendered != "env=prod token={{token}}" {
+		t.Fatalf("unexpected strict render output %q", rendered)
+	}
+	if len(missing) != 1 || missing[0] != "token" {
+		t.Fatalf("expected missing token in strict mode, got %#v", missing)
+	}
+}
+
+func TestRenderTemplateText_NonStrictMode(t *testing.T) {
+	rendered, missing := RenderTemplateText("env={{ env }} token={{token}}", map[string]string{"env": "prod"}, false)
+	if rendered != "env=prod token=" {
+		t.Fatalf("unexpected non-strict render output %q", rendered)
+	}
+	if len(missing) != 1 || missing[0] != "token" {
+		t.Fatalf("expected missing token in non-strict mode, got %#v", missing)
+	}
+}

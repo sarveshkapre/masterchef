@@ -2621,6 +2621,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/templates",
 			"POST /v1/templates",
 			"POST /v1/templates/{id}/launch",
+			"POST /v1/templates/{id}/render",
 			"DELETE /v1/templates/{id}/delete",
 			"GET /v1/runbooks",
 			"POST /v1/runbooks",
@@ -2815,6 +2816,7 @@ func (s *Server) handleTemplates(baseDir string) http.HandlerFunc {
 		Name        string                         `json:"name"`
 		Description string                         `json:"description"`
 		ConfigPath  string                         `json:"config_path"`
+		StrictMode  bool                           `json:"strict_mode,omitempty"`
 		Defaults    map[string]string              `json:"defaults"`
 		Survey      map[string]control.SurveyField `json:"survey"`
 	}
@@ -2843,6 +2845,7 @@ func (s *Server) handleTemplates(baseDir string) http.HandlerFunc {
 				Name:        req.Name,
 				Description: req.Description,
 				ConfigPath:  req.ConfigPath,
+				StrictMode:  req.StrictMode,
 				Defaults:    req.Defaults,
 				Survey:      req.Survey,
 			})
@@ -2897,6 +2900,12 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		mergedVars := control.MergeTemplateVariables(t.Defaults, launch.Answers)
+		rendered, missing, renderErr := control.RenderTemplateFile(t.ConfigPath, mergedVars, t.StrictMode)
+		if renderErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": renderErr.Error()})
+			return
+		}
 		key := r.Header.Get("Idempotency-Key")
 		force := strings.ToLower(r.Header.Get("X-Force-Apply")) == "true"
 		priority := launch.Priority
@@ -2917,9 +2926,49 @@ func (s *Server) handleTemplateAction(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		writeJSON(w, http.StatusAccepted, map[string]any{
-			"template": t,
-			"job":      job,
-			"answers":  launch.Answers,
+			"template":           t,
+			"job":                job,
+			"answers":            launch.Answers,
+			"resolved_variables": mergedVars,
+			"missing_variables":  missing,
+			"rendered_preview":   rendered,
+		})
+	case "render":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		type renderReq struct {
+			Answers map[string]string `json:"answers"`
+		}
+		var req renderReq
+		if r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+				return
+			}
+		}
+		t, ok := s.templates.Get(id)
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "template not found"})
+			return
+		}
+		if err := control.ValidateSurveyAnswers(t.Survey, req.Answers); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		mergedVars := control.MergeTemplateVariables(t.Defaults, req.Answers)
+		rendered, missing, err := control.RenderTemplateFile(t.ConfigPath, mergedVars, t.StrictMode)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"template_id":        t.ID,
+			"strict_mode":        t.StrictMode,
+			"resolved_variables": mergedVars,
+			"missing_variables":  missing,
+			"rendered":           rendered,
 		})
 	case "delete":
 		if r.Method != http.MethodDelete {

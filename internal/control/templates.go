@@ -3,11 +3,16 @@ package control
 import (
 	"errors"
 	"fmt"
+	"os"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+var templateVariablePattern = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}`)
 
 type SurveyField struct {
 	Type     string   `json:"type"` // string|int|bool
@@ -20,6 +25,7 @@ type Template struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	ConfigPath  string                 `json:"config_path"`
+	StrictMode  bool                   `json:"strict_mode,omitempty"`
 	Defaults    map[string]string      `json:"defaults,omitempty"`
 	Survey      map[string]SurveyField `json:"survey,omitempty"`
 	CreatedAt   time.Time              `json:"created_at"`
@@ -150,4 +156,64 @@ func ValidateSurveyAnswers(schema map[string]SurveyField, answers map[string]str
 		}
 	}
 	return nil
+}
+
+func MergeTemplateVariables(defaults, answers map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range defaults {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		out[key] = v
+	}
+	for k, v := range answers {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		out[key] = v
+	}
+	return out
+}
+
+func RenderTemplateText(template string, vars map[string]string, strict bool) (string, []string) {
+	missing := map[string]struct{}{}
+	rendered := templateVariablePattern.ReplaceAllStringFunc(template, func(token string) string {
+		matches := templateVariablePattern.FindStringSubmatch(token)
+		if len(matches) != 2 {
+			return token
+		}
+		key := strings.TrimSpace(matches[1])
+		if value, ok := vars[key]; ok {
+			return value
+		}
+		missing[key] = struct{}{}
+		if strict {
+			return token
+		}
+		return ""
+	})
+	missingList := make([]string, 0, len(missing))
+	for key := range missing {
+		missingList = append(missingList, key)
+	}
+	sort.Strings(missingList)
+	return rendered, missingList
+}
+
+func RenderTemplateFile(path string, vars map[string]string, strict bool) (string, []string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", nil, errors.New("config_path is required")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return "", nil, err
+	}
+	rendered, missing := RenderTemplateText(string(body), vars, strict)
+	if strict && len(missing) > 0 {
+		return "", missing, fmt.Errorf("undefined template variables: %s", strings.Join(missing, ", "))
+	}
+	return rendered, missing, nil
 }
