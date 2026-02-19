@@ -59,6 +59,7 @@ type Server struct {
 	objectModel            *control.ObjectModelRegistry
 	moduleScaffold         *control.ModuleScaffoldCatalog
 	migrations             *control.MigrationStore
+	migrationTooling       *control.MigrationToolingStore
 	solutionPacks          *control.SolutionPackCatalog
 	useCaseTemplates       *control.UseCaseTemplateCatalog
 	workspaceTemplates     *control.WorkspaceTemplateCatalog
@@ -221,6 +222,7 @@ func New(addr, baseDir string) *Server {
 	objectModel := control.NewObjectModelRegistry()
 	moduleScaffold := control.NewModuleScaffoldCatalog()
 	migrations := control.NewMigrationStore()
+	migrationTooling := control.NewMigrationToolingStore()
 	solutionPacks := control.NewSolutionPackCatalog()
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
@@ -375,6 +377,7 @@ func New(addr, baseDir string) *Server {
 		objectModel:            objectModel,
 		moduleScaffold:         moduleScaffold,
 		migrations:             migrations,
+		migrationTooling:       migrationTooling,
 		solutionPacks:          solutionPacks,
 		useCaseTemplates:       useCaseTemplates,
 		workspaceTemplates:     workspaceTemplates,
@@ -881,6 +884,11 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
 	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
 	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
+	mux.HandleFunc("/v1/migrations/translate", s.handleMigrationTranslate)
+	mux.HandleFunc("/v1/migrations/translations", s.handleMigrationTranslations)
+	mux.HandleFunc("/v1/migrations/translations/", s.handleMigrationTranslationAction)
+	mux.HandleFunc("/v1/migrations/equivalence-check", s.handleMigrationEquivalence)
+	mux.HandleFunc("/v1/migrations/diff-report", s.handleMigrationDiffReport)
 	mux.HandleFunc("/v1/use-case-templates", s.handleUseCaseTemplates(baseDir))
 	mux.HandleFunc("/v1/use-case-templates/", s.handleUseCaseTemplateAction(baseDir))
 	mux.HandleFunc("/v1/solution-packs", s.handleSolutionPacks(baseDir))
@@ -2887,6 +2895,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/migrations/assess",
 			"GET /v1/migrations/reports",
 			"GET /v1/migrations/reports/{id}",
+			"POST /v1/migrations/translate",
+			"GET /v1/migrations/translations",
+			"GET /v1/migrations/translations/{id}",
+			"POST /v1/migrations/equivalence-check",
+			"POST /v1/migrations/diff-report",
 			"GET /v1/use-case-templates",
 			"POST /v1/use-case-templates/{id}/apply",
 			"GET /v1/solution-packs",
