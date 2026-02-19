@@ -105,6 +105,7 @@ Universal command-palette search across hosts, services, runs, policies, and mod
 Data bag/global object store with encrypted item support and structured search is available via `/v1/data-bags` and `/v1/data-bags/search`.
 Chef-style role and environment objects with deterministic per-environment resolution are available via `/v1/roles`, `/v1/environments`, and `GET /v1/roles/{name}/resolve`.
 Open schema model registry and validation (YAML/CUE/JSON Schema) are available via `/v1/schema/models` and `POST /v1/schema/validate`.
+Configuration composition with recursive `includes`, `imports`, and `overlays` is supported by the config loader with deterministic precedence and cycle detection.
 Encrypted variable files with key rotation (Vault-style) are available via `/v1/vars/encrypted/files` and `/v1/vars/encrypted/keys`.
 Pillar/Hiera-style hierarchical data resolution with explicit merge strategies is available via `POST /v1/pillar/resolve`.
 Fact caching with TTL/invalidation and Salt Mine-style cross-node fact queries are available via `/v1/facts/cache` and `POST /v1/facts/mine/query`.

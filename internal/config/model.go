@@ -3,6 +3,9 @@ package config
 // Config is the top-level desired state model for a Masterchef run.
 type Config struct {
 	Version   string     `json:"version" yaml:"version"`
+	Includes  []string   `json:"includes,omitempty" yaml:"includes,omitempty"`
+	Imports   []string   `json:"imports,omitempty" yaml:"imports,omitempty"`
+	Overlays  []string   `json:"overlays,omitempty" yaml:"overlays,omitempty"`
 	Inventory Inventory  `json:"inventory" yaml:"inventory"`
 	Execution Execution  `json:"execution,omitempty" yaml:"execution,omitempty"`
 	Resources []Resource `json:"resources" yaml:"resources"`
