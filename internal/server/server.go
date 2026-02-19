@@ -73,6 +73,7 @@ type Server struct {
 	mutationTests         *control.MutationStore
 	propertyHarness       *control.PropertyHarnessStore
 	styleAnalyzer         *control.StyleAnalyzer
+	providerProtocols     *control.ProviderProtocolStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -207,6 +208,7 @@ func New(addr, baseDir string) *Server {
 	mutationTests := control.NewMutationStore()
 	propertyHarness := control.NewPropertyHarnessStore()
 	styleAnalyzer := control.NewStyleAnalyzer()
+	providerProtocols := control.NewProviderProtocolStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -333,6 +335,7 @@ func New(addr, baseDir string) *Server {
 		mutationTests:         mutationTests,
 		propertyHarness:       propertyHarness,
 		styleAnalyzer:         styleAnalyzer,
+		providerProtocols:     providerProtocols,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -505,6 +508,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
+	mux.HandleFunc("/v1/providers/protocol/descriptors", s.handleProviderProtocolDescriptors)
+	mux.HandleFunc("/v1/providers/protocol/negotiate", s.handleProviderProtocolNegotiate)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/graph", s.handlePlanGraph(baseDir))
 	mux.HandleFunc("/v1/plans/graph/query", s.handlePlanGraphQuery(baseDir))
@@ -2744,6 +2749,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/providers/conformance/runs",
 			"POST /v1/providers/conformance/runs",
 			"GET /v1/providers/conformance/runs/{id}",
+			"GET /v1/providers/protocol/descriptors",
+			"POST /v1/providers/protocol/descriptors",
+			"POST /v1/providers/protocol/negotiate",
 			"POST /v1/query",
 			"GET /v1/data-bags",
 			"POST /v1/data-bags",
