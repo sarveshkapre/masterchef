@@ -72,6 +72,7 @@ type Server struct {
 	agentDispatch       *control.AgentDispatchStore
 	proxyMinions        *control.ProxyMinionStore
 	networkTransports   *control.NetworkTransportCatalog
+	portableRunners     *control.PortableRunnerCatalog
 	disruptionBudgets   *control.DisruptionBudgetStore
 	executionEnvs       *control.ExecutionEnvironmentStore
 	executionCreds      *control.ExecutionCredentialStore
@@ -169,6 +170,7 @@ func New(addr, baseDir string) *Server {
 	agentDispatch := control.NewAgentDispatchStore()
 	proxyMinions := control.NewProxyMinionStore()
 	networkTransports := control.NewNetworkTransportCatalog()
+	portableRunners := control.NewPortableRunnerCatalog()
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
@@ -258,6 +260,7 @@ func New(addr, baseDir string) *Server {
 		agentDispatch:       agentDispatch,
 		proxyMinions:        proxyMinions,
 		networkTransports:   networkTransports,
+		portableRunners:     portableRunners,
 		disruptionBudgets:   disruptionBudgets,
 		executionEnvs:       executionEnvs,
 		executionCreds:      executionCreds,
@@ -370,6 +373,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/agents/proxy-minions/dispatch", s.handleProxyMinionDispatch(baseDir))
 	mux.HandleFunc("/v1/execution/network-transports", s.handleNetworkTransports)
 	mux.HandleFunc("/v1/execution/network-transports/validate", s.handleNetworkTransportValidate)
+	mux.HandleFunc("/v1/execution/portable-runners", s.handlePortableRunners)
+	mux.HandleFunc("/v1/execution/portable-runners/select", s.handlePortableRunnerSelect)
 	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
 	mux.HandleFunc("/v1/execution/environments/", s.handleExecutionEnvironmentAction)
 	mux.HandleFunc("/v1/execution/admission-policy", s.handleExecutionAdmissionPolicy)
@@ -2124,6 +2129,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/execution/network-transports",
 			"POST /v1/execution/network-transports",
 			"POST /v1/execution/network-transports/validate",
+			"GET /v1/execution/portable-runners",
+			"POST /v1/execution/portable-runners",
+			"POST /v1/execution/portable-runners/select",
 			"GET /v1/execution/environments",
 			"POST /v1/execution/environments",
 			"GET /v1/execution/environments/{id}",
