@@ -76,6 +76,7 @@ type Server struct {
 	identity           *control.IdentityStore
 	scim               *control.SCIMStore
 	oidcWorkload       *control.OIDCWorkloadStore
+	mtls               *control.MTLSStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -149,6 +150,7 @@ func New(addr, baseDir string) *Server {
 	identity := control.NewIdentityStore()
 	scim := control.NewSCIMStore()
 	oidcWorkload := control.NewOIDCWorkloadStore()
+	mtls := control.NewMTLSStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -214,6 +216,7 @@ func New(addr, baseDir string) *Server {
 		identity:           identity,
 		scim:               scim,
 		oidcWorkload:       oidcWorkload,
+		mtls:               mtls,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -309,6 +312,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/identity/oidc/workload/exchange", s.handleOIDCWorkloadExchange)
 	mux.HandleFunc("/v1/identity/oidc/workload/credentials", s.handleOIDCWorkloadCredentials)
 	mux.HandleFunc("/v1/identity/oidc/workload/credentials/", s.handleOIDCWorkloadCredentialAction)
+	mux.HandleFunc("/v1/security/mtls/authorities", s.handleMTLSAuthorities)
+	mux.HandleFunc("/v1/security/mtls/policies", s.handleMTLSPolicies)
+	mux.HandleFunc("/v1/security/mtls/handshake-check", s.handleMTLSHandshakeCheck)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -1981,6 +1987,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/identity/oidc/workload/exchange",
 			"GET /v1/identity/oidc/workload/credentials",
 			"GET /v1/identity/oidc/workload/credentials/{id}",
+			"GET /v1/security/mtls/authorities",
+			"POST /v1/security/mtls/authorities",
+			"GET /v1/security/mtls/policies",
+			"POST /v1/security/mtls/policies",
+			"POST /v1/security/mtls/handshake-check",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",
