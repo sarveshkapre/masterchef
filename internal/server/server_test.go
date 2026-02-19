@@ -1748,7 +1748,7 @@ resources:
 	}
 }
 
-func TestFleetNodesEndpointPaginationAndCompactMode(t *testing.T) {
+func TestFleetNodesEndpointPaginationAndRenderModes(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
 	features := filepath.Join(tmp, "features.md")
@@ -1834,6 +1834,33 @@ resources:
 	}
 	if strings.Contains(rr.Body.String(), `"workloads"`) {
 		t.Fatalf("expected compact fleet response to omit workloads field: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"mode":"compact"`) {
+		t.Fatalf("expected compact response mode: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/fleet/nodes?mode=virtualized&limit=1", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fleet nodes virtualized mode failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"mode":"virtualized"`) ||
+		!strings.Contains(rr.Body.String(), `"virtualization"`) ||
+		!strings.Contains(rr.Body.String(), `"row_id"`) {
+		t.Fatalf("expected virtualized mode payload fields: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/fleet/nodes?mode=low-bandwidth&limit=1", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fleet nodes low-bandwidth mode failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"mode":"low-bandwidth"`) ||
+		!strings.Contains(rr.Body.String(), `"transport_hints"`) ||
+		!strings.Contains(rr.Body.String(), `"last_seen_unix"`) {
+		t.Fatalf("expected low-bandwidth mode payload fields: %s", rr.Body.String())
 	}
 
 	rr = httptest.NewRecorder()

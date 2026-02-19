@@ -33,11 +33,15 @@ func (s *Server) handleFleetNodes(baseDir string) http.HandlerFunc {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		mode := parseFleetRenderMode(r)
 		limit := 200
 		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
 				limit = n
 			}
+		}
+		if mode == "virtualized" && limit > 1000 {
+			limit = 1000
 		}
 		if limit > 2000 {
 			limit = 2000
@@ -48,8 +52,6 @@ func (s *Server) handleFleetNodes(baseDir string) http.HandlerFunc {
 				offset = n
 			}
 		}
-		compact := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("compact")), "true") ||
-			strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("mode")), "compact")
 		nodes := s.computeFleetNodes(baseDir)
 		total := len(nodes)
 		if offset > total {
@@ -67,27 +69,91 @@ func (s *Server) handleFleetNodes(baseDir string) http.HandlerFunc {
 
 		items := make([]any, 0, len(page))
 		for _, node := range page {
-			if compact {
+			switch mode {
+			case "low-bandwidth":
+				items = append(items, map[string]any{
+					"host":            node.Host,
+					"status":          node.LastRunStatus,
+					"risk":            node.RiskScore,
+					"alerts":          node.AlertCount,
+					"events":          node.EventCount,
+					"last_seen_unix":  node.LastSeenAt.Unix(),
+					"link_quality":    "degraded-ready",
+					"workload_count":  len(node.Workloads),
+					"failure_count":   node.FailureCount,
+					"bandwidth_bytes": estimateLowBandwidthPayload(node),
+				})
+			case "virtualized":
+				items = append(items, map[string]any{
+					"row_id":       node.Host,
+					"host":         node.Host,
+					"last_seen_at": node.LastSeenAt,
+					"status":       node.LastRunStatus,
+					"risk_score":   node.RiskScore,
+					"alert_count":  node.AlertCount,
+				})
+			case "compact":
 				items = append(items, map[string]any{
 					"host":         node.Host,
 					"last_seen_at": node.LastSeenAt,
 					"risk_score":   node.RiskScore,
 					"alert_count":  node.AlertCount,
 				})
-				continue
+			default:
+				items = append(items, node)
 			}
-			items = append(items, node)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		resp := map[string]any{
 			"items":       items,
 			"count":       len(items),
 			"total":       total,
 			"cursor":      strconv.Itoa(offset),
 			"next_cursor": nextCursor,
 			"limit":       limit,
-			"mode":        map[bool]string{true: "compact", false: "full"}[compact],
-		})
+			"mode":        mode,
+		}
+		if mode == "virtualized" {
+			resp["virtualization"] = map[string]any{
+				"enabled":       true,
+				"row_height_px": 28,
+				"window_start":  offset,
+				"window_end":    end,
+				"total_rows":    total,
+			}
+		}
+		if mode == "low-bandwidth" {
+			resp["transport_hints"] = map[string]any{
+				"compression_recommended": true,
+				"cache_ttl_seconds":       10,
+				"fields_profile":          "minimal",
+			}
+		}
+		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+func parseFleetRenderMode(r *http.Request) string {
+	mode := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("mode")))
+	switch mode {
+	case "compact", "virtualized", "low-bandwidth":
+		return mode
+	case "":
+		if strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("compact")), "true") {
+			return "compact"
+		}
+		return "full"
+	default:
+		return "full"
+	}
+}
+
+func estimateLowBandwidthPayload(node fleetNode) int {
+	// Estimate for clients to reason about paging and degraded network behavior.
+	base := 72
+	base += len(node.Host)
+	base += len(node.LastRunStatus)
+	base += (len(node.Workloads) * 8)
+	return base
 }
 
 func (s *Server) computeFleetNodes(baseDir string) []fleetNode {
