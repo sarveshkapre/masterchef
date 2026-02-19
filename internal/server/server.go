@@ -81,6 +81,7 @@ type Server struct {
 	packageRegistry    *control.PackageRegistryStore
 	agentPKI           *control.AgentPKIStore
 	agentAttestation   *control.AgentAttestationStore
+	policyPull         *control.PolicyPullStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -159,6 +160,7 @@ func New(addr, baseDir string) *Server {
 	packageRegistry := control.NewPackageRegistryStore()
 	agentPKI := control.NewAgentPKIStore()
 	agentAttestation := control.NewAgentAttestationStore()
+	policyPull := control.NewPolicyPullStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -229,6 +231,7 @@ func New(addr, baseDir string) *Server {
 		packageRegistry:    packageRegistry,
 		agentPKI:           agentPKI,
 		agentAttestation:   agentAttestation,
+		policyPull:         policyPull,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -269,6 +272,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/risk-summary", s.handlePlanRiskSummary(baseDir))
 	mux.HandleFunc("/v1/policy/simulate", s.handlePolicySimulation(baseDir))
+	mux.HandleFunc("/v1/policy/pull/sources", s.handlePolicyPullSources)
+	mux.HandleFunc("/v1/policy/pull/sources/", s.handlePolicyPullSourceAction)
+	mux.HandleFunc("/v1/policy/pull/execute", s.handlePolicyPullExecute(baseDir))
+	mux.HandleFunc("/v1/policy/pull/results", s.handlePolicyPullResults)
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
@@ -1932,6 +1939,11 @@ func currentAPISpec() control.APISpec {
 			"GET /healthz",
 			"GET /v1/activity",
 			"GET /v1/search",
+			"GET /v1/policy/pull/sources",
+			"POST /v1/policy/pull/sources",
+			"GET /v1/policy/pull/sources/{id}",
+			"POST /v1/policy/pull/execute",
+			"GET /v1/policy/pull/results",
 			"GET /v1/inventory/groups",
 			"GET /v1/fleet/health",
 			"GET /v1/inventory/runtime-hosts",

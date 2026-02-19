@@ -148,6 +148,7 @@ Staging-to-live file-sync pipelines for distributed compiler/worker nodes are av
 Promotion pipelines with immutable artifact pinning are available via `/v1/gitops/promotions` with stage-advance enforcement against digest drift.
 Drift-aware GitOps reconciliation loop is available via `POST /v1/gitops/reconcile` with simulation guardrails and optional auto-enqueue.
 Signed GitOps plan-artifact workflows are available via `/v1/gitops/plan-artifacts/sign` and `/v1/gitops/plan-artifacts/verify`.
+Policy pull from control plane or signed Git sources is available via `/v1/policy/pull/sources`, `POST /v1/policy/pull/execute`, and `GET /v1/policy/pull/results` with signature verification enforcement for trusted Git sources.
 Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/beacon-reactor/rules` and `/v1/compat/beacon-reactor/emit`.
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.
 Runtime host discovery and auto-enrollment are available via `/v1/inventory/enroll` and `/v1/inventory/runtime-hosts`, including lifecycle actions for bootstrap, activate, quarantine, and decommission.
