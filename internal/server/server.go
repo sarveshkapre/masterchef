@@ -80,6 +80,7 @@ type Server struct {
 	upgradeOrchestration   *control.UpgradeOrchestrationStore
 	failoverDrills         *control.RegionalFailoverDrillStore
 	performanceDiagnostics *control.PerformanceDiagnosticsStore
+	topologyPlacement      *control.TopologyPlacementStore
 	federation             *control.FederationStore
 	schedulerPartitions    *control.SchedulerPartitionStore
 	workerAutoscaling      *control.WorkerAutoscalingStore
@@ -223,6 +224,7 @@ func New(addr, baseDir string) *Server {
 	upgradeOrchestration := control.NewUpgradeOrchestrationStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
 	performanceDiagnostics := control.NewPerformanceDiagnosticsStore()
+	topologyPlacement := control.NewTopologyPlacementStore()
 	federation := control.NewFederationStore()
 	schedulerPartitions := control.NewSchedulerPartitionStore()
 	workerAutoscaling := control.NewWorkerAutoscalingStore()
@@ -358,6 +360,7 @@ func New(addr, baseDir string) *Server {
 		upgradeOrchestration:   upgradeOrchestration,
 		failoverDrills:         failoverDrills,
 		performanceDiagnostics: performanceDiagnostics,
+		topologyPlacement:      topologyPlacement,
 		federation:             federation,
 		schedulerPartitions:    schedulerPartitions,
 		workerAutoscaling:      workerAutoscaling,
@@ -832,6 +835,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/failover-drills/scorecards", s.handleRegionalFailoverScorecards)
 	mux.HandleFunc("/v1/control/performance/profiles", s.handlePerformanceProfiles)
 	mux.HandleFunc("/v1/control/performance/diagnostics", s.handlePerformanceDiagnostics)
+	mux.HandleFunc("/v1/control/topology-placement/policies", s.handleTopologyPlacementPolicies)
+	mux.HandleFunc("/v1/control/topology-placement/decide", s.handleTopologyPlacementDecision)
 	mux.HandleFunc("/v1/control/chaos/experiments", s.handleChaosExperiments)
 	mux.HandleFunc("/v1/control/chaos/experiments/", s.handleChaosExperimentAction)
 	mux.HandleFunc("/v1/control/leak-detection/policy", s.handleLeakDetectionPolicy)
@@ -2896,6 +2901,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/performance/profiles",
 			"POST /v1/control/performance/profiles",
 			"POST /v1/control/performance/diagnostics",
+			"GET /v1/control/topology-placement/policies",
+			"POST /v1/control/topology-placement/policies",
+			"POST /v1/control/topology-placement/decide",
 			"GET /v1/control/chaos/experiments",
 			"POST /v1/control/chaos/experiments",
 			"GET /v1/control/chaos/experiments/{id}",

@@ -197,6 +197,7 @@ Multi-master control mode with centralized job/event cache is available via `/v1
 Multi-region control-plane federation is available via `/v1/control/federation/peers` and `/v1/control/federation/health`.
 Fleet sharding and tenancy-aware scheduler partitioning are available via `/v1/control/scheduler/partitions` and `/v1/control/scheduler/partition-decision`.
 Performance profiling and bottleneck diagnostics are available via `/v1/control/performance/profiles` and `/v1/control/performance/diagnostics`.
+Topology-aware run placement decisions by region, zone, cluster, and failure domain are available via `/v1/control/topology-placement/policies` and `POST /v1/control/topology-placement/decide`.
 Adaptive worker autoscaling recommendations based on queue depth and p95 latency are available via `/v1/control/autoscaling/policy` and `/v1/control/autoscaling/recommend`.
 Cost-aware scheduling and throttling controls are available via `/v1/control/cost-scheduling/policies` and `/v1/control/cost-scheduling/admit`.
 Bandwidth-aware artifact distribution and caching controls are available via `/v1/control/artifact-distribution/policies` and `/v1/control/artifact-distribution/plan`.
