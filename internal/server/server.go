@@ -151,6 +151,7 @@ type Server struct {
 	secretIntegrations     *control.SecretsIntegrationStore
 	packagePinning         *control.PackagePinStore
 	packageRegistry        *control.PackageRegistryStore
+	cosignVerification     *control.CosignVerificationStore
 	contentChannels        *control.ContentChannelStore
 	agentPKI               *control.AgentPKIStore
 	agentCatalogs          *control.AgentCatalogStore
@@ -309,6 +310,7 @@ func New(addr, baseDir string) *Server {
 	secretIntegrations := control.NewSecretsIntegrationStore()
 	packagePinning := control.NewPackagePinStore()
 	packageRegistry := control.NewPackageRegistryStore()
+	cosignVerification := control.NewCosignVerificationStore()
 	contentChannels := control.NewContentChannelStore()
 	agentPKI := control.NewAgentPKIStore()
 	agentCatalogs := control.NewAgentCatalogStore()
@@ -459,6 +461,7 @@ func New(addr, baseDir string) *Server {
 		secretIntegrations:     secretIntegrations,
 		packagePinning:         packagePinning,
 		packageRegistry:        packageRegistry,
+		cosignVerification:     cosignVerification,
 		contentChannels:        contentChannels,
 		agentPKI:               agentPKI,
 		agentCatalogs:          agentCatalogs,
@@ -733,6 +736,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/artifacts/", s.handlePackageArtifactAction)
 	mux.HandleFunc("/v1/packages/signing-policy", s.handlePackageSigningPolicy)
 	mux.HandleFunc("/v1/packages/verify", s.handlePackageVerify)
+	mux.HandleFunc("/v1/packages/cosign/trust-roots", s.handleCosignTrustRoots)
+	mux.HandleFunc("/v1/packages/cosign/trust-roots/", s.handleCosignTrustRootAction)
+	mux.HandleFunc("/v1/packages/cosign/policy", s.handleCosignPolicy)
+	mux.HandleFunc("/v1/packages/cosign/verify", s.handleCosignVerify)
 	mux.HandleFunc("/v1/packages/certification-policy", s.handlePackageCertificationPolicy)
 	mux.HandleFunc("/v1/packages/certify", s.handlePackageCertify)
 	mux.HandleFunc("/v1/packages/certifications", s.handlePackageCertifications)
@@ -2678,6 +2685,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/packages/signing-policy",
 			"POST /v1/packages/signing-policy",
 			"POST /v1/packages/verify",
+			"GET /v1/packages/cosign/trust-roots",
+			"POST /v1/packages/cosign/trust-roots",
+			"GET /v1/packages/cosign/trust-roots/{id}",
+			"GET /v1/packages/cosign/policy",
+			"POST /v1/packages/cosign/policy",
+			"POST /v1/packages/cosign/verify",
 			"GET /v1/packages/certification-policy",
 			"POST /v1/packages/certification-policy",
 			"POST /v1/packages/certify",

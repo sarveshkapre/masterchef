@@ -163,6 +163,7 @@ OIDC workload identity support is available via `/v1/identity/oidc/workload/prov
 mTLS component trust/policy management with handshake verification is available via `/v1/security/mtls/authorities`, `/v1/security/mtls/policies`, and `/v1/security/mtls/handshake-check`.
 Secrets manager integrations plus secret-usage tracing with redaction-by-default logs are available via `/v1/secrets/integrations`, `/v1/secrets/resolve`, and `/v1/secrets/traces`.
 Signed module/provider package artifacts with provenance metadata and policy-driven verification are available via `/v1/packages/artifacts`, `/v1/packages/signing-policy`, and `/v1/packages/verify`.
+Sigstore/Cosign verification workflows with trust-root, issuer/subject policy, and transparency-log checks are available via `/v1/packages/cosign/trust-roots`, `/v1/packages/cosign/policy`, and `/v1/packages/cosign/verify`.
 Private/public registry visibility controls are available via package artifact `visibility` and `GET /v1/packages/artifacts?visibility=public|private`.
 Module/provider provenance and vulnerability reports are available via `GET /v1/packages/provenance/report`.
 Package version pinning with hold/unhold and drift enforcement decisions is available via `/v1/packages/pinning/policies` and `POST /v1/packages/pinning/evaluate`.
