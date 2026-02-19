@@ -74,6 +74,7 @@ type Server struct {
 	executionEnvs       *control.ExecutionEnvironmentStore
 	executionCreds      *control.ExecutionCredentialStore
 	hopRelay            *control.HopRelayStore
+	syndic              *control.SyndicStore
 	signatureAdmission  *control.SignatureAdmissionStore
 	runtimeSecrets      *control.RuntimeSecretStore
 	delegationTokens    *control.DelegationTokenStore
@@ -166,6 +167,7 @@ func New(addr, baseDir string) *Server {
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
 	hopRelay := control.NewHopRelayStore()
+	syndic := control.NewSyndicStore()
 	signatureAdmission := control.NewSignatureAdmissionStore()
 	runtimeSecrets := control.NewRuntimeSecretStore()
 	delegationTokens := control.NewDelegationTokenStore()
@@ -250,6 +252,7 @@ func New(addr, baseDir string) *Server {
 		executionEnvs:       executionEnvs,
 		executionCreds:      executionCreds,
 		hopRelay:            hopRelay,
+		syndic:              syndic,
 		signatureAdmission:  signatureAdmission,
 		runtimeSecrets:      runtimeSecrets,
 		delegationTokens:    delegationTokens,
@@ -349,6 +352,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/relays/endpoints", s.handleRelayEndpoints)
 	mux.HandleFunc("/v1/execution/relays/endpoints/", s.handleRelayEndpointAction)
 	mux.HandleFunc("/v1/execution/relays/sessions", s.handleRelaySessions)
+	mux.HandleFunc("/v1/control/syndic/nodes", s.handleSyndicNodes)
+	mux.HandleFunc("/v1/control/syndic/route", s.handleSyndicRoute)
 	mux.HandleFunc("/v1/security/signatures/keyrings", s.handleSignatureKeyrings)
 	mux.HandleFunc("/v1/security/signatures/keyrings/", s.handleSignatureKeyringAction)
 	mux.HandleFunc("/v1/security/signatures/admission-policy", s.handleSignatureAdmissionPolicy)
@@ -2077,6 +2082,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/execution/relays/endpoints/{id}",
 			"GET /v1/execution/relays/sessions",
 			"POST /v1/execution/relays/sessions",
+			"GET /v1/control/syndic/nodes",
+			"POST /v1/control/syndic/nodes",
+			"GET /v1/control/syndic/route",
+			"POST /v1/control/syndic/route",
 			"GET /v1/security/signatures/keyrings",
 			"POST /v1/security/signatures/keyrings",
 			"GET /v1/security/signatures/keyrings/{id}",
