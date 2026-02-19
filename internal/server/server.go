@@ -55,6 +55,7 @@ type Server struct {
 	plugins            *control.PluginExtensionStore
 	eventBus           *control.EventBus
 	nodes              *control.NodeLifecycleStore
+	gitopsPreviews     *control.GitOpsPreviewStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -107,6 +108,7 @@ func New(addr, baseDir string) *Server {
 	plugins := control.NewPluginExtensionStore()
 	eventBus := control.NewEventBus()
 	nodes := control.NewNodeLifecycleStore()
+	gitopsPreviews := control.NewGitOpsPreviewStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -151,6 +153,7 @@ func New(addr, baseDir string) *Server {
 		plugins:            plugins,
 		eventBus:           eventBus,
 		nodes:              nodes,
+		gitopsPreviews:     gitopsPreviews,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -197,6 +200,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/runtime-hosts", s.handleRuntimeHosts)
 	mux.HandleFunc("/v1/inventory/runtime-hosts/", s.handleRuntimeHostAction)
 	mux.HandleFunc("/v1/inventory/enroll", s.handleRuntimeEnrollAlias)
+	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
+	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/data-bags", s.handleDataBags)
 	mux.HandleFunc("/v1/data-bags/search", s.handleDataBagSearch)
 	mux.HandleFunc("/v1/data-bags/", s.handleDataBagItem)
@@ -1763,6 +1768,11 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/inventory/runtime-hosts/{name}/activate",
 			"POST /v1/inventory/runtime-hosts/{name}/quarantine",
 			"POST /v1/inventory/runtime-hosts/{name}/decommission",
+			"GET /v1/gitops/previews",
+			"POST /v1/gitops/previews",
+			"GET /v1/gitops/previews/{id}",
+			"POST /v1/gitops/previews/{id}/promote",
+			"POST /v1/gitops/previews/{id}/close",
 			"GET /v1/incidents/view",
 			"GET /v1/fleet/nodes",
 			"GET /v1/drift/insights",
