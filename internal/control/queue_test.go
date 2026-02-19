@@ -178,3 +178,49 @@ func TestQueue_PriorityNormalizationAndStatusBreakdown(t *testing.T) {
 		t.Fatalf("unexpected pending breakdown: %+v", st)
 	}
 }
+
+func TestQueue_WorkerLifecyclePolicyStateless(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	q := NewQueue(16)
+	policy := q.SetWorkerLifecyclePolicy(WorkerLifecycleInput{
+		Mode:             "stateless",
+		MaxJobsPerWorker: 1,
+	})
+	if policy.Mode != "stateless" || policy.MaxJobsPerWorker != 1 {
+		t.Fatalf("unexpected lifecycle policy %+v", policy)
+	}
+
+	exec := &fakeExecutor{}
+	q.StartWorker(ctx, exec)
+	j1, err := q.Enqueue("a.yaml", "", false, "")
+	if err != nil {
+		t.Fatalf("enqueue a.yaml: %v", err)
+	}
+	j2, err := q.Enqueue("b.yaml", "", false, "")
+	if err != nil {
+		t.Fatalf("enqueue b.yaml: %v", err)
+	}
+
+	waitSucceeded := func(id string) {
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			cur, _ := q.Get(id)
+			if cur != nil && cur.Status == JobSucceeded {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for job %s success; current=%+v", id, cur)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitSucceeded(j1.ID)
+	waitSucceeded(j2.ID)
+
+	status := q.WorkerLifecycleStatus()
+	if status.Recycles < 2 {
+		t.Fatalf("expected at least 2 worker recycles in stateless mode, got %+v", status)
+	}
+}

@@ -600,6 +600,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/disruption-budgets", s.handleDisruptionBudgets)
 	mux.HandleFunc("/v1/control/disruption-budgets/evaluate", s.handleDisruptionBudgetEvaluate)
 	mux.HandleFunc("/v1/control/queue", s.handleQueueControl)
+	mux.HandleFunc("/v1/control/workers/lifecycle", s.handleWorkerLifecycle)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
@@ -2477,6 +2478,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/disruption-budgets/evaluate",
 			"POST /v1/control/queue",
 			"GET /v1/control/queue",
+			"POST /v1/control/workers/lifecycle",
+			"GET /v1/control/workers/lifecycle",
 			"POST /v1/control/recover-stuck",
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
@@ -3907,6 +3910,32 @@ func (s *Server) handleQueueControl(w http.ResponseWriter, r *http.Request) {
 		default:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
 		}
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleWorkerLifecycle(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.queue.WorkerLifecycleStatus())
+	case http.MethodPost:
+		var req control.WorkerLifecycleInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		policy := s.queue.SetWorkerLifecyclePolicy(req)
+		s.events.Append(control.Event{
+			Type:    "control.worker_lifecycle.policy",
+			Message: "worker lifecycle policy updated",
+			Fields: map[string]any{
+				"mode":                policy.Mode,
+				"max_jobs_per_worker": policy.MaxJobsPerWorker,
+				"restart_delay_ms":    policy.RestartDelayMS,
+			},
+		})
+		writeJSON(w, http.StatusOK, s.queue.WorkerLifecycleStatus())
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

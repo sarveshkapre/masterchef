@@ -30,6 +30,26 @@ type Job struct {
 	EndedAt        time.Time `json:"ended_at,omitempty"`
 }
 
+type WorkerLifecyclePolicy struct {
+	Mode             string    `json:"mode"` // persistent, stateless
+	MaxJobsPerWorker int       `json:"max_jobs_per_worker,omitempty"`
+	RestartDelayMS   int       `json:"restart_delay_ms,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type WorkerLifecycleInput struct {
+	Mode             string `json:"mode,omitempty"`
+	MaxJobsPerWorker int    `json:"max_jobs_per_worker,omitempty"`
+	RestartDelayMS   int    `json:"restart_delay_ms,omitempty"`
+}
+
+type WorkerLifecycleStatus struct {
+	Policy           WorkerLifecyclePolicy `json:"policy"`
+	Generation       int64                 `json:"generation"`
+	Recycles         int64                 `json:"recycles"`
+	CurrentQueueLoad QueueControlStatus    `json:"current_queue_load"`
+}
+
 type Executor interface {
 	ApplyPath(configPath string) error
 }
@@ -52,6 +72,9 @@ type Queue struct {
 	paused          bool
 	running         int
 	rrIndex         int
+	workerPolicy    WorkerLifecyclePolicy
+	generation      int64
+	recycles        int64
 }
 
 func NewQueue(buffer int) *Queue {
@@ -65,6 +88,12 @@ func NewQueue(buffer int) *Queue {
 		pendingNormal:  make(chan string, buffer),
 		pendingLow:     make(chan string, buffer),
 		workerShutdown: make(chan struct{}),
+		workerPolicy: WorkerLifecyclePolicy{
+			Mode:             "persistent",
+			MaxJobsPerWorker: 0,
+			RestartDelayMS:   0,
+			UpdatedAt:        time.Now().UTC(),
+		},
 	}
 }
 
@@ -169,20 +198,29 @@ func (q *Queue) Cancel(id string) error {
 func (q *Queue) StartWorker(ctx context.Context, exec Executor) {
 	go func() {
 		defer close(q.workerShutdown)
+		q.mu.Lock()
+		q.generation = 1
+		q.mu.Unlock()
 		for {
-			if q.IsPaused() {
+			policy := q.WorkerLifecyclePolicy()
+			jobsProcessed, done := q.runWorkerGeneration(ctx, exec, policy)
+			if done {
+				return
+			}
+			if jobsProcessed > 0 {
+				q.mu.Lock()
+				q.recycles++
+				q.generation++
+				q.mu.Unlock()
+			}
+			delay := time.Duration(policy.RestartDelayMS) * time.Millisecond
+			if delay > 0 {
 				select {
 				case <-ctx.Done():
 					return
-				case <-time.After(100 * time.Millisecond):
-					continue
+				case <-time.After(delay):
 				}
 			}
-			id, ok := q.nextPending(ctx)
-			if !ok {
-				return
-			}
-			q.runOne(id, exec)
 		}
 	}()
 }
@@ -229,6 +267,30 @@ func (q *Queue) runOne(id string, exec Executor) {
 	cp = *j
 	q.mu.Unlock()
 	q.publish(cp)
+}
+
+func (q *Queue) runWorkerGeneration(ctx context.Context, exec Executor, policy WorkerLifecyclePolicy) (int, bool) {
+	maxJobs := normalizedMaxJobs(policy)
+	processed := 0
+	for {
+		if q.IsPaused() {
+			select {
+			case <-ctx.Done():
+				return processed, true
+			case <-time.After(100 * time.Millisecond):
+				continue
+			}
+		}
+		id, ok := q.nextPending(ctx)
+		if !ok {
+			return processed, true
+		}
+		q.runOne(id, exec)
+		processed++
+		if maxJobs > 0 && processed >= maxJobs {
+			return processed, false
+		}
+	}
 }
 
 func (q *Queue) pushPending(id, priority string) error {
@@ -403,6 +465,56 @@ type QueueControlStatus struct {
 	PendingLow    int  `json:"pending_low"`
 }
 
+func (q *Queue) SetWorkerLifecyclePolicy(in WorkerLifecycleInput) WorkerLifecyclePolicy {
+	mode := strings.ToLower(strings.TrimSpace(in.Mode))
+	if mode == "" {
+		mode = "persistent"
+	}
+	switch mode {
+	case "persistent", "stateless":
+	default:
+		mode = "persistent"
+	}
+	maxJobs := in.MaxJobsPerWorker
+	if mode == "stateless" && maxJobs <= 0 {
+		maxJobs = 1
+	}
+	if maxJobs < 0 {
+		maxJobs = 0
+	}
+	restart := in.RestartDelayMS
+	if restart < 0 {
+		restart = 0
+	}
+	policy := WorkerLifecyclePolicy{
+		Mode:             mode,
+		MaxJobsPerWorker: maxJobs,
+		RestartDelayMS:   restart,
+		UpdatedAt:        time.Now().UTC(),
+	}
+	q.mu.Lock()
+	q.workerPolicy = policy
+	q.mu.Unlock()
+	return policy
+}
+
+func (q *Queue) WorkerLifecyclePolicy() WorkerLifecyclePolicy {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return q.workerPolicy
+}
+
+func (q *Queue) WorkerLifecycleStatus() WorkerLifecycleStatus {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	return WorkerLifecycleStatus{
+		Policy:           q.workerPolicy,
+		Generation:       q.generation,
+		Recycles:         q.recycles,
+		CurrentQueueLoad: q.controlStatusLocked(),
+	}
+}
+
 func (q *Queue) Pause() QueueControlStatus {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -499,6 +611,19 @@ func normalizePriority(p string) string {
 	default:
 		return "normal"
 	}
+}
+
+func normalizedMaxJobs(policy WorkerLifecyclePolicy) int {
+	if policy.Mode == "stateless" {
+		if policy.MaxJobsPerWorker <= 0 {
+			return 1
+		}
+		return policy.MaxJobsPerWorker
+	}
+	if policy.MaxJobsPerWorker <= 0 {
+		return 0
+	}
+	return policy.MaxJobsPerWorker
 }
 
 func itoa(n int64) string {
