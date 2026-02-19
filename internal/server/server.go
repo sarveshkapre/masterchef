@@ -50,6 +50,7 @@ type Server struct {
 	failoverDrills      *control.RegionalFailoverDrillStore
 	federation          *control.FederationStore
 	schedulerPartitions *control.SchedulerPartitionStore
+	workerAutoscaling   *control.WorkerAutoscalingStore
 	schemaMigs          *control.SchemaMigrationManager
 	dataBags            *control.DataBagStore
 	roleEnv             *control.RoleEnvironmentStore
@@ -139,6 +140,7 @@ func New(addr, baseDir string) *Server {
 	failoverDrills := control.NewRegionalFailoverDrillStore()
 	federation := control.NewFederationStore()
 	schedulerPartitions := control.NewSchedulerPartitionStore()
+	workerAutoscaling := control.NewWorkerAutoscalingStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	dataBags := control.NewDataBagStore()
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
@@ -220,6 +222,7 @@ func New(addr, baseDir string) *Server {
 		failoverDrills:      failoverDrills,
 		federation:          federation,
 		schedulerPartitions: schedulerPartitions,
+		workerAutoscaling:   workerAutoscaling,
 		schemaMigs:          schemaMigs,
 		dataBags:            dataBags,
 		roleEnv:             roleEnv,
@@ -518,6 +521,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/scheduler/partitions", s.handleSchedulerPartitions)
 	mux.HandleFunc("/v1/control/scheduler/partitions/", s.handleSchedulerPartitionAction)
 	mux.HandleFunc("/v1/control/scheduler/partition-decision", s.handleSchedulerPartitionDecision)
+	mux.HandleFunc("/v1/control/autoscaling/policy", s.handleWorkerAutoscalingPolicy)
+	mux.HandleFunc("/v1/control/autoscaling/recommend", s.handleWorkerAutoscalingRecommend)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
 	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
 	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
@@ -2329,6 +2334,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/scheduler/partitions",
 			"GET /v1/control/scheduler/partitions/{id}",
 			"POST /v1/control/scheduler/partition-decision",
+			"GET /v1/control/autoscaling/policy",
+			"POST /v1/control/autoscaling/policy",
+			"POST /v1/control/autoscaling/recommend",
 			"GET /v1/control/multi-master/nodes",
 			"POST /v1/control/multi-master/nodes",
 			"GET /v1/control/multi-master/nodes/{id}",
