@@ -70,6 +70,7 @@ type Server struct {
 	performanceGates      *control.PerformanceGateStore
 	loadSoak              *control.LoadSoakStore
 	readinessScorecards   *control.ReadinessScorecardStore
+	mutationTests         *control.MutationStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -201,6 +202,7 @@ func New(addr, baseDir string) *Server {
 	performanceGates := control.NewPerformanceGateStore()
 	loadSoak := control.NewLoadSoakStore()
 	readinessScorecards := control.NewReadinessScorecardStore()
+	mutationTests := control.NewMutationStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -324,6 +326,7 @@ func New(addr, baseDir string) *Server {
 		performanceGates:      performanceGates,
 		loadSoak:              loadSoak,
 		readinessScorecards:   readinessScorecards,
+		mutationTests:         mutationTests,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -483,6 +486,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/load-soak/suites", s.handleLoadSoakSuites)
 	mux.HandleFunc("/v1/release/tests/load-soak/runs", s.handleLoadSoakRuns)
 	mux.HandleFunc("/v1/release/tests/load-soak/runs/", s.handleLoadSoakRunAction)
+	mux.HandleFunc("/v1/release/tests/mutation/policy", s.handleMutationPolicy)
+	mux.HandleFunc("/v1/release/tests/mutation/suites", s.handleMutationSuites)
+	mux.HandleFunc("/v1/release/tests/mutation/runs", s.handleMutationRuns)
+	mux.HandleFunc("/v1/release/tests/mutation/runs/", s.handleMutationRunAction)
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
@@ -2703,6 +2710,13 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/tests/load-soak/runs",
 			"POST /v1/release/tests/load-soak/runs",
 			"GET /v1/release/tests/load-soak/runs/{id}",
+			"GET /v1/release/tests/mutation/policy",
+			"POST /v1/release/tests/mutation/policy",
+			"GET /v1/release/tests/mutation/suites",
+			"POST /v1/release/tests/mutation/suites",
+			"GET /v1/release/tests/mutation/runs",
+			"POST /v1/release/tests/mutation/runs",
+			"GET /v1/release/tests/mutation/runs/{id}",
 			"GET /v1/providers/conformance/suites",
 			"POST /v1/providers/conformance/suites",
 			"GET /v1/providers/conformance/runs",
