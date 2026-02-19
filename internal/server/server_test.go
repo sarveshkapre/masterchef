@@ -348,6 +348,76 @@ resources:
 	}
 }
 
+func TestAuditTimelineEndpoint(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-audit-timeline.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	for _, body := range []string{
+		`{"type":"identity.sso.provider.created","message":"sso provider created","fields":{"provider":"okta"}}`,
+		`{"type":"run.failed","message":"run failed","fields":{"run_id":"run-1"}}`,
+		`{"type":"external.alert","message":"latency spike","fields":{"service":"api"}}`,
+	} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte(body)))
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusAccepted {
+			t.Fatalf("event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/activity/audit-timeline?category=identity&since=2h", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("identity audit timeline failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"identity.sso.provider.created"`) ||
+		strings.Contains(rr.Body.String(), `"run.failed"`) {
+		t.Fatalf("expected identity-only timeline items: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/activity/audit-timeline?category=resource&since=2h", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("resource audit timeline failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"run.failed"`) {
+		t.Fatalf("expected resource category timeline item: %s", rr.Body.String())
+	}
+}
+
 func TestControlHandoffEndpoint(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")
