@@ -121,6 +121,7 @@ type Server struct {
 	executionCreds         *control.ExecutionCredentialStore
 	systemdUnits           *control.SystemdUnitStore
 	rebootOrchestration    *control.RebootOrchestrationStore
+	patchManagement        *control.PatchManagementStore
 	sessionRecordings      *control.SessionRecordingStore
 	masterless             *control.MasterlessStore
 	hopRelay               *control.HopRelayStore
@@ -270,6 +271,7 @@ func New(addr, baseDir string) *Server {
 	executionCreds := control.NewExecutionCredentialStore()
 	systemdUnits := control.NewSystemdUnitStore()
 	rebootOrchestration := control.NewRebootOrchestrationStore()
+	patchManagement := control.NewPatchManagementStore()
 	sessionRecordings := control.NewSessionRecordingStore(baseDir)
 	masterless := control.NewMasterlessStore()
 	hopRelay := control.NewHopRelayStore()
@@ -411,6 +413,7 @@ func New(addr, baseDir string) *Server {
 		executionCreds:         executionCreds,
 		systemdUnits:           systemdUnits,
 		rebootOrchestration:    rebootOrchestration,
+		patchManagement:        patchManagement,
 		sessionRecordings:      sessionRecordings,
 		masterless:             masterless,
 		hopRelay:               hopRelay,
@@ -611,6 +614,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/systemd/units/render", s.handleSystemdRender)
 	mux.HandleFunc("/v1/execution/reboot/policies", s.handleRebootPolicies)
 	mux.HandleFunc("/v1/execution/reboot/plan", s.handleRebootPlan)
+	mux.HandleFunc("/v1/execution/patch/policies", s.handlePatchPolicies)
+	mux.HandleFunc("/v1/execution/patch/plan", s.handlePatchPlan)
 	mux.HandleFunc("/v1/execution/session-recordings", s.handleSessionRecordings)
 	mux.HandleFunc("/v1/execution/session-recordings/", s.handleSessionRecordingAction)
 	mux.HandleFunc("/v1/execution/adaptive-concurrency/policy", s.handleAdaptiveConcurrencyPolicy)
@@ -2490,6 +2495,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/execution/reboot/policies",
 			"POST /v1/execution/reboot/policies",
 			"POST /v1/execution/reboot/plan",
+			"GET /v1/execution/patch/policies",
+			"POST /v1/execution/patch/policies",
+			"POST /v1/execution/patch/plan",
 			"GET /v1/execution/session-recordings",
 			"GET /v1/execution/session-recordings/{id}",
 			"GET /v1/execution/adaptive-concurrency/policy",
