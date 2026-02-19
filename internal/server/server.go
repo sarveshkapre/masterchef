@@ -72,6 +72,7 @@ type Server struct {
 	readinessScorecards   *control.ReadinessScorecardStore
 	mutationTests         *control.MutationStore
 	propertyHarness       *control.PropertyHarnessStore
+	styleAnalyzer         *control.StyleAnalyzer
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -205,6 +206,7 @@ func New(addr, baseDir string) *Server {
 	readinessScorecards := control.NewReadinessScorecardStore()
 	mutationTests := control.NewMutationStore()
 	propertyHarness := control.NewPropertyHarnessStore()
+	styleAnalyzer := control.NewStyleAnalyzer()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -330,6 +332,7 @@ func New(addr, baseDir string) *Server {
 		readinessScorecards:   readinessScorecards,
 		mutationTests:         mutationTests,
 		propertyHarness:       propertyHarness,
+		styleAnalyzer:         styleAnalyzer,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -462,6 +465,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/docs/generate", s.handleDocsGenerate)
 	mux.HandleFunc("/v1/docs/examples/verify", s.handleDocsExampleVerify)
 	mux.HandleFunc("/v1/docs/api/version-diff", s.handleDocsAPIVersionDiff)
+	mux.HandleFunc("/v1/lint/style/rules", s.handleStyleAnalyzerRules)
+	mux.HandleFunc("/v1/lint/style/analyze", s.handleStyleAnalyzerAnalyze)
 	mux.HandleFunc("/v1/release/readiness", s.handleReleaseReadiness)
 	mux.HandleFunc("/v1/release/readiness/scorecards", s.handleReadinessScorecards)
 	mux.HandleFunc("/v1/release/readiness/scorecards/", s.handleReadinessScorecardAction)
@@ -2332,6 +2337,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/docs/examples/verify",
 			"GET /v1/docs/api/version-diff",
 			"POST /v1/docs/api/version-diff",
+			"GET /v1/lint/style/rules",
+			"POST /v1/lint/style/analyze",
 			"GET /v1/policy/pull/sources",
 			"POST /v1/policy/pull/sources",
 			"GET /v1/policy/pull/sources/{id}",
