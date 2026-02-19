@@ -480,3 +480,40 @@ func TestValidate_MatrixNormalizationAndValidation(t *testing.T) {
 		t.Fatalf("expected empty matrix values validation error")
 	}
 }
+
+func TestValidate_LoopNormalizationAndValidation(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:      "l1",
+				Type:    "command",
+				Host:    "localhost",
+				Command: "echo hi",
+				Loop:    []string{"prod", "prod", " staging ", ""},
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected loop to normalize and validate, got %v", err)
+	}
+	if cfg.Resources[0].LoopVar != "item" {
+		t.Fatalf("expected default loop_var=item, got %q", cfg.Resources[0].LoopVar)
+	}
+	if len(cfg.Resources[0].Loop) != 2 || cfg.Resources[0].Loop[0] != "prod" || cfg.Resources[0].Loop[1] != "staging" {
+		t.Fatalf("expected normalized loop values, got %#v", cfg.Resources[0].Loop)
+	}
+
+	cfg.Resources[0].LoopVar = "env.value"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected invalid loop_var validation error")
+	}
+	cfg.Resources[0].LoopVar = "env"
+	cfg.Resources[0].Matrix = map[string][]string{"env": []string{"prod"}}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected loop_var matrix conflict validation error")
+	}
+}

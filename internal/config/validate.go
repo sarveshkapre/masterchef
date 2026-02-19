@@ -152,6 +152,9 @@ func Validate(cfg *Config) error {
 		if err := normalizeMatrix(&r.Matrix, fmt.Sprintf("resource %q", r.ID)); err != nil {
 			return err
 		}
+		if err := normalizeLoop(r, fmt.Sprintf("resource %q", r.ID)); err != nil {
+			return err
+		}
 		r.BecomeUser = strings.TrimSpace(r.BecomeUser)
 		if r.BecomeUser != "" {
 			r.Become = true
@@ -228,6 +231,9 @@ func Validate(cfg *Config) error {
 		}
 		h.When = strings.TrimSpace(h.When)
 		if err := normalizeMatrix(&h.Matrix, fmt.Sprintf("handler %q", h.ID)); err != nil {
+			return err
+		}
+		if err := normalizeLoop(h, fmt.Sprintf("handler %q", h.ID)); err != nil {
 			return err
 		}
 		h.BecomeUser = strings.TrimSpace(h.BecomeUser)
@@ -353,5 +359,40 @@ func normalizeMatrix(matrix *map[string][]string, owner string) error {
 		out[name] = clean
 	}
 	*matrix = out
+	return nil
+}
+
+func normalizeLoop(resource *Resource, owner string) error {
+	if resource == nil {
+		return nil
+	}
+	loop := make([]string, 0, len(resource.Loop))
+	seen := map[string]struct{}{}
+	for _, value := range resource.Loop {
+		item := strings.TrimSpace(value)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		loop = append(loop, item)
+	}
+	resource.Loop = loop
+	resource.LoopVar = strings.TrimSpace(resource.LoopVar)
+	if len(resource.Loop) == 0 {
+		resource.LoopVar = ""
+		return nil
+	}
+	if resource.LoopVar == "" {
+		resource.LoopVar = "item"
+	}
+	if strings.Contains(resource.LoopVar, ".") || strings.Contains(resource.LoopVar, " ") {
+		return fmt.Errorf("%s loop_var %q must be a simple token", owner, resource.LoopVar)
+	}
+	if _, exists := resource.Matrix[resource.LoopVar]; exists {
+		return fmt.Errorf("%s loop_var %q conflicts with matrix key", owner, resource.LoopVar)
+	}
 	return nil
 }

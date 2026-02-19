@@ -47,6 +47,8 @@ type Resource struct {
 	NotifyHandlers []string            `json:"notify_handlers,omitempty" yaml:"notify_handlers,omitempty"`
 	When           string              `json:"when,omitempty" yaml:"when,omitempty"`
 	Matrix         map[string][]string `json:"matrix,omitempty" yaml:"matrix,omitempty"`
+	Loop           []string            `json:"loop,omitempty" yaml:"loop,omitempty"`
+	LoopVar        string              `json:"loop_var,omitempty" yaml:"loop_var,omitempty"`
 	Tags           []string            `json:"tags,omitempty" yaml:"tags,omitempty"`
 
 	// file

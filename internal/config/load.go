@@ -229,6 +229,7 @@ func cloneResource(in Resource) Resource {
 	} else {
 		out.Matrix = map[string][]string{}
 	}
+	out.Loop = append([]string{}, in.Loop...)
 	return out
 }
 

@@ -23,7 +23,8 @@ func expandResourceCollection(resources []Resource) []Resource {
 	}
 	out := make([]Resource, 0, len(resources))
 	for _, in := range resources {
-		combos := matrixCombinations(in.Matrix)
+		effectiveMatrix, expanded := expansionMatrix(in)
+		combos := matrixCombinations(effectiveMatrix)
 		if len(combos) == 0 {
 			combos = []map[string]string{{}}
 		}
@@ -34,14 +35,41 @@ func expandResourceCollection(resources []Resource) []Resource {
 			res := cloneResource(in)
 			res.When = ""
 			res.Matrix = nil
+			res.Loop = nil
+			res.LoopVar = ""
 			applyResourceTemplateVars(&res, vars)
-			if len(in.Matrix) > 0 && strings.TrimSpace(res.ID) == strings.TrimSpace(in.ID) {
+			if expanded && strings.TrimSpace(res.ID) == strings.TrimSpace(in.ID) {
 				res.ID = appendMatrixSuffix(res.ID, vars)
 			}
 			out = append(out, res)
 		}
 	}
 	return out
+}
+
+func expansionMatrix(in Resource) (map[string][]string, bool) {
+	matrix := map[string][]string{}
+	expanded := false
+	for key, values := range in.Matrix {
+		matrix[key] = append([]string{}, values...)
+		if len(values) > 0 {
+			expanded = true
+		}
+	}
+	if len(in.Loop) > 0 {
+		key := strings.TrimSpace(in.LoopVar)
+		if key == "" {
+			key = "item"
+		}
+		if _, exists := matrix[key]; !exists {
+			matrix[key] = append([]string{}, in.Loop...)
+			expanded = true
+		}
+	}
+	if len(matrix) == 0 {
+		return nil, false
+	}
+	return matrix, expanded
 }
 
 func matrixCombinations(matrix map[string][]string) []map[string]string {
