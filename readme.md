@@ -212,6 +212,7 @@ Masterless execution mode with local state/pillar rendering is available via `/v
 Public plugin/module certification pipelines and publication quality gates are available via `/v1/packages/certify`, `/v1/packages/certification-policy`, and `POST /v1/packages/publication/check`.
 Maintainer health metrics (test pass rate, issue latency, release cadence, open security issues) are available via `/v1/packages/maintainers/health`.
 Module/provider quality scoring with craftsmanship tiers (`gold`/`silver`/`bronze`) and trust badges (`trusted`/`verified`/`community`) is available via `GET /v1/packages/quality` and `POST /v1/packages/quality/evaluate`.
+Curated content channels (`certified`, `validated`, `community`) with controlled sync policies and per-organization sync remotes secured by API tokens are available via `/v1/packages/content-channels`, `/v1/packages/content-channels/sync-policy`, and `/v1/packages/content-channels/remotes`.
 Control-plane canary upgrade workflow with automatic rollback on regression is available via `/v1/control/canary-upgrades`.
 Health probe integrations for promotion/rollback gating are available via `/v1/control/health-probes`, `/v1/control/health-probes/checks`, and `/v1/control/health-probes/evaluate`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.

@@ -148,6 +148,68 @@ resources:
 	}
 
 	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/content-channels", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("content channels list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Contains(rr.Body.Bytes(), []byte(`"certified"`)) {
+		t.Fatalf("expected certified channel in content channels list: %s", rr.Body.String())
+	}
+
+	syncPolicy := []byte(`{"channel":"validated","allowlist":["module/core/*"],"blocklist":["module/community/*"]}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/content-channels/sync-policy", bytes.NewReader(syncPolicy))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("content channel sync policy failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/content-channels/sync-policy?channel=validated", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("content channel sync policy get failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	remoteCreate := []byte(`{
+  "organization":"acme",
+  "channel":"validated",
+  "name":"central-validated",
+  "url":"https://registry.acme.example/sync",
+  "api_token":"token-1",
+  "enabled":true
+}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/content-channels/remotes", bytes.NewReader(remoteCreate))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("content channel remote create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var remote struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &remote)
+	if remote.ID == "" {
+		t.Fatalf("expected remote id in response: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/content-channels/remotes?organization=acme&channel=validated", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("content channel remote list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rotate := []byte(`{"api_token":"token-2"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/content-channels/remotes/"+remote.ID+"/rotate-token", bytes.NewReader(rotate))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("content channel remote token rotate failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/v1/packages/artifacts?visibility=public", nil)
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {

@@ -114,6 +114,7 @@ type Server struct {
 	mtls                  *control.MTLSStore
 	secretIntegrations    *control.SecretsIntegrationStore
 	packageRegistry       *control.PackageRegistryStore
+	contentChannels       *control.ContentChannelStore
 	agentPKI              *control.AgentPKIStore
 	agentCatalogs         *control.AgentCatalogStore
 	agentAttestation      *control.AgentAttestationStore
@@ -234,6 +235,7 @@ func New(addr, baseDir string) *Server {
 	mtls := control.NewMTLSStore()
 	secretIntegrations := control.NewSecretsIntegrationStore()
 	packageRegistry := control.NewPackageRegistryStore()
+	contentChannels := control.NewContentChannelStore()
 	agentPKI := control.NewAgentPKIStore()
 	agentCatalogs := control.NewAgentCatalogStore()
 	agentAttestation := control.NewAgentAttestationStore()
@@ -346,6 +348,7 @@ func New(addr, baseDir string) *Server {
 		mtls:                  mtls,
 		secretIntegrations:    secretIntegrations,
 		packageRegistry:       packageRegistry,
+		contentChannels:       contentChannels,
 		agentPKI:              agentPKI,
 		agentCatalogs:         agentCatalogs,
 		agentAttestation:      agentAttestation,
@@ -561,6 +564,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/provenance/report", s.handlePackageProvenanceReport)
 	mux.HandleFunc("/v1/packages/quality", s.handlePackageQuality)
 	mux.HandleFunc("/v1/packages/quality/evaluate", s.handlePackageQualityEvaluate)
+	mux.HandleFunc("/v1/packages/content-channels", s.handleContentChannels)
+	mux.HandleFunc("/v1/packages/content-channels/sync-policy", s.handleContentChannelPolicy)
+	mux.HandleFunc("/v1/packages/content-channels/remotes", s.handleContentChannelRemotes)
+	mux.HandleFunc("/v1/packages/content-channels/remotes/", s.handleContentChannelRemoteAction)
 	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
 	mux.HandleFunc("/v1/agents/catalogs", s.handleAgentCatalogs(baseDir))
 	mux.HandleFunc("/v1/agents/catalogs/replay", s.handleAgentCatalogReplay(baseDir))
@@ -2437,6 +2444,13 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/packages/provenance/report",
 			"GET /v1/packages/quality",
 			"POST /v1/packages/quality/evaluate",
+			"GET /v1/packages/content-channels",
+			"GET /v1/packages/content-channels/sync-policy",
+			"POST /v1/packages/content-channels/sync-policy",
+			"GET /v1/packages/content-channels/remotes",
+			"POST /v1/packages/content-channels/remotes",
+			"GET /v1/packages/content-channels/remotes/{id}",
+			"POST /v1/packages/content-channels/remotes/{id}/rotate-token",
 			"GET /v1/agents/cert-policy",
 			"POST /v1/agents/cert-policy",
 			"GET /v1/agents/catalogs",
