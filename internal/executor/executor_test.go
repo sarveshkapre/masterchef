@@ -813,6 +813,92 @@ func TestApply_WinRMTransportLocalhostShim(t *testing.T) {
 	}
 }
 
+func TestApply_RegistryResourceLocalShim(t *testing.T) {
+	tmp := t.TempDir()
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:                "reg-1",
+					Type:              "registry",
+					Host:              "localhost",
+					RegistryKey:       `hkcu\\software\\masterchef\\setting`,
+					RegistryValue:     "enabled",
+					RegistryValueType: "string",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded || len(run.Results) != 1 || !run.Results[0].Changed {
+		t.Fatalf("unexpected first registry run result: %#v", run)
+	}
+	run, err = ex.Apply(p)
+	if err != nil {
+		t.Fatalf("second apply failed: %v", err)
+	}
+	if run.Results[0].Changed {
+		t.Fatalf("expected idempotent second registry run")
+	}
+	regFile := filepath.Join(tmp, ".masterchef", "windows", "registry.json")
+	raw, err := os.ReadFile(regFile)
+	if err != nil {
+		t.Fatalf("expected registry shim state file: %v", err)
+	}
+	if !strings.Contains(string(raw), `"value": "enabled"`) {
+		t.Fatalf("expected registry value in shim file: %s", string(raw))
+	}
+}
+
+func TestApply_ScheduledTaskResourceLocalShim(t *testing.T) {
+	tmp := t.TempDir()
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:           "task-1",
+					Type:         "scheduled_task",
+					Host:         "localhost",
+					TaskName:     "nightly-cleanup",
+					TaskSchedule: "0 2 * * *",
+					TaskCommand:  "echo cleanup",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded || len(run.Results) != 1 || !run.Results[0].Changed {
+		t.Fatalf("unexpected first scheduled task run result: %#v", run)
+	}
+	run, err = ex.Apply(p)
+	if err != nil {
+		t.Fatalf("second apply failed: %v", err)
+	}
+	if run.Results[0].Changed {
+		t.Fatalf("expected idempotent second scheduled task run")
+	}
+	taskFile := filepath.Join(tmp, ".masterchef", "windows", "scheduled_tasks.json")
+	raw, err := os.ReadFile(taskFile)
+	if err != nil {
+		t.Fatalf("expected scheduled task shim state file: %v", err)
+	}
+	if !strings.Contains(string(raw), `"command": "echo cleanup"`) {
+		t.Fatalf("expected scheduled task command in shim file: %s", string(raw))
+	}
+}
+
 func TestApply_CustomTransportPluginHandler(t *testing.T) {
 	ex := New("")
 	if err := ex.RegisterTransport("plugin/mock", func(step planner.Step, r config.Resource) (bool, bool, string, error) {

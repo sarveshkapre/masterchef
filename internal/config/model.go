@@ -72,6 +72,16 @@ type Resource struct {
 	RetryBackoff      string `json:"retry_backoff,omitempty" yaml:"retry_backoff,omitempty"` // constant, linear, exponential
 	RetryJitterSecs   int    `json:"retry_jitter_seconds,omitempty" yaml:"retry_jitter_seconds,omitempty"`
 	UntilContains     string `json:"until_contains,omitempty" yaml:"until_contains,omitempty"`
+
+	// windows registry
+	RegistryKey       string `json:"registry_key,omitempty" yaml:"registry_key,omitempty"`
+	RegistryValue     string `json:"registry_value,omitempty" yaml:"registry_value,omitempty"`
+	RegistryValueType string `json:"registry_value_type,omitempty" yaml:"registry_value_type,omitempty"` // string, dword, qword
+
+	// windows scheduled task
+	TaskName     string `json:"task_name,omitempty" yaml:"task_name,omitempty"`
+	TaskSchedule string `json:"task_schedule,omitempty" yaml:"task_schedule,omitempty"`
+	TaskCommand  string `json:"task_command,omitempty" yaml:"task_command,omitempty"`
 }
 
 type Execution struct {

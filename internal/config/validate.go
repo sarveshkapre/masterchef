@@ -203,6 +203,39 @@ func Validate(cfg *Config) error {
 			if r.RetryJitterSecs < 0 {
 				return fmt.Errorf("resource %q command.retry_jitter_seconds must be >= 0", r.ID)
 			}
+		case "registry":
+			if r.Become {
+				return fmt.Errorf("resource %q privilege escalation is only supported for command resources", r.ID)
+			}
+			if strings.TrimSpace(r.RegistryKey) == "" {
+				return fmt.Errorf("resource %q registry.registry_key is required", r.ID)
+			}
+			r.RegistryKey = strings.TrimSpace(r.RegistryKey)
+			r.RegistryValueType = strings.ToLower(strings.TrimSpace(r.RegistryValueType))
+			if r.RegistryValueType == "" {
+				r.RegistryValueType = "string"
+			}
+			switch r.RegistryValueType {
+			case "string", "dword", "qword":
+			default:
+				return fmt.Errorf("resource %q registry.registry_value_type must be one of string, dword, qword", r.ID)
+			}
+		case "scheduled_task":
+			if r.Become {
+				return fmt.Errorf("resource %q privilege escalation is only supported for command resources", r.ID)
+			}
+			r.TaskName = strings.TrimSpace(r.TaskName)
+			r.TaskCommand = strings.TrimSpace(r.TaskCommand)
+			r.TaskSchedule = strings.TrimSpace(r.TaskSchedule)
+			if r.TaskName == "" {
+				return fmt.Errorf("resource %q scheduled_task.task_name is required", r.ID)
+			}
+			if r.TaskCommand == "" {
+				return fmt.Errorf("resource %q scheduled_task.task_command is required", r.ID)
+			}
+			if r.TaskSchedule == "" {
+				r.TaskSchedule = "@daily"
+			}
 		default:
 			return fmt.Errorf("resource %q has unsupported type %q", r.ID, r.Type)
 		}
@@ -298,6 +331,39 @@ func Validate(cfg *Config) error {
 			}
 			if h.RetryJitterSecs < 0 {
 				return fmt.Errorf("handler %q command.retry_jitter_seconds must be >= 0", h.ID)
+			}
+		case "registry":
+			if h.Become {
+				return fmt.Errorf("handler %q privilege escalation is only supported for command resources", h.ID)
+			}
+			if strings.TrimSpace(h.RegistryKey) == "" {
+				return fmt.Errorf("handler %q registry.registry_key is required", h.ID)
+			}
+			h.RegistryKey = strings.TrimSpace(h.RegistryKey)
+			h.RegistryValueType = strings.ToLower(strings.TrimSpace(h.RegistryValueType))
+			if h.RegistryValueType == "" {
+				h.RegistryValueType = "string"
+			}
+			switch h.RegistryValueType {
+			case "string", "dword", "qword":
+			default:
+				return fmt.Errorf("handler %q registry.registry_value_type must be one of string, dword, qword", h.ID)
+			}
+		case "scheduled_task":
+			if h.Become {
+				return fmt.Errorf("handler %q privilege escalation is only supported for command resources", h.ID)
+			}
+			h.TaskName = strings.TrimSpace(h.TaskName)
+			h.TaskCommand = strings.TrimSpace(h.TaskCommand)
+			h.TaskSchedule = strings.TrimSpace(h.TaskSchedule)
+			if h.TaskName == "" {
+				return fmt.Errorf("handler %q scheduled_task.task_name is required", h.ID)
+			}
+			if h.TaskCommand == "" {
+				return fmt.Errorf("handler %q scheduled_task.task_command is required", h.ID)
+			}
+			if h.TaskSchedule == "" {
+				h.TaskSchedule = "@daily"
 			}
 		default:
 			return fmt.Errorf("handler %q has unsupported type %q", h.ID, h.Type)

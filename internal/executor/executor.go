@@ -236,6 +236,9 @@ func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
 
 func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool) {
 	r := step.Resource
+	if r.Type == "registry" || r.Type == "scheduled_task" {
+		return e.executeWindowsShimResource(step, r)
+	}
 	handler, ok := e.transportHandlers[strings.ToLower(strings.TrimSpace(step.Host.Transport))]
 	if !ok {
 		return state.ResourceRun{
@@ -301,6 +304,121 @@ func (e *Executor) executeSingleStep(step planner.Step) (state.ResourceRun, bool
 		res.Message = err.Error()
 	}
 	return res, true
+}
+
+func (e *Executor) executeWindowsShimResource(step planner.Step, r config.Resource) (state.ResourceRun, bool) {
+	res := state.ResourceRun{
+		ResourceID: r.ID,
+		Type:       r.Type,
+		Host:       r.Host,
+	}
+	transport := strings.ToLower(strings.TrimSpace(step.Host.Transport))
+	if transport == "winrm" && isLocalWinRMHost(step.Host) {
+		transport = "local"
+	}
+	if transport != "local" {
+		res.Message = "windows resource type " + r.Type + " is only supported in local/winrm-localhost shim mode"
+		return res, true
+	}
+
+	stateDir := strings.TrimSpace(e.baseDir)
+	if stateDir == "" {
+		stateDir = "."
+	}
+	root := filepath.Join(stateDir, ".masterchef", "windows")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		res.Message = "create windows shim state dir: " + err.Error()
+		return res, true
+	}
+
+	switch r.Type {
+	case "registry":
+		type registryState map[string]map[string]string
+		regPath := filepath.Join(root, "registry.json")
+		state := registryState{}
+		if raw, err := os.ReadFile(regPath); err == nil && len(raw) > 0 {
+			_ = json.Unmarshal(raw, &state)
+		}
+		key := strings.ToLower(strings.TrimSpace(r.RegistryKey))
+		if key == "" {
+			res.Message = "registry_key is required"
+			return res, true
+		}
+		if state[key] == nil {
+			state[key] = map[string]string{}
+		}
+		valueType := strings.ToLower(strings.TrimSpace(r.RegistryValueType))
+		if valueType == "" {
+			valueType = "string"
+		}
+		currentType := state[key]["type"]
+		currentValue := state[key]["value"]
+		if currentType == valueType && currentValue == r.RegistryValue {
+			res.Message = "registry already in desired state"
+			return res, false
+		}
+		state[key]["type"] = valueType
+		state[key]["value"] = r.RegistryValue
+		body, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			res.Message = "marshal registry state: " + err.Error()
+			return res, true
+		}
+		if err := os.WriteFile(regPath, body, 0o644); err != nil {
+			res.Message = "write registry state: " + err.Error()
+			return res, true
+		}
+		res.Changed = true
+		res.Message = "registry value updated"
+		return res, false
+	case "scheduled_task":
+		type taskState map[string]map[string]string
+		taskPath := filepath.Join(root, "scheduled_tasks.json")
+		state := taskState{}
+		if raw, err := os.ReadFile(taskPath); err == nil && len(raw) > 0 {
+			_ = json.Unmarshal(raw, &state)
+		}
+		name := strings.TrimSpace(r.TaskName)
+		if name == "" {
+			res.Message = "task_name is required"
+			return res, true
+		}
+		command := strings.TrimSpace(r.TaskCommand)
+		if command == "" {
+			res.Message = "task_command is required"
+			return res, true
+		}
+		schedule := strings.TrimSpace(r.TaskSchedule)
+		if schedule == "" {
+			schedule = "@daily"
+		}
+		key := strings.ToLower(name)
+		current := state[key]
+		if current != nil && current["command"] == command && current["schedule"] == schedule {
+			res.Message = "scheduled task already in desired state"
+			return res, false
+		}
+		state[key] = map[string]string{
+			"name":     name,
+			"schedule": schedule,
+			"command":  command,
+		}
+		body, err := json.MarshalIndent(state, "", "  ")
+		if err != nil {
+			res.Message = "marshal scheduled task state: " + err.Error()
+			return res, true
+		}
+		if err := os.WriteFile(taskPath, body, 0o644); err != nil {
+			res.Message = "write scheduled task state: " + err.Error()
+			return res, true
+		}
+		res.Changed = true
+		res.Message = "scheduled task updated"
+		return res, false
+	default:
+		res.Message = "unsupported windows shim resource type: " + r.Type
+		return res, true
+	}
 }
 
 func (e *Executor) runCommandHook(step planner.Step, handler transportApplyFunc, base config.Resource, hookName, command string) (string, bool, error) {

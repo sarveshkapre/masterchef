@@ -554,3 +554,48 @@ func TestValidate_RetryBackoffCommandOnly(t *testing.T) {
 		t.Fatalf("expected retry backoff/jitter on file resource to fail")
 	}
 }
+
+func TestValidate_WindowsResourceTypes(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:                "reg-1",
+				Type:              "registry",
+				Host:              "localhost",
+				RegistryKey:       `hkcu\\software\\masterchef\\setting`,
+				RegistryValue:     "enabled",
+				RegistryValueType: "STRING",
+			},
+			{
+				ID:          "task-1",
+				Type:        "scheduled_task",
+				Host:        "localhost",
+				TaskName:    "nightly-cleanup",
+				TaskCommand: "echo cleanup",
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected windows resources to validate, got %v", err)
+	}
+	if cfg.Resources[0].RegistryValueType != "string" {
+		t.Fatalf("expected normalized registry value type, got %q", cfg.Resources[0].RegistryValueType)
+	}
+	if cfg.Resources[1].TaskSchedule != "@daily" {
+		t.Fatalf("expected default task schedule, got %q", cfg.Resources[1].TaskSchedule)
+	}
+
+	cfg.Resources[0].RegistryValueType = "binary"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected invalid registry value type error")
+	}
+	cfg.Resources[0].RegistryValueType = "string"
+	cfg.Resources[1].TaskCommand = ""
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected missing task command error")
+	}
+}
