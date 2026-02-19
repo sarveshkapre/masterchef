@@ -2185,6 +2185,68 @@ resources:
 	if !strings.Contains(rr.Body.String(), `"workflow":"rollout"`) || !strings.Contains(rr.Body.String(), `"no_mouse_coverage_percent"`) {
 		t.Fatalf("expected rollout navigation workflow with coverage details: %s", rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/views", bytes.NewReader([]byte(`{
+		"name":"Team Rollout View",
+		"entity":"runs",
+		"mode":"human",
+		"query":"status=failed",
+		"limit":25,
+		"pinned":true
+	}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("saved view create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var savedView struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &savedView); err != nil || savedView.ID == "" {
+		t.Fatalf("saved view decode failed: err=%v body=%s", err, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/ui/dashboard/widgets", bytes.NewReader([]byte(`{
+		"view_id":"`+savedView.ID+`",
+		"title":"Team Rollout Widget",
+		"description":"Pinned failed runs for team handoff",
+		"width":8,
+		"height":5,
+		"column":1,
+		"row":1,
+		"pinned":true
+	}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("dashboard widget create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var widget struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &widget); err != nil || widget.ID == "" {
+		t.Fatalf("dashboard widget decode failed: err=%v body=%s", err, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/ui/dashboard/widgets?pinned_only=true", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("dashboard widget list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), widget.ID) {
+		t.Fatalf("expected created dashboard widget in list: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/ui/dashboard/widgets/"+widget.ID+"/refresh", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("dashboard widget refresh failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"last_refreshed_at"`) {
+		t.Fatalf("expected refresh timestamp in widget response: %s", rr.Body.String())
+	}
 }
 
 func TestPlanExplainEndpoint(t *testing.T) {

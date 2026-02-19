@@ -50,6 +50,7 @@ type Server struct {
 	accessibility         *control.AccessibilityStore
 	progressiveDisclosure *control.ProgressiveDisclosureStore
 	shortcuts             *control.UIShortcutCatalog
+	dashboardWidgets      *control.DashboardWidgetStore
 	bulk                  *control.BulkManager
 	actionDocs            *control.ActionDocCatalog
 	objectModel           *control.ObjectModelRegistry
@@ -169,6 +170,7 @@ func New(addr, baseDir string) *Server {
 	accessibility := control.NewAccessibilityStore()
 	progressiveDisclosure := control.NewProgressiveDisclosureStore()
 	shortcuts := control.NewUIShortcutCatalog()
+	dashboardWidgets := control.NewDashboardWidgetStore()
 	bulk := control.NewBulkManager(15 * time.Minute)
 	actionDocs := control.NewActionDocCatalog()
 	objectModel := control.NewObjectModelRegistry()
@@ -280,6 +282,7 @@ func New(addr, baseDir string) *Server {
 		accessibility:         accessibility,
 		progressiveDisclosure: progressiveDisclosure,
 		shortcuts:             shortcuts,
+		dashboardWidgets:      dashboardWidgets,
 		bulk:                  bulk,
 		actionDocs:            actionDocs,
 		objectModel:           objectModel,
@@ -657,6 +660,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/ui/progressive-disclosure/reveal", s.handleProgressiveDisclosureReveal)
 	mux.HandleFunc("/v1/ui/shortcuts", s.handleUIShortcuts)
 	mux.HandleFunc("/v1/ui/navigation-map", s.handleUINavigationMap)
+	mux.HandleFunc("/v1/ui/dashboard/widgets", s.handleDashboardWidgets)
+	mux.HandleFunc("/v1/ui/dashboard/widgets/", s.handleDashboardWidgetAction)
 	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
 	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
 	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
@@ -2554,6 +2559,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/ui/progressive-disclosure/reveal",
 			"GET /v1/ui/shortcuts",
 			"GET /v1/ui/navigation-map",
+			"GET /v1/ui/dashboard/widgets",
+			"POST /v1/ui/dashboard/widgets",
+			"GET /v1/ui/dashboard/widgets/{id}",
+			"DELETE /v1/ui/dashboard/widgets/{id}",
+			"POST /v1/ui/dashboard/widgets/{id}/pin",
+			"POST /v1/ui/dashboard/widgets/{id}/refresh",
 			"POST /v1/migrations/assess",
 			"GET /v1/migrations/reports",
 			"GET /v1/migrations/reports/{id}",
