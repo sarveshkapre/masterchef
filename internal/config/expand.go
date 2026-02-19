@@ -218,6 +218,7 @@ func applyResourceTemplateVars(res *Resource, vars map[string]string) {
 	res.BecomeUser = replaceString(res.BecomeUser)
 	res.RescueCommand = replaceString(res.RescueCommand)
 	res.AlwaysCommand = replaceString(res.AlwaysCommand)
+	res.RetryBackoff = replaceString(res.RetryBackoff)
 	res.UntilContains = replaceString(res.UntilContains)
 	res.DependsOn = replaceSlice(res.DependsOn)
 	res.Require = replaceSlice(res.Require)

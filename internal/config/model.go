@@ -69,6 +69,8 @@ type Resource struct {
 	AlwaysCommand     string `json:"always_command,omitempty" yaml:"always_command,omitempty"`
 	Retries           int    `json:"retries,omitempty" yaml:"retries,omitempty"`
 	RetryDelaySeconds int    `json:"retry_delay_seconds,omitempty" yaml:"retry_delay_seconds,omitempty"`
+	RetryBackoff      string `json:"retry_backoff,omitempty" yaml:"retry_backoff,omitempty"` // constant, linear, exponential
+	RetryJitterSecs   int    `json:"retry_jitter_seconds,omitempty" yaml:"retry_jitter_seconds,omitempty"`
 	UntilContains     string `json:"until_contains,omitempty" yaml:"until_contains,omitempty"`
 }
 

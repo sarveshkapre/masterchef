@@ -123,7 +123,7 @@ Disruption budget definitions and rollout-gating evaluation are available via `/
 Privilege escalation controls for command resources are supported via `become` and `become_user`, with explicit run-result audit markers.
 Session recording artifacts for privileged remote command executions are emitted under `.masterchef/sessions` and linked from run output.
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-groups`, `-resources`, `-tags`, and `-skip-tags`.
-Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, and `until_contains`.
+Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, `retry_backoff`, `retry_jitter_seconds`, and `until_contains`.
 Command resources support `rescue_command` and `always_command` hooks for block/rescue/always-style error handling flows.
 Explicit `require`/`before`/`notify`/`subscribe` resource relationships are supported in config and influence planner dependency ordering for event-driven orchestration.
 Refresh-on-change execution semantics are supported via command guards (`only_if`, `unless`) and refresh controls (`refresh_only`, `refresh_command`) for event-triggered actions.

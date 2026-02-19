@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/masterchef/masterchef/internal/config"
 	"github.com/masterchef/masterchef/internal/planner"
@@ -550,6 +551,38 @@ func TestApply_CommandRetriesUntilSuccess(t *testing.T) {
 	}
 	if len(run.Results) != 1 || !strings.Contains(run.Results[0].Message, "succeeded after 2 attempts") {
 		t.Fatalf("expected retry success message, got %#v", run.Results)
+	}
+}
+
+func TestRetryDelayForAttempt_BackoffModes(t *testing.T) {
+	base := 2 * time.Second
+	if got := retryDelayForAttempt(base, 1, "constant"); got != 2*time.Second {
+		t.Fatalf("constant backoff attempt 1: got=%s", got)
+	}
+	if got := retryDelayForAttempt(base, 2, "linear"); got != 4*time.Second {
+		t.Fatalf("linear backoff attempt 2: got=%s", got)
+	}
+	if got := retryDelayForAttempt(base, 3, "exponential"); got != 8*time.Second {
+		t.Fatalf("exponential backoff attempt 3: got=%s", got)
+	}
+	if got := retryDelayForAttempt(base, 0, "linear"); got != 0 {
+		t.Fatalf("attempt <= 0 should produce zero delay, got=%s", got)
+	}
+}
+
+func TestRetryJitterForAttempt_DeterministicAndBounded(t *testing.T) {
+	max := 3 * time.Second
+	a := retryJitterForAttempt("retry-step", 1, max)
+	b := retryJitterForAttempt("retry-step", 1, max)
+	if a != b {
+		t.Fatalf("expected deterministic jitter, got %s and %s", a, b)
+	}
+	if a < 0 || a > max {
+		t.Fatalf("expected jitter in [0,%s], got %s", max, a)
+	}
+	c := retryJitterForAttempt("retry-step", 2, max)
+	if c == a {
+		t.Fatalf("expected different jitter value for different attempt")
 	}
 }
 

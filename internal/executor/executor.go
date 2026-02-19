@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -178,7 +179,9 @@ func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
 	if step.Resource.Retries > 0 {
 		attempts = step.Resource.Retries + 1
 	}
-	delay := time.Duration(step.Resource.RetryDelaySeconds) * time.Second
+	baseDelay := time.Duration(step.Resource.RetryDelaySeconds) * time.Second
+	backoff := normalizeRetryBackoff(step.Resource.RetryBackoff)
+	jitterMax := time.Duration(step.Resource.RetryJitterSecs) * time.Second
 	untilContains := strings.TrimSpace(step.Resource.UntilContains)
 
 	var last state.ResourceRun
@@ -199,8 +202,11 @@ func (e *Executor) executeStep(step planner.Step) (state.ResourceRun, bool) {
 			}
 			return last, false
 		}
-		if attempt < attempts && delay > 0 {
-			time.Sleep(delay)
+		if attempt < attempts {
+			delay := retryDelayForAttempt(baseDelay, attempt, backoff) + retryJitterForAttempt(step.Resource.ID, attempt, jitterMax)
+			if delay > 0 {
+				time.Sleep(delay)
+			}
 		}
 	}
 	if attempts > 1 {
@@ -290,6 +296,8 @@ func (e *Executor) runCommandHook(step planner.Step, handler transportApplyFunc,
 	hookResource.Unless = ""
 	hookResource.Retries = 0
 	hookResource.RetryDelaySeconds = 0
+	hookResource.RetryBackoff = ""
+	hookResource.RetryJitterSecs = 0
 	hookResource.UntilContains = ""
 	hookResource.RescueCommand = ""
 	hookResource.AlwaysCommand = ""
@@ -409,6 +417,49 @@ func appendAuditMessage(message, audit string) string {
 		return audit
 	}
 	return message + "; " + audit
+}
+
+func normalizeRetryBackoff(mode string) string {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "", "constant", "linear", "exponential":
+		return mode
+	default:
+		return ""
+	}
+}
+
+func retryDelayForAttempt(base time.Duration, attempt int, mode string) time.Duration {
+	if base <= 0 || attempt <= 0 {
+		return 0
+	}
+	switch mode {
+	case "linear":
+		return base * time.Duration(attempt)
+	case "exponential":
+		if attempt > 30 {
+			attempt = 30
+		}
+		return base * time.Duration(1<<(attempt-1))
+	default:
+		return base
+	}
+}
+
+func retryJitterForAttempt(resourceID string, attempt int, max time.Duration) time.Duration {
+	if max <= 0 || attempt <= 0 {
+		return 0
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(strings.TrimSpace(resourceID)))
+	_, _ = h.Write([]byte(":"))
+	_, _ = h.Write([]byte(strconv.Itoa(attempt)))
+	n := h.Sum32()
+	maxNanos := max.Nanoseconds()
+	if maxNanos <= 0 {
+		return 0
+	}
+	return time.Duration(int64(n)%(maxNanos+1)) * time.Nanosecond
 }
 
 type sessionRecord struct {

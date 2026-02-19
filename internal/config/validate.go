@@ -173,6 +173,9 @@ func Validate(cfg *Config) error {
 			if strings.TrimSpace(r.RescueCommand) != "" || strings.TrimSpace(r.AlwaysCommand) != "" {
 				return fmt.Errorf("resource %q block/rescue/always hooks are only supported for command resources", r.ID)
 			}
+			if strings.TrimSpace(r.RetryBackoff) != "" || r.RetryJitterSecs != 0 {
+				return fmt.Errorf("resource %q retry_backoff/retry_jitter_seconds are only supported for command resources", r.ID)
+			}
 			if strings.TrimSpace(r.Path) == "" {
 				return fmt.Errorf("resource %q file.path is required", r.ID)
 			}
@@ -190,6 +193,15 @@ func Validate(cfg *Config) error {
 			}
 			if r.RetryDelaySeconds < 0 {
 				return fmt.Errorf("resource %q command.retry_delay_seconds must be >= 0", r.ID)
+			}
+			r.RetryBackoff = strings.ToLower(strings.TrimSpace(r.RetryBackoff))
+			switch r.RetryBackoff {
+			case "", "constant", "linear", "exponential":
+			default:
+				return fmt.Errorf("resource %q command.retry_backoff must be one of constant, linear, exponential", r.ID)
+			}
+			if r.RetryJitterSecs < 0 {
+				return fmt.Errorf("resource %q command.retry_jitter_seconds must be >= 0", r.ID)
 			}
 		default:
 			return fmt.Errorf("resource %q has unsupported type %q", r.ID, r.Type)
@@ -257,6 +269,9 @@ func Validate(cfg *Config) error {
 			if strings.TrimSpace(h.RescueCommand) != "" || strings.TrimSpace(h.AlwaysCommand) != "" {
 				return fmt.Errorf("handler %q block/rescue/always hooks are only supported for command resources", h.ID)
 			}
+			if strings.TrimSpace(h.RetryBackoff) != "" || h.RetryJitterSecs != 0 {
+				return fmt.Errorf("handler %q retry_backoff/retry_jitter_seconds are only supported for command resources", h.ID)
+			}
 			if strings.TrimSpace(h.Path) == "" {
 				return fmt.Errorf("handler %q file.path is required", h.ID)
 			}
@@ -274,6 +289,15 @@ func Validate(cfg *Config) error {
 			}
 			if h.RetryDelaySeconds < 0 {
 				return fmt.Errorf("handler %q command.retry_delay_seconds must be >= 0", h.ID)
+			}
+			h.RetryBackoff = strings.ToLower(strings.TrimSpace(h.RetryBackoff))
+			switch h.RetryBackoff {
+			case "", "constant", "linear", "exponential":
+			default:
+				return fmt.Errorf("handler %q command.retry_backoff must be one of constant, linear, exponential", h.ID)
+			}
+			if h.RetryJitterSecs < 0 {
+				return fmt.Errorf("handler %q command.retry_jitter_seconds must be >= 0", h.ID)
 			}
 		default:
 			return fmt.Errorf("handler %q has unsupported type %q", h.ID, h.Type)

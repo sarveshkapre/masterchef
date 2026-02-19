@@ -99,12 +99,17 @@ func TestValidate_CommandRetryPolicy(t *testing.T) {
 				Command:           "echo ok",
 				Retries:           2,
 				RetryDelaySeconds: 1,
+				RetryBackoff:      "LINEAR",
+				RetryJitterSecs:   1,
 				UntilContains:     "ok",
 			},
 		},
 	}
 	if err := Validate(cfg); err != nil {
 		t.Fatalf("expected valid retry policy, got %v", err)
+	}
+	if cfg.Resources[0].RetryBackoff != "linear" {
+		t.Fatalf("expected normalized retry backoff, got %q", cfg.Resources[0].RetryBackoff)
 	}
 	cfg.Resources[0].Retries = -1
 	if err := Validate(cfg); err == nil {
@@ -114,6 +119,16 @@ func TestValidate_CommandRetryPolicy(t *testing.T) {
 	cfg.Resources[0].RetryDelaySeconds = -1
 	if err := Validate(cfg); err == nil {
 		t.Fatalf("expected retry delay validation error")
+	}
+	cfg.Resources[0].RetryDelaySeconds = 1
+	cfg.Resources[0].RetryBackoff = "invalid"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected retry backoff validation error")
+	}
+	cfg.Resources[0].RetryBackoff = "constant"
+	cfg.Resources[0].RetryJitterSecs = -1
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected retry jitter validation error")
 	}
 }
 
@@ -515,5 +530,27 @@ func TestValidate_LoopNormalizationAndValidation(t *testing.T) {
 	cfg.Resources[0].Matrix = map[string][]string{"env": []string{"prod"}}
 	if err := Validate(cfg); err == nil {
 		t.Fatalf("expected loop_var matrix conflict validation error")
+	}
+}
+
+func TestValidate_RetryBackoffCommandOnly(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:              "f1",
+				Type:            "file",
+				Host:            "localhost",
+				Path:            "/tmp/x",
+				RetryBackoff:    "linear",
+				RetryJitterSecs: 1,
+			},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected retry backoff/jitter on file resource to fail")
 	}
 }
