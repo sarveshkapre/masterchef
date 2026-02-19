@@ -51,6 +51,7 @@ type Server struct {
 	federation          *control.FederationStore
 	schedulerPartitions *control.SchedulerPartitionStore
 	workerAutoscaling   *control.WorkerAutoscalingStore
+	tenantLimits        *control.TenantLimitStore
 	schemaMigs          *control.SchemaMigrationManager
 	dataBags            *control.DataBagStore
 	roleEnv             *control.RoleEnvironmentStore
@@ -141,6 +142,7 @@ func New(addr, baseDir string) *Server {
 	federation := control.NewFederationStore()
 	schedulerPartitions := control.NewSchedulerPartitionStore()
 	workerAutoscaling := control.NewWorkerAutoscalingStore()
+	tenantLimits := control.NewTenantLimitStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	dataBags := control.NewDataBagStore()
 	roleEnv := control.NewRoleEnvironmentStore(baseDir)
@@ -223,6 +225,7 @@ func New(addr, baseDir string) *Server {
 		federation:          federation,
 		schedulerPartitions: schedulerPartitions,
 		workerAutoscaling:   workerAutoscaling,
+		tenantLimits:        tenantLimits,
 		schemaMigs:          schemaMigs,
 		dataBags:            dataBags,
 		roleEnv:             roleEnv,
@@ -523,6 +526,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/scheduler/partition-decision", s.handleSchedulerPartitionDecision)
 	mux.HandleFunc("/v1/control/autoscaling/policy", s.handleWorkerAutoscalingPolicy)
 	mux.HandleFunc("/v1/control/autoscaling/recommend", s.handleWorkerAutoscalingRecommend)
+	mux.HandleFunc("/v1/control/tenancy/policies", s.handleTenantPolicies)
+	mux.HandleFunc("/v1/control/tenancy/admit-check", s.handleTenantAdmissionCheck)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
 	mux.HandleFunc("/v1/control/multi-master/nodes/", s.handleMultiMasterNodeAction)
 	mux.HandleFunc("/v1/control/multi-master/cache", s.handleMultiMasterCache)
@@ -2337,6 +2342,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/autoscaling/policy",
 			"POST /v1/control/autoscaling/policy",
 			"POST /v1/control/autoscaling/recommend",
+			"GET /v1/control/tenancy/policies",
+			"POST /v1/control/tenancy/policies",
+			"POST /v1/control/tenancy/admit-check",
 			"GET /v1/control/multi-master/nodes",
 			"POST /v1/control/multi-master/nodes",
 			"GET /v1/control/multi-master/nodes/{id}",
