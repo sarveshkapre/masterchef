@@ -124,6 +124,7 @@ type Server struct {
 	hopRelay               *control.HopRelayStore
 	syndic                 *control.SyndicStore
 	fipsMode               *control.FIPSModeStore
+	hostSecurityProfiles   *control.HostSecurityProfileStore
 	signatureAdmission     *control.SignatureAdmissionStore
 	runtimeSecrets         *control.RuntimeSecretStore
 	delegationTokens       *control.DelegationTokenStore
@@ -269,6 +270,7 @@ func New(addr, baseDir string) *Server {
 	hopRelay := control.NewHopRelayStore()
 	syndic := control.NewSyndicStore()
 	fipsMode := control.NewFIPSModeStore()
+	hostSecurityProfiles := control.NewHostSecurityProfileStore()
 	signatureAdmission := control.NewSignatureAdmissionStore()
 	runtimeSecrets := control.NewRuntimeSecretStore()
 	delegationTokens := control.NewDelegationTokenStore()
@@ -406,6 +408,7 @@ func New(addr, baseDir string) *Server {
 		hopRelay:               hopRelay,
 		syndic:                 syndic,
 		fipsMode:               fipsMode,
+		hostSecurityProfiles:   hostSecurityProfiles,
 		signatureAdmission:     signatureAdmission,
 		runtimeSecrets:         runtimeSecrets,
 		delegationTokens:       delegationTokens,
@@ -619,6 +622,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/syndic/route", s.handleSyndicRoute)
 	mux.HandleFunc("/v1/security/crypto/fips-mode", s.handleFIPSMode)
 	mux.HandleFunc("/v1/security/crypto/fips/validate", s.handleFIPSValidate)
+	mux.HandleFunc("/v1/security/host-profiles", s.handleHostSecurityProfiles)
+	mux.HandleFunc("/v1/security/host-profiles/evaluate", s.handleHostSecurityEvaluate)
 	mux.HandleFunc("/v1/security/signatures/keyrings", s.handleSignatureKeyrings)
 	mux.HandleFunc("/v1/security/signatures/keyrings/", s.handleSignatureKeyringAction)
 	mux.HandleFunc("/v1/security/signatures/admission-policy", s.handleSignatureAdmissionPolicy)
@@ -2500,6 +2505,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/security/crypto/fips-mode",
 			"POST /v1/security/crypto/fips-mode",
 			"POST /v1/security/crypto/fips/validate",
+			"GET /v1/security/host-profiles",
+			"POST /v1/security/host-profiles",
+			"POST /v1/security/host-profiles/evaluate",
 			"GET /v1/security/signatures/keyrings",
 			"POST /v1/security/signatures/keyrings",
 			"GET /v1/security/signatures/keyrings/{id}",
