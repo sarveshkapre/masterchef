@@ -67,6 +67,7 @@ type Server struct {
 	ephemeralTestEnv      *control.EphemeralEnvironmentStore
 	chaosExperiments      *control.ChaosExperimentStore
 	leakDetection         *control.LeakDetectionStore
+	performanceGates      *control.PerformanceGateStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -195,6 +196,7 @@ func New(addr, baseDir string) *Server {
 	ephemeralTestEnv := control.NewEphemeralEnvironmentStore()
 	chaosExperiments := control.NewChaosExperimentStore()
 	leakDetection := control.NewLeakDetectionStore()
+	performanceGates := control.NewPerformanceGateStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -315,6 +317,7 @@ func New(addr, baseDir string) *Server {
 		ephemeralTestEnv:      ephemeralTestEnv,
 		chaosExperiments:      chaosExperiments,
 		leakDetection:         leakDetection,
+		performanceGates:      performanceGates,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -454,6 +457,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/dependency-bot/policy", s.handleDependencyUpdatePolicy)
 	mux.HandleFunc("/v1/release/dependency-bot/updates", s.handleDependencyUpdates)
 	mux.HandleFunc("/v1/release/dependency-bot/updates/", s.handleDependencyUpdateAction)
+	mux.HandleFunc("/v1/release/performance-gates/policy", s.handlePerformanceGatePolicy)
+	mux.HandleFunc("/v1/release/performance-gates/evaluate", s.handlePerformanceGateEvaluate)
+	mux.HandleFunc("/v1/release/performance-gates/evaluations", s.handlePerformanceGateEvaluations)
 	mux.HandleFunc("/v1/release/tests/flake-policy", s.handleFlakePolicy)
 	mux.HandleFunc("/v1/release/tests/flake-observations", s.handleFlakeObservations)
 	mux.HandleFunc("/v1/release/tests/flake-cases", s.handleFlakeCases)
@@ -2651,6 +2657,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/release/dependency-bot/updates",
 			"GET /v1/release/dependency-bot/updates/{id}",
 			"POST /v1/release/dependency-bot/updates/{id}/evaluate",
+			"GET /v1/release/performance-gates/policy",
+			"POST /v1/release/performance-gates/policy",
+			"POST /v1/release/performance-gates/evaluate",
+			"GET /v1/release/performance-gates/evaluations",
 			"GET /v1/release/tests/flake-policy",
 			"POST /v1/release/tests/flake-policy",
 			"POST /v1/release/tests/flake-observations",

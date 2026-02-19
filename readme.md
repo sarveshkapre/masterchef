@@ -247,6 +247,7 @@ Simulation coverage reporting now includes per-resource-type support breakdown a
 Post-run invariant checks with configurable severity are available via `POST /v1/control/invariants/check`.
 Release blocker policy enforcement with craftsmanship tiers is available via `GET/POST /v1/release/blocker-policy`.
 Automated dependency update bot workflows with compatibility/performance verification are available via `/v1/release/dependency-bot/policy` and `/v1/release/dependency-bot/updates`.
+Performance regression gates with latency, throughput, and error-budget thresholds are available via `/v1/release/performance-gates/policy` and `/v1/release/performance-gates/evaluate`.
 Flake detection and quarantine workflows for unstable test cases are available via `/v1/release/tests/flake-policy`, `/v1/release/tests/flake-observations`, and `/v1/release/tests/flake-cases`.
 Safety-aware test impact analysis for targeted CI runs is available via `POST /v1/release/tests/impact-analysis` with safe fallback recommendations.
 End-to-end scenario test runner APIs for fleet simulations are available via `/v1/release/tests/scenarios` and `/v1/release/tests/scenario-runs`, with golden-run baselines and regression detection via `/v1/release/tests/scenario-baselines` and `/v1/release/tests/scenario-runs/{id}/compare-baseline`.
