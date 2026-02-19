@@ -218,6 +218,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/runtime-hosts", s.handleRuntimeHosts)
 	mux.HandleFunc("/v1/inventory/runtime-hosts/", s.handleRuntimeHostAction)
 	mux.HandleFunc("/v1/inventory/enroll", s.handleRuntimeEnrollAlias)
+	mux.HandleFunc("/v1/fleet/health", s.handleFleetHealth(baseDir))
 	mux.HandleFunc("/v1/agents/checkins", s.handleAgentCheckins)
 	mux.HandleFunc("/v1/agents/dispatch-mode", s.handleAgentDispatchMode)
 	mux.HandleFunc("/v1/agents/dispatch", s.handleAgentDispatch(baseDir))
@@ -1794,6 +1795,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/activity",
 			"GET /v1/search",
 			"GET /v1/inventory/groups",
+			"GET /v1/fleet/health",
 			"GET /v1/inventory/runtime-hosts",
 			"POST /v1/inventory/runtime-hosts",
 			"POST /v1/inventory/enroll",
