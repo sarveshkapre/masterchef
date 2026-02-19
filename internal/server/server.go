@@ -345,6 +345,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/dependency-bot/updates", s.handleDependencyUpdates)
 	mux.HandleFunc("/v1/release/dependency-bot/updates/", s.handleDependencyUpdateAction)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
+	mux.HandleFunc("/v1/plans/graph", s.handlePlanGraph(baseDir))
 	mux.HandleFunc("/v1/plans/risk-summary", s.handlePlanRiskSummary(baseDir))
 	mux.HandleFunc("/v1/policy/simulate", s.handlePolicySimulation(baseDir))
 	mux.HandleFunc("/v1/policy/pull/sources", s.handlePolicyPullSources)
@@ -2320,6 +2321,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/docs/actions",
 			"GET /v1/docs/actions/{id}",
 			"POST /v1/plans/explain",
+			"POST /v1/plans/graph",
 			"POST /v1/plans/risk-summary",
 			"POST /v1/policy/simulate",
 			"GET /v1/alerts/inbox",

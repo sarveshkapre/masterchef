@@ -198,6 +198,7 @@ Documentation generator for modules/providers/policy APIs is available via `GET/
 Executable documentation examples verification is available via `POST /v1/docs/examples/verify` and `masterchef docs verify-examples`.
 API docs version-diff views with deprecation timelines are available via `GET/POST /v1/docs/api/version-diff`.
 Per-step plan explainability (reason/trigger/outcome/risk hints) is available via `POST /v1/plans/explain`.
+Execution graph visualization for UI/automation consumers is available via `POST /v1/plans/graph` (structured nodes/edges plus DOT and Mermaid renderings).
 Topology-aware blast-radius maps for impacted hosts/resources/dependencies are available via `POST /v1/control/blast-radius-map`.
 Human-readable pre-apply risk summaries are available via `POST /v1/plans/risk-summary`.
 Policy simulation and gating checks are available via `POST /v1/policy/simulate`.
