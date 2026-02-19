@@ -63,6 +63,7 @@ type Server struct {
 	dependencyUpdates     *control.DependencyUpdateStore
 	flakes                *control.FlakeQuarantineStore
 	scenarioTests         *control.ScenarioTestStore
+	providerConformance   *control.ProviderConformanceStore
 	healthProbes          *control.HealthProbeStore
 	canaryUpgrades        *control.CanaryUpgradeStore
 	failoverDrills        *control.RegionalFailoverDrillStore
@@ -187,6 +188,7 @@ func New(addr, baseDir string) *Server {
 	dependencyUpdates := control.NewDependencyUpdateStore()
 	flakes := control.NewFlakeQuarantineStore()
 	scenarioTests := control.NewScenarioTestStore()
+	providerConformance := control.NewProviderConformanceStore()
 	healthProbes := control.NewHealthProbeStore()
 	canaryUpgrades := control.NewCanaryUpgradeStore()
 	failoverDrills := control.NewRegionalFailoverDrillStore()
@@ -303,6 +305,7 @@ func New(addr, baseDir string) *Server {
 		dependencyUpdates:     dependencyUpdates,
 		flakes:                flakes,
 		scenarioTests:         scenarioTests,
+		providerConformance:   providerConformance,
 		healthProbes:          healthProbes,
 		canaryUpgrades:        canaryUpgrades,
 		failoverDrills:        failoverDrills,
@@ -452,6 +455,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/scenario-runs/", s.handleTestScenarioRunAction)
 	mux.HandleFunc("/v1/release/tests/scenario-baselines", s.handleTestScenarioBaselines)
 	mux.HandleFunc("/v1/release/tests/scenario-baselines/", s.handleTestScenarioBaselineAction)
+	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
+	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
+	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/graph", s.handlePlanGraph(baseDir))
 	mux.HandleFunc("/v1/plans/graph/query", s.handlePlanGraphQuery(baseDir))
@@ -2646,6 +2652,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/tests/scenario-baselines",
 			"POST /v1/release/tests/scenario-baselines",
 			"GET /v1/release/tests/scenario-baselines/{id}",
+			"GET /v1/providers/conformance/suites",
+			"POST /v1/providers/conformance/suites",
+			"GET /v1/providers/conformance/runs",
+			"POST /v1/providers/conformance/runs",
+			"GET /v1/providers/conformance/runs/{id}",
 			"POST /v1/query",
 			"GET /v1/data-bags",
 			"POST /v1/data-bags",
