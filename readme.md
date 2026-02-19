@@ -215,6 +215,7 @@ Per-step plan explainability (reason/trigger/outcome/risk hints) is available vi
 Execution graph visualization for UI/automation consumers is available via `POST /v1/plans/graph` (structured nodes/edges plus DOT and Mermaid renderings).
 Resource graph query API for dependency/impact analysis is available via `POST /v1/plans/graph/query` with upstream/downstream traversal controls.
 Change diff previews for each planned resource action are available via `POST /v1/plans/diff-preview`.
+Cross-runner plan reproducibility checks for baseline/runner artifacts are available via `POST /v1/plans/reproducibility-check`.
 Topology-aware blast-radius maps for impacted hosts/resources/dependencies are available via `POST /v1/control/blast-radius-map`.
 Human-readable pre-apply risk summaries are available via `POST /v1/plans/risk-summary`.
 Policy simulation and gating checks are available via `POST /v1/policy/simulate`.
