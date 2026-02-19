@@ -36,6 +36,7 @@ type Server struct {
 	runbooks            *control.RunbookStore
 	assocs              *control.AssociationStore
 	commands            *control.CommandIngestStore
+	convergeTriggers    *control.ConvergeTriggerStore
 	canaries            *control.CanaryStore
 	rules               *control.RuleEngine
 	webhooks            *control.WebhookDispatcher
@@ -146,6 +147,7 @@ func New(addr, baseDir string) *Server {
 	runbooks := control.NewRunbookStore()
 	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
+	convergeTriggers := control.NewConvergeTriggerStore(5000)
 	canaries := control.NewCanaryStore(queue)
 	rules := control.NewRuleEngine()
 	webhooks := control.NewWebhookDispatcher(5000)
@@ -248,6 +250,7 @@ func New(addr, baseDir string) *Server {
 		runbooks:            runbooks,
 		assocs:              assocs,
 		commands:            commands,
+		convergeTriggers:    convergeTriggers,
 		canaries:            canaries,
 		rules:               rules,
 		webhooks:            webhooks,
@@ -595,6 +598,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
+	mux.HandleFunc("/v1/converge/triggers", s.handleConvergeTriggers(baseDir))
+	mux.HandleFunc("/v1/converge/triggers/", s.handleConvergeTriggerByID)
 	mux.HandleFunc("/v1/alerts/inbox", s.handleAlertInbox)
 	mux.HandleFunc("/v1/notifications/targets", s.handleNotificationTargets)
 	mux.HandleFunc("/v1/notifications/targets/", s.handleNotificationTargetAction)
@@ -2544,6 +2549,9 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/facts/cache/{node}",
 			"POST /v1/facts/mine/query",
 			"POST /v1/events/ingest",
+			"GET /v1/converge/triggers",
+			"POST /v1/converge/triggers",
+			"GET /v1/converge/triggers/{id}",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",
 			"GET /v1/object-store/objects",
