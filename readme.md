@@ -161,6 +161,7 @@ Promotion pipelines with immutable artifact pinning are available via `/v1/gitop
 Drift-aware GitOps reconciliation loop is available via `POST /v1/gitops/reconcile` with simulation guardrails and optional auto-enqueue.
 Signed GitOps plan-artifact workflows are available via `/v1/gitops/plan-artifacts/sign` and `/v1/gitops/plan-artifacts/verify`.
 Policy pull from control plane or signed Git sources is available via `/v1/policy/pull/sources`, `POST /v1/policy/pull/execute`, and `GET /v1/policy/pull/results` with signature verification enforcement for trusted Git sources.
+Versioned policy bundles with lockfiles and staged policy-group/run-list promotions are available via `/v1/policy/bundles`, `POST /v1/policy/bundles/{id}/promote`, and `GET /v1/policy/bundles/{id}/promotions`.
 Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/beacon-reactor/rules` and `/v1/compat/beacon-reactor/emit`.
 Salt-style grains compatibility and grain-query translation are available via `GET /v1/compat/grains` and `POST /v1/compat/grains/query`.
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.

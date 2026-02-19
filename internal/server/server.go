@@ -107,6 +107,7 @@ type Server struct {
 	agentPKI            *control.AgentPKIStore
 	agentCatalogs       *control.AgentCatalogStore
 	agentAttestation    *control.AgentAttestationStore
+	policyBundles       *control.PolicyBundleStore
 	policyPull          *control.PolicyPullStore
 	multiMaster         *control.MultiMasterStore
 	edgeRelay           *control.EdgeRelayStore
@@ -215,6 +216,7 @@ func New(addr, baseDir string) *Server {
 	agentPKI := control.NewAgentPKIStore()
 	agentCatalogs := control.NewAgentCatalogStore()
 	agentAttestation := control.NewAgentAttestationStore()
+	policyBundles := control.NewPolicyBundleStore()
 	policyPull := control.NewPolicyPullStore()
 	multiMaster := control.NewMultiMasterStore()
 	edgeRelay := control.NewEdgeRelayStore()
@@ -315,6 +317,7 @@ func New(addr, baseDir string) *Server {
 		agentPKI:            agentPKI,
 		agentCatalogs:       agentCatalogs,
 		agentAttestation:    agentAttestation,
+		policyBundles:       policyBundles,
 		policyPull:          policyPull,
 		multiMaster:         multiMaster,
 		edgeRelay:           edgeRelay,
@@ -397,6 +400,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/policy/pull/sources/", s.handlePolicyPullSourceAction)
 	mux.HandleFunc("/v1/policy/pull/execute", s.handlePolicyPullExecute(baseDir))
 	mux.HandleFunc("/v1/policy/pull/results", s.handlePolicyPullResults)
+	mux.HandleFunc("/v1/policy/bundles", s.handlePolicyBundles)
+	mux.HandleFunc("/v1/policy/bundles/", s.handlePolicyBundleAction)
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
@@ -2174,6 +2179,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/policy/pull/sources/{id}",
 			"POST /v1/policy/pull/execute",
 			"GET /v1/policy/pull/results",
+			"GET /v1/policy/bundles",
+			"POST /v1/policy/bundles",
+			"GET /v1/policy/bundles/{id}",
+			"POST /v1/policy/bundles/{id}/promote",
+			"GET /v1/policy/bundles/{id}/promotions",
 			"GET /v1/inventory/groups",
 			"POST /v1/inventory/import/cmdb",
 			"POST /v1/inventory/import/assist",
