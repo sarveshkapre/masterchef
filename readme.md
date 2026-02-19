@@ -245,6 +245,7 @@ Post-run invariant checks with configurable severity are available via `POST /v1
 Release blocker policy enforcement with craftsmanship tiers is available via `GET/POST /v1/release/blocker-policy`.
 Automated dependency update bot workflows with compatibility/performance verification are available via `/v1/release/dependency-bot/policy` and `/v1/release/dependency-bot/updates`.
 Flake detection and quarantine workflows for unstable test cases are available via `/v1/release/tests/flake-policy`, `/v1/release/tests/flake-observations`, and `/v1/release/tests/flake-cases`.
+Safety-aware test impact analysis for targeted CI runs is available via `POST /v1/release/tests/impact-analysis` with safe fallback recommendations.
 Pinned toolchain reproducibility checks for local/CI pipelines are available via `masterchef release toolchain-check`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters and `GET /v1/activity/audit-timeline` identity/resource categories.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.

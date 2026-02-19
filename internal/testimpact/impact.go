@@ -11,6 +11,13 @@ type Report struct {
 	ImpactedPackages []string `json:"impacted_packages"`
 	FallbackToAll    bool     `json:"fallback_to_all"`
 	Reason           string   `json:"reason,omitempty"`
+	Scope            string   `json:"scope"`
+	RecommendedTest  string   `json:"recommended_test"`
+}
+
+type AnalyzeOptions struct {
+	AlwaysInclude      []string
+	MaxTargetedPackage int
 }
 
 var criticalFallbackPackages = []string{
@@ -22,6 +29,10 @@ var criticalFallbackPackages = []string{
 }
 
 func Analyze(changedFiles []string) Report {
+	return AnalyzeWithOptions(changedFiles, AnalyzeOptions{})
+}
+
+func AnalyzeWithOptions(changedFiles []string, opts AnalyzeOptions) Report {
 	pkgSet := map[string]struct{}{}
 	fallback := false
 	reason := ""
@@ -47,6 +58,14 @@ func Analyze(changedFiles []string) Report {
 		reason = "no changed files provided"
 	}
 
+	for _, pkg := range opts.AlwaysInclude {
+		pkg = strings.TrimSpace(pkg)
+		if pkg == "" {
+			continue
+		}
+		pkgSet[pkg] = struct{}{}
+	}
+
 	for pkg := range pkgSet {
 		if pkg == "./internal/config" || pkg == "./internal/planner" || pkg == "./internal/executor" || pkg == "./internal/server" || pkg == "./internal/control" {
 			pkgSet["./internal/cli"] = struct{}{}
@@ -65,11 +84,30 @@ func Analyze(changedFiles []string) Report {
 		impacted = append(impacted, pkg)
 	}
 	sort.Strings(impacted)
+	if !fallback && opts.MaxTargetedPackage > 0 && len(impacted) > opts.MaxTargetedPackage {
+		fallback = true
+		reason = "impacted package set exceeds max targeted threshold"
+		for _, pkg := range criticalFallbackPackages {
+			pkgSet[pkg] = struct{}{}
+		}
+		pkgSet["./internal/cli"] = struct{}{}
+		impacted = impacted[:0]
+		for pkg := range pkgSet {
+			impacted = append(impacted, pkg)
+		}
+		sort.Strings(impacted)
+	}
+	scope := "targeted"
+	if fallback {
+		scope = "safe-fallback"
+	}
 	return Report{
 		ChangedFiles:     cleaned,
 		ImpactedPackages: impacted,
 		FallbackToAll:    fallback,
 		Reason:           reason,
+		Scope:            scope,
+		RecommendedTest:  "go test " + strings.Join(impacted, " "),
 	}
 }
 

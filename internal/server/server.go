@@ -443,6 +443,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/release/tests/flake-observations", s.handleFlakeObservations)
 	mux.HandleFunc("/v1/release/tests/flake-cases", s.handleFlakeCases)
 	mux.HandleFunc("/v1/release/tests/flake-cases/", s.handleFlakeCaseAction)
+	mux.HandleFunc("/v1/release/tests/impact-analysis", s.handleTestImpactAnalysis)
 	mux.HandleFunc("/v1/plans/explain", s.handlePlanExplain(baseDir))
 	mux.HandleFunc("/v1/plans/graph", s.handlePlanGraph(baseDir))
 	mux.HandleFunc("/v1/plans/graph/query", s.handlePlanGraphQuery(baseDir))
@@ -2627,6 +2628,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/release/tests/flake-cases/{id}",
 			"POST /v1/release/tests/flake-cases/{id}/quarantine",
 			"POST /v1/release/tests/flake-cases/{id}/unquarantine",
+			"POST /v1/release/tests/impact-analysis",
 			"POST /v1/query",
 			"GET /v1/data-bags",
 			"POST /v1/data-bags",
