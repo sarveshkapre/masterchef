@@ -44,21 +44,78 @@ type ComplianceFinding struct {
 }
 
 type ComplianceScan struct {
-	ID         string              `json:"id"`
-	ProfileID  string              `json:"profile_id"`
-	TargetKind string              `json:"target_kind"`
-	TargetName string              `json:"target_name"`
-	Status     string              `json:"status"` // pass|fail
-	Score      int                 `json:"score"`
-	StartedAt  time.Time           `json:"started_at"`
-	EndedAt    time.Time           `json:"ended_at"`
-	Findings   []ComplianceFinding `json:"findings"`
+	ID          string              `json:"id"`
+	ProfileID   string              `json:"profile_id"`
+	TargetKind  string              `json:"target_kind"`
+	TargetName  string              `json:"target_name"`
+	Team        string              `json:"team,omitempty"`
+	Environment string              `json:"environment,omitempty"`
+	Service     string              `json:"service,omitempty"`
+	Status      string              `json:"status"` // pass|fail
+	Score       int                 `json:"score"`
+	StartedAt   time.Time           `json:"started_at"`
+	EndedAt     time.Time           `json:"ended_at"`
+	Findings    []ComplianceFinding `json:"findings"`
 }
 
 type ComplianceScanInput struct {
-	ProfileID  string `json:"profile_id"`
-	TargetKind string `json:"target_kind"`
-	TargetName string `json:"target_name"`
+	ProfileID   string `json:"profile_id"`
+	TargetKind  string `json:"target_kind"`
+	TargetName  string `json:"target_name"`
+	Team        string `json:"team,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	Service     string `json:"service,omitempty"`
+}
+
+type ComplianceExceptionStatus string
+
+const (
+	ComplianceExceptionPending  ComplianceExceptionStatus = "pending"
+	ComplianceExceptionApproved ComplianceExceptionStatus = "approved"
+	ComplianceExceptionRejected ComplianceExceptionStatus = "rejected"
+	ComplianceExceptionExpired  ComplianceExceptionStatus = "expired"
+)
+
+type ComplianceExceptionApproval struct {
+	Actor     string    `json:"actor"`
+	Decision  string    `json:"decision"` // approve|reject
+	Comment   string    `json:"comment,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ComplianceException struct {
+	ID          string                        `json:"id"`
+	ProfileID   string                        `json:"profile_id"`
+	ControlID   string                        `json:"control_id"`
+	TargetKind  string                        `json:"target_kind"`
+	TargetName  string                        `json:"target_name"`
+	Reason      string                        `json:"reason"`
+	RequestedBy string                        `json:"requested_by"`
+	ExpiresAt   time.Time                     `json:"expires_at"`
+	Status      ComplianceExceptionStatus     `json:"status"`
+	Approvals   []ComplianceExceptionApproval `json:"approvals,omitempty"`
+	CreatedAt   time.Time                     `json:"created_at"`
+	UpdatedAt   time.Time                     `json:"updated_at"`
+}
+
+type ComplianceExceptionInput struct {
+	ProfileID   string `json:"profile_id"`
+	ControlID   string `json:"control_id"`
+	TargetKind  string `json:"target_kind"`
+	TargetName  string `json:"target_name"`
+	Reason      string `json:"reason"`
+	RequestedBy string `json:"requested_by"`
+	ExpiresAt   string `json:"expires_at"` // RFC3339
+}
+
+type ComplianceScorecard struct {
+	Dimension    string    `json:"dimension"`
+	Key          string    `json:"key"`
+	ScanCount    int       `json:"scan_count"`
+	PassCount    int       `json:"pass_count"`
+	FailCount    int       `json:"fail_count"`
+	AverageScore int       `json:"average_score"`
+	LastScanAt   time.Time `json:"last_scan_at"`
 }
 
 type ComplianceContinuousConfig struct {
@@ -83,13 +140,15 @@ type ComplianceContinuousInput struct {
 }
 
 type ComplianceStore struct {
-	mu             sync.RWMutex
-	nextProfileID  int64
-	nextScanID     int64
-	nextConfigID   int64
-	profiles       map[string]*ComplianceProfile
-	scans          map[string]*ComplianceScan
-	continuousRuns map[string]*ComplianceContinuousConfig
+	mu              sync.RWMutex
+	nextProfileID   int64
+	nextScanID      int64
+	nextConfigID    int64
+	nextExceptionID int64
+	profiles        map[string]*ComplianceProfile
+	scans           map[string]*ComplianceScan
+	continuousRuns  map[string]*ComplianceContinuousConfig
+	exceptions      map[string]*ComplianceException
 }
 
 func NewComplianceStore() *ComplianceStore {
@@ -97,6 +156,7 @@ func NewComplianceStore() *ComplianceStore {
 		profiles:       map[string]*ComplianceProfile{},
 		scans:          map[string]*ComplianceScan{},
 		continuousRuns: map[string]*ComplianceContinuousConfig{},
+		exceptions:     map[string]*ComplianceException{},
 	}
 }
 
@@ -151,6 +211,108 @@ func (s *ComplianceStore) GetProfile(id string) (ComplianceProfile, bool) {
 	return cloneComplianceProfile(*item), true
 }
 
+func (s *ComplianceStore) CreateException(in ComplianceExceptionInput) (ComplianceException, error) {
+	profileID := strings.TrimSpace(in.ProfileID)
+	controlID := strings.TrimSpace(in.ControlID)
+	targetKind := strings.TrimSpace(in.TargetKind)
+	targetName := strings.TrimSpace(in.TargetName)
+	reason := strings.TrimSpace(in.Reason)
+	requestedBy := strings.TrimSpace(in.RequestedBy)
+	if profileID == "" || controlID == "" || targetKind == "" || targetName == "" || reason == "" || requestedBy == "" {
+		return ComplianceException{}, errors.New("profile_id, control_id, target_kind, target_name, reason, and requested_by are required")
+	}
+	expiresAt, err := time.Parse(time.RFC3339, strings.TrimSpace(in.ExpiresAt))
+	if err != nil {
+		return ComplianceException{}, errors.New("expires_at must be RFC3339")
+	}
+	now := time.Now().UTC()
+	if !expiresAt.After(now) {
+		return ComplianceException{}, errors.New("expires_at must be in the future")
+	}
+	if expiresAt.After(now.Add(365 * 24 * time.Hour)) {
+		return ComplianceException{}, errors.New("expires_at must be within 365 days")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	profile, ok := s.profiles[profileID]
+	if !ok {
+		return ComplianceException{}, errors.New("compliance profile not found")
+	}
+	if !profileHasControl(profile, controlID) {
+		return ComplianceException{}, errors.New("control_id does not belong to profile")
+	}
+	s.nextExceptionID++
+	item := ComplianceException{
+		ID:          "compliance-exception-" + itoa(s.nextExceptionID),
+		ProfileID:   profileID,
+		ControlID:   controlID,
+		TargetKind:  targetKind,
+		TargetName:  targetName,
+		Reason:      reason,
+		RequestedBy: requestedBy,
+		ExpiresAt:   expiresAt,
+		Status:      ComplianceExceptionPending,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	s.exceptions[item.ID] = &item
+	return cloneComplianceException(item), nil
+}
+
+func (s *ComplianceStore) ListExceptions() []ComplianceException {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	s.expireExceptionsLocked(now)
+	out := make([]ComplianceException, 0, len(s.exceptions))
+	for _, item := range s.exceptions {
+		out = append(out, cloneComplianceException(*item))
+	}
+	s.mu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+func (s *ComplianceStore) ApproveException(id, actor, comment string) (ComplianceException, error) {
+	return s.decideException(id, actor, "approve", comment)
+}
+
+func (s *ComplianceStore) RejectException(id, actor, comment string) (ComplianceException, error) {
+	return s.decideException(id, actor, "reject", comment)
+}
+
+func (s *ComplianceStore) decideException(id, actor, decision, comment string) (ComplianceException, error) {
+	id = strings.TrimSpace(id)
+	actor = strings.TrimSpace(actor)
+	if id == "" || actor == "" {
+		return ComplianceException{}, errors.New("id and actor are required")
+	}
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.expireExceptionsLocked(now)
+	item, ok := s.exceptions[id]
+	if !ok {
+		return ComplianceException{}, errors.New("compliance exception not found")
+	}
+	if item.Status != ComplianceExceptionPending {
+		return ComplianceException{}, errors.New("compliance exception is not pending")
+	}
+	item.Approvals = append(item.Approvals, ComplianceExceptionApproval{
+		Actor:     actor,
+		Decision:  decision,
+		Comment:   strings.TrimSpace(comment),
+		CreatedAt: now,
+	})
+	if decision == "approve" {
+		item.Status = ComplianceExceptionApproved
+	} else {
+		item.Status = ComplianceExceptionRejected
+	}
+	item.UpdatedAt = now
+	return cloneComplianceException(*item), nil
+}
+
 func (s *ComplianceStore) RunScan(in ComplianceScanInput) (ComplianceScan, error) {
 	profileID := strings.TrimSpace(in.ProfileID)
 	targetKind := strings.TrimSpace(in.TargetKind)
@@ -160,6 +322,7 @@ func (s *ComplianceStore) RunScan(in ComplianceScanInput) (ComplianceScan, error
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.expireExceptionsLocked(time.Now().UTC())
 	profile, ok := s.profiles[profileID]
 	if !ok {
 		return ComplianceScan{}, errors.New("compliance profile not found")
@@ -169,6 +332,18 @@ func (s *ComplianceStore) RunScan(in ComplianceScanInput) (ComplianceScan, error
 	passCount := 0
 	for _, control := range profile.Controls {
 		status := evaluateComplianceControl(control.ID, targetKind, targetName)
+		if ex, hasEx := s.matchApprovedExceptionLocked(profileID, control.ID, targetKind, targetName, startedAt); hasEx {
+			status = "waived"
+			findings = append(findings, ComplianceFinding{
+				ControlID: control.ID,
+				Status:    status,
+				Severity:  control.Severity,
+				Message:   fmt.Sprintf("%s control waived by approved exception %s", control.ID, ex.ID),
+				Evidence:  fmt.Sprintf("exception=%s target=%s/%s", ex.ID, targetKind, targetName),
+			})
+			passCount++
+			continue
+		}
 		if status == "pass" {
 			passCount++
 		}
@@ -190,15 +365,18 @@ func (s *ComplianceStore) RunScan(in ComplianceScanInput) (ComplianceScan, error
 	}
 	s.nextScanID++
 	scan := ComplianceScan{
-		ID:         "compliance-scan-" + itoa(s.nextScanID),
-		ProfileID:  profile.ID,
-		TargetKind: targetKind,
-		TargetName: targetName,
-		Status:     status,
-		Score:      score,
-		StartedAt:  startedAt,
-		EndedAt:    time.Now().UTC(),
-		Findings:   findings,
+		ID:          "compliance-scan-" + itoa(s.nextScanID),
+		ProfileID:   profile.ID,
+		TargetKind:  targetKind,
+		TargetName:  targetName,
+		Team:        strings.TrimSpace(in.Team),
+		Environment: strings.TrimSpace(in.Environment),
+		Service:     strings.TrimSpace(in.Service),
+		Status:      status,
+		Score:       score,
+		StartedAt:   startedAt,
+		EndedAt:     time.Now().UTC(),
+		Findings:    findings,
 	}
 	s.scans[scan.ID] = &scan
 	return cloneComplianceScan(scan), nil
@@ -327,6 +505,70 @@ func (s *ComplianceStore) RunContinuousScan(configID string) (ComplianceScan, Co
 	return scan, updated, nil
 }
 
+func (s *ComplianceStore) ScorecardsByDimension(dimension string) ([]ComplianceScorecard, error) {
+	dimension = strings.ToLower(strings.TrimSpace(dimension))
+	if dimension == "" {
+		dimension = "team"
+	}
+	if dimension != "team" && dimension != "environment" && dimension != "service" {
+		return nil, errors.New("dimension must be team, environment, or service")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	type agg struct {
+		scans      int
+		pass       int
+		fail       int
+		scoreTotal int
+		lastScanAt time.Time
+	}
+	byKey := map[string]*agg{}
+	for _, scan := range s.scans {
+		key := scorecardDimensionKey(*scan, dimension)
+		if key == "" {
+			continue
+		}
+		item := byKey[key]
+		if item == nil {
+			item = &agg{}
+			byKey[key] = item
+		}
+		item.scans++
+		item.scoreTotal += scan.Score
+		if scan.Status == "pass" {
+			item.pass++
+		} else {
+			item.fail++
+		}
+		if scan.EndedAt.After(item.lastScanAt) {
+			item.lastScanAt = scan.EndedAt
+		}
+	}
+	out := make([]ComplianceScorecard, 0, len(byKey))
+	for key, item := range byKey {
+		avg := 0
+		if item.scans > 0 {
+			avg = item.scoreTotal / item.scans
+		}
+		out = append(out, ComplianceScorecard{
+			Dimension:    dimension,
+			Key:          key,
+			ScanCount:    item.scans,
+			PassCount:    item.pass,
+			FailCount:    item.fail,
+			AverageScore: avg,
+			LastScanAt:   item.lastScanAt,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].AverageScore != out[j].AverageScore {
+			return out[i].AverageScore > out[j].AverageScore
+		}
+		return out[i].Key < out[j].Key
+	})
+	return out, nil
+}
+
 func (s *ComplianceStore) ExportEvidence(scanID, format string) ([]byte, string, error) {
 	scan, ok := s.GetScan(scanID)
 	if !ok {
@@ -422,6 +664,56 @@ func evaluateComplianceControl(controlID, targetKind, targetName string) string 
 	return "pass"
 }
 
+func (s *ComplianceStore) matchApprovedExceptionLocked(profileID, controlID, targetKind, targetName string, now time.Time) (ComplianceException, bool) {
+	for _, item := range s.exceptions {
+		if item.Status != ComplianceExceptionApproved {
+			continue
+		}
+		if !now.Before(item.ExpiresAt) {
+			continue
+		}
+		if item.ProfileID != profileID || item.ControlID != controlID {
+			continue
+		}
+		if item.TargetKind != targetKind || item.TargetName != targetName {
+			continue
+		}
+		return cloneComplianceException(*item), true
+	}
+	return ComplianceException{}, false
+}
+
+func (s *ComplianceStore) expireExceptionsLocked(now time.Time) {
+	for _, item := range s.exceptions {
+		if (item.Status == ComplianceExceptionApproved || item.Status == ComplianceExceptionPending) && !now.Before(item.ExpiresAt) {
+			item.Status = ComplianceExceptionExpired
+			item.UpdatedAt = now
+		}
+	}
+}
+
+func profileHasControl(profile *ComplianceProfile, controlID string) bool {
+	for _, control := range profile.Controls {
+		if control.ID == controlID {
+			return true
+		}
+	}
+	return false
+}
+
+func scorecardDimensionKey(scan ComplianceScan, dimension string) string {
+	switch dimension {
+	case "team":
+		return strings.TrimSpace(scan.Team)
+	case "environment":
+		return strings.TrimSpace(scan.Environment)
+	case "service":
+		return strings.TrimSpace(scan.Service)
+	default:
+		return ""
+	}
+}
+
 func normalizeComplianceControls(in []ComplianceControl) ([]ComplianceControl, error) {
 	if len(in) == 0 {
 		return nil, errors.New("at least one control is required")
@@ -469,5 +761,11 @@ func cloneComplianceContinuousConfig(in ComplianceContinuousConfig) ComplianceCo
 		lastRun := *in.LastRunAt
 		out.LastRunAt = &lastRun
 	}
+	return out
+}
+
+func cloneComplianceException(in ComplianceException) ComplianceException {
+	out := in
+	out.Approvals = append([]ComplianceExceptionApproval{}, in.Approvals...)
 	return out
 }

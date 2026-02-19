@@ -279,6 +279,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/compliance/scans/", s.handleComplianceScanAction)
 	mux.HandleFunc("/v1/compliance/continuous", s.handleComplianceContinuous)
 	mux.HandleFunc("/v1/compliance/continuous/", s.handleComplianceContinuousAction)
+	mux.HandleFunc("/v1/compliance/exceptions", s.handleComplianceExceptions)
+	mux.HandleFunc("/v1/compliance/exceptions/", s.handleComplianceExceptionAction)
+	mux.HandleFunc("/v1/compliance/scorecards", s.handleComplianceScorecards)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
 	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
@@ -1922,6 +1925,11 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/compliance/continuous",
 			"POST /v1/compliance/continuous",
 			"POST /v1/compliance/continuous/{id}/run",
+			"GET /v1/compliance/exceptions",
+			"POST /v1/compliance/exceptions",
+			"POST /v1/compliance/exceptions/{id}/approve",
+			"POST /v1/compliance/exceptions/{id}/reject",
+			"GET /v1/compliance/scorecards",
 			"GET /v1/gitops/previews",
 			"POST /v1/gitops/previews",
 			"GET /v1/gitops/previews/{id}",

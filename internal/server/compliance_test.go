@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestComplianceEndpoints(t *testing.T) {
@@ -66,7 +67,7 @@ resources:
 	}
 	_ = json.Unmarshal(rr.Body.Bytes(), &profile)
 
-	runScan := []byte(`{"profile_id":"` + profile.ID + `","target_kind":"host","target_name":"prod-1"}`)
+	runScan := []byte(`{"profile_id":"` + profile.ID + `","target_kind":"host","target_name":"prod-1","team":"payments","environment":"prod","service":"checkout"}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/compliance/scans", bytes.NewReader(runScan))
 	s.httpServer.Handler.ServeHTTP(rr, req)
@@ -109,5 +110,36 @@ resources:
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("run continuous scan failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	expiresAt := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	createException := []byte(`{"profile_id":"` + profile.ID + `","control_id":"CIS-1.1","target_kind":"host","target_name":"prod-1","reason":"legacy host exception","requested_by":"platform-owner","expires_at":"` + expiresAt + `"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/compliance/exceptions", bytes.NewReader(createException))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create compliance exception failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var exception struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(rr.Body.Bytes(), &exception)
+
+	approveException := []byte(`{"actor":"security-lead","comment":"approved until migration done"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/compliance/exceptions/"+exception.ID+"/approve", bytes.NewReader(approveException))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("approve compliance exception failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/compliance/scorecards?dimension=team", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fetch compliance scorecards failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"payments"`) {
+		t.Fatalf("expected scorecards payload to include team key, got body=%s", rr.Body.String())
 	}
 }

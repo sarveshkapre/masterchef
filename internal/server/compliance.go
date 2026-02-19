@@ -186,3 +186,99 @@ func (s *Server) handleComplianceContinuousAction(w http.ResponseWriter, r *http
 		"scan":   scan,
 	})
 }
+
+func (s *Server) handleComplianceExceptions(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.compliance.ListExceptions())
+	case http.MethodPost:
+		var req control.ComplianceExceptionInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := s.compliance.CreateException(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.recordEvent(control.Event{
+			Type:    "compliance.exception.created",
+			Message: "compliance exception requested",
+			Fields: map[string]any{
+				"exception_id": item.ID,
+				"profile_id":   item.ProfileID,
+				"control_id":   item.ControlID,
+				"target":       item.TargetKind + "/" + item.TargetName,
+			},
+		}, true)
+		writeJSON(w, http.StatusCreated, item)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleComplianceExceptionAction(w http.ResponseWriter, r *http.Request) {
+	parts := splitPath(r.URL.Path)
+	// /v1/compliance/exceptions/{id}/approve|reject
+	if len(parts) != 5 || parts[0] != "v1" || parts[1] != "compliance" || parts[2] != "exceptions" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Actor   string `json:"actor"`
+		Comment string `json:"comment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	var (
+		item control.ComplianceException
+		err  error
+	)
+	switch parts[4] {
+	case "approve":
+		item, err = s.compliance.ApproveException(parts[3], req.Actor, req.Comment)
+	case "reject":
+		item, err = s.compliance.RejectException(parts[3], req.Actor, req.Comment)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown compliance exception action"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordEvent(control.Event{
+		Type:    "compliance.exception." + parts[4],
+		Message: "compliance exception decision recorded",
+		Fields: map[string]any{
+			"exception_id": item.ID,
+			"status":       item.Status,
+			"actor":        req.Actor,
+		},
+	}, true)
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleComplianceScorecards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	dimension := strings.TrimSpace(r.URL.Query().Get("dimension"))
+	items, err := s.compliance.ScorecardsByDimension(dimension)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dimension": dimension,
+		"items":     items,
+	})
+}

@@ -3,6 +3,7 @@ package control
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestComplianceProfileScanAndEvidence(t *testing.T) {
@@ -24,9 +25,12 @@ func TestComplianceProfileScanAndEvidence(t *testing.T) {
 	}
 
 	scan, err := store.RunScan(ComplianceScanInput{
-		ProfileID:  profile.ID,
-		TargetKind: "host",
-		TargetName: "prod-1",
+		ProfileID:   profile.ID,
+		TargetKind:  "host",
+		TargetName:  "prod-1",
+		Team:        "payments",
+		Environment: "prod",
+		Service:     "checkout",
 	})
 	if err != nil {
 		t.Fatalf("run scan failed: %v", err)
@@ -46,6 +50,52 @@ func TestComplianceProfileScanAndEvidence(t *testing.T) {
 	sarifOut, ct, err := store.ExportEvidence(scan.ID, "sarif")
 	if err != nil || ct != "application/sarif+json" || !strings.Contains(string(sarifOut), `"version": "2.1.0"`) {
 		t.Fatalf("unexpected sarif export result: err=%v ct=%s payload=%s", err, ct, string(sarifOut))
+	}
+
+	expiresAt := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	ex, err := store.CreateException(ComplianceExceptionInput{
+		ProfileID:   profile.ID,
+		ControlID:   "CIS-1.1",
+		TargetKind:  "host",
+		TargetName:  "prod-1",
+		Reason:      "temporary waiver",
+		RequestedBy: "platform-owner",
+		ExpiresAt:   expiresAt,
+	})
+	if err != nil {
+		t.Fatalf("create exception failed: %v", err)
+	}
+	if _, err := store.ApproveException(ex.ID, "security-lead", "approved"); err != nil {
+		t.Fatalf("approve exception failed: %v", err)
+	}
+	scanWithWaiver, err := store.RunScan(ComplianceScanInput{
+		ProfileID:   profile.ID,
+		TargetKind:  "host",
+		TargetName:  "prod-1",
+		Team:        "payments",
+		Environment: "prod",
+		Service:     "checkout",
+	})
+	if err != nil {
+		t.Fatalf("run scan with waiver failed: %v", err)
+	}
+	hasWaived := false
+	for _, finding := range scanWithWaiver.Findings {
+		if finding.ControlID == "CIS-1.1" && finding.Status == "waived" {
+			hasWaived = true
+			break
+		}
+	}
+	if !hasWaived {
+		t.Fatalf("expected waived finding after approved exception: %+v", scanWithWaiver.Findings)
+	}
+
+	scorecards, err := store.ScorecardsByDimension("team")
+	if err != nil {
+		t.Fatalf("scorecards by team failed: %v", err)
+	}
+	if len(scorecards) == 0 || scorecards[0].Dimension != "team" {
+		t.Fatalf("expected non-empty team scorecards, got %+v", scorecards)
 	}
 }
 
