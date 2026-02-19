@@ -82,18 +82,71 @@ type TaskPlanPreviewStep struct {
 	Parameters      map[string]any `json:"parameters,omitempty"`
 }
 
+type TaskExecutionStatus string
+
+const (
+	TaskExecutionPending   TaskExecutionStatus = "pending"
+	TaskExecutionRunning   TaskExecutionStatus = "running"
+	TaskExecutionSucceeded TaskExecutionStatus = "succeeded"
+	TaskExecutionFailed    TaskExecutionStatus = "failed"
+	TaskExecutionTimedOut  TaskExecutionStatus = "timed_out"
+	TaskExecutionCanceled  TaskExecutionStatus = "canceled"
+)
+
+type TaskExecutionStep struct {
+	Name            string              `json:"name"`
+	TaskID          string              `json:"task_id"`
+	Module          string              `json:"module"`
+	Action          string              `json:"action"`
+	Primitive       string              `json:"primitive"`
+	ContinueOnError bool                `json:"continue_on_error,omitempty"`
+	Status          TaskExecutionStatus `json:"status"`
+	Parameters      map[string]any      `json:"parameters,omitempty"`
+	Error           string              `json:"error,omitempty"`
+	StartedAt       time.Time           `json:"started_at,omitempty"`
+	EndedAt         time.Time           `json:"ended_at,omitempty"`
+}
+
+type TaskExecution struct {
+	ID             string              `json:"id"`
+	PlanID         string              `json:"plan_id"`
+	PlanName       string              `json:"plan_name,omitempty"`
+	Status         TaskExecutionStatus `json:"status"`
+	PollIntervalMS int                 `json:"poll_interval_ms"`
+	TimeoutSeconds int                 `json:"timeout_seconds"`
+	CreatedAt      time.Time           `json:"created_at"`
+	StartedAt      time.Time           `json:"started_at,omitempty"`
+	EndedAt        time.Time           `json:"ended_at,omitempty"`
+	StepCount      int                 `json:"step_count"`
+	CompletedSteps int                 `json:"completed_steps"`
+	Error          string              `json:"error,omitempty"`
+	Steps          []TaskExecutionStep `json:"steps,omitempty"`
+}
+
+type TaskExecutionInput struct {
+	PlanID         string                    `json:"plan_id"`
+	Overrides      map[string]map[string]any `json:"overrides,omitempty"`
+	PollIntervalMS int                       `json:"poll_interval_ms,omitempty"`
+	TimeoutSeconds int                       `json:"timeout_seconds,omitempty"`
+}
+
 type TaskFrameworkStore struct {
-	mu         sync.RWMutex
-	nextTaskID int64
-	nextPlanID int64
-	tasks      map[string]TaskDefinition
-	plans      map[string]TaskPlan
+	mu            sync.RWMutex
+	nextTaskID    int64
+	nextPlanID    int64
+	nextExecution int64
+	tasks         map[string]TaskDefinition
+	plans         map[string]TaskPlan
+	executions    map[string]TaskExecution
+	canceled      map[string]struct{}
 }
 
 func NewTaskFrameworkStore() *TaskFrameworkStore {
 	return &TaskFrameworkStore{
-		tasks: map[string]TaskDefinition{},
-		plans: map[string]TaskPlan{},
+		tasks:      map[string]TaskDefinition{},
+		plans:      map[string]TaskPlan{},
+		executions: map[string]TaskExecution{},
+		canceled:   map[string]struct{}{},
 	}
 }
 
@@ -259,6 +312,217 @@ func (s *TaskFrameworkStore) PreviewPlan(planID string, in TaskPlanPreviewInput)
 		})
 	}
 	return out, nil
+}
+
+func (s *TaskFrameworkStore) StartExecution(in TaskExecutionInput) (TaskExecution, error) {
+	planID := strings.TrimSpace(in.PlanID)
+	if planID == "" {
+		return TaskExecution{}, errors.New("plan_id is required")
+	}
+	poll := in.PollIntervalMS
+	if poll <= 0 {
+		poll = 1000
+	}
+	if poll < 100 {
+		poll = 100
+	}
+	if poll > 60000 {
+		poll = 60000
+	}
+	timeout := in.TimeoutSeconds
+	if timeout <= 0 {
+		timeout = 300
+	}
+	if timeout < 1 {
+		timeout = 1
+	}
+	if timeout > 3600 {
+		timeout = 3600
+	}
+
+	overrides := map[string]map[string]any{}
+	for k, v := range in.Overrides {
+		overrides[strings.TrimSpace(k)] = cloneTaskAnyMap(v)
+	}
+
+	s.mu.Lock()
+	plan, ok := s.plans[planID]
+	if !ok {
+		s.mu.Unlock()
+		return TaskExecution{}, errors.New("task plan not found")
+	}
+	s.nextExecution++
+	execID := "taskexec-" + itoa(s.nextExecution)
+	exec := TaskExecution{
+		ID:             execID,
+		PlanID:         plan.ID,
+		PlanName:       plan.Name,
+		Status:         TaskExecutionPending,
+		PollIntervalMS: poll,
+		TimeoutSeconds: timeout,
+		CreatedAt:      time.Now().UTC(),
+		StepCount:      len(plan.Steps),
+		CompletedSteps: 0,
+		Steps:          make([]TaskExecutionStep, 0, len(plan.Steps)),
+	}
+	s.executions[execID] = cloneTaskExecution(exec)
+	s.mu.Unlock()
+
+	go s.runExecution(execID, plan, overrides, timeout)
+	return cloneTaskExecution(exec), nil
+}
+
+func (s *TaskFrameworkStore) ListExecutions(limit int) []TaskExecution {
+	s.mu.RLock()
+	out := make([]TaskExecution, 0, len(s.executions))
+	for _, item := range s.executions {
+		out = append(out, cloneTaskExecution(item))
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func (s *TaskFrameworkStore) GetExecution(id string) (TaskExecution, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.executions[strings.TrimSpace(id)]
+	if !ok {
+		return TaskExecution{}, false
+	}
+	return cloneTaskExecution(item), true
+}
+
+func (s *TaskFrameworkStore) CancelExecution(id string) (TaskExecution, error) {
+	id = strings.TrimSpace(id)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.executions[id]
+	if !ok {
+		return TaskExecution{}, errors.New("task execution not found")
+	}
+	if item.Status == TaskExecutionSucceeded || item.Status == TaskExecutionFailed || item.Status == TaskExecutionTimedOut || item.Status == TaskExecutionCanceled {
+		return cloneTaskExecution(item), nil
+	}
+	s.canceled[id] = struct{}{}
+	item.Status = TaskExecutionCanceled
+	item.Error = "task execution canceled"
+	item.EndedAt = time.Now().UTC()
+	s.executions[id] = cloneTaskExecution(item)
+	return cloneTaskExecution(item), nil
+}
+
+func (s *TaskFrameworkStore) runExecution(execID string, plan TaskPlan, overrides map[string]map[string]any, timeoutSeconds int) {
+	started := time.Now().UTC()
+	deadline := started.Add(time.Duration(timeoutSeconds) * time.Second)
+
+	s.mu.Lock()
+	item, ok := s.executions[execID]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+	item.Status = TaskExecutionRunning
+	item.StartedAt = started
+	s.executions[execID] = cloneTaskExecution(item)
+	s.mu.Unlock()
+
+	execStatus := TaskExecutionSucceeded
+	execError := ""
+	completed := 0
+	steps := make([]TaskExecutionStep, 0, len(plan.Steps))
+
+	for _, step := range plan.Steps {
+		now := time.Now().UTC()
+		if !now.Before(deadline) {
+			execStatus = TaskExecutionTimedOut
+			execError = "task execution timed out"
+			break
+		}
+
+		s.mu.RLock()
+		_, canceled := s.canceled[execID]
+		s.mu.RUnlock()
+		if canceled {
+			execStatus = TaskExecutionCanceled
+			execError = "task execution canceled"
+			break
+		}
+
+		task, ok := s.GetTask(step.TaskID)
+		if !ok {
+			execStatus = TaskExecutionFailed
+			execError = "task definition not found: " + step.TaskID
+			break
+		}
+
+		params := cloneTaskAnyMap(step.Parameters)
+		if ov, ok := overrides[step.Name]; ok {
+			for k, v := range ov {
+				params[k] = deepCopyAny(v)
+			}
+		}
+		resolved, err := resolveTaskParameters(task, params)
+		if err != nil {
+			status := TaskExecutionFailed
+			stepRun := TaskExecutionStep{
+				Name:            step.Name,
+				TaskID:          step.TaskID,
+				Module:          task.Module,
+				Action:          task.Action,
+				Primitive:       task.Primitive,
+				ContinueOnError: step.ContinueOnError,
+				Status:          status,
+				Parameters:      maskTaskParameters(task, params),
+				Error:           err.Error(),
+				StartedAt:       now,
+				EndedAt:         time.Now().UTC(),
+			}
+			steps = append(steps, stepRun)
+			completed++
+			if step.ContinueOnError {
+				continue
+			}
+			execStatus = TaskExecutionFailed
+			execError = "step " + step.Name + " failed: " + err.Error()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+		stepRun := TaskExecutionStep{
+			Name:            step.Name,
+			TaskID:          step.TaskID,
+			Module:          task.Module,
+			Action:          task.Action,
+			Primitive:       task.Primitive,
+			ContinueOnError: step.ContinueOnError,
+			Status:          TaskExecutionSucceeded,
+			Parameters:      maskTaskParameters(task, resolved),
+			StartedAt:       now,
+			EndedAt:         time.Now().UTC(),
+		}
+		steps = append(steps, stepRun)
+		completed++
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok = s.executions[execID]
+	if !ok {
+		return
+	}
+	item.Status = execStatus
+	item.Error = strings.TrimSpace(execError)
+	item.CompletedSteps = completed
+	item.Steps = append([]TaskExecutionStep{}, steps...)
+	item.EndedAt = time.Now().UTC()
+	if execStatus == TaskExecutionRunning || execStatus == TaskExecutionPending {
+		item.Status = TaskExecutionSucceeded
+	}
+	s.executions[execID] = cloneTaskExecution(item)
+	delete(s.canceled, execID)
 }
 
 func (s *TaskFrameworkStore) resolveStepLocked(step TaskPlanStep, idx int) (TaskPlanStep, error) {
@@ -517,6 +781,21 @@ func cloneTaskPlan(in TaskPlan) TaskPlan {
 			Parameters:      cloneTaskAnyMap(step.Parameters),
 		})
 	}
+	return out
+}
+
+func cloneTaskExecution(in TaskExecution) TaskExecution {
+	out := in
+	out.Steps = make([]TaskExecutionStep, 0, len(in.Steps))
+	for _, step := range in.Steps {
+		out.Steps = append(out.Steps, cloneTaskExecutionStep(step))
+	}
+	return out
+}
+
+func cloneTaskExecutionStep(in TaskExecutionStep) TaskExecutionStep {
+	out := in
+	out.Parameters = cloneTaskAnyMap(in.Parameters)
 	return out
 }
 

@@ -125,7 +125,7 @@ Step-level retries and `until`-style retry conditions are supported for command 
 Command resources support `rescue_command` and `always_command` hooks for block/rescue/always-style error handling flows.
 Explicit `require`/`before`/`notify`/`subscribe` resource relationships are supported in config and influence planner dependency ordering for event-driven orchestration.
 Refresh-on-change execution semantics are supported via command guards (`only_if`, `unless`) and refresh controls (`refresh_only`, `refresh_command`) for event-triggered actions.
-Task and plan framework for module-packaged actions is available via `/v1/tasks/definitions` and `/v1/tasks/plans`, including typed parameter contracts and sensitive-parameter masking in plan/preview responses.
+Task and plan framework for module-packaged actions is available via `/v1/tasks/definitions` and `/v1/tasks/plans`, including typed parameter contracts, sensitive-parameter masking in plan/preview responses, and async task execution with poll/timeout controls via `/v1/tasks/executions`.
 Built-in template rendering now includes a safe function library (`upper`, `lower`, `trim`, `default`) and strict undefined-variable enforcement via template `strict_mode`, `POST /v1/templates/{id}/render`, and launch-time validation.
 Handler/notification model for event-triggered resource actions is supported with `notify_handlers` plus top-level `handlers` definitions, with deduplicated post-change handler execution.
 Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.

@@ -369,6 +369,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/tasks/definitions/", s.handleTaskDefinitionByID)
 	mux.HandleFunc("/v1/tasks/plans", s.handleTaskPlans)
 	mux.HandleFunc("/v1/tasks/plans/", s.handleTaskPlanAction)
+	mux.HandleFunc("/v1/tasks/executions", s.handleTaskExecutions)
+	mux.HandleFunc("/v1/tasks/executions/", s.handleTaskExecutionAction)
 	mux.HandleFunc("/v1/edge-relay/sites", s.handleEdgeRelaySites)
 	mux.HandleFunc("/v1/edge-relay/sites/", s.handleEdgeRelaySiteAction)
 	mux.HandleFunc("/v1/edge-relay/messages", s.handleEdgeRelayMessages)
@@ -2154,6 +2156,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/tasks/plans",
 			"GET /v1/tasks/plans/{id}",
 			"POST /v1/tasks/plans/{id}/preview",
+			"GET /v1/tasks/executions",
+			"POST /v1/tasks/executions",
+			"GET /v1/tasks/executions/{id}",
+			"POST /v1/tasks/executions/{id}/cancel",
 			"GET /v1/edge-relay/sites",
 			"POST /v1/edge-relay/sites",
 			"GET /v1/edge-relay/sites/{id}",

@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/masterchef/masterchef/internal/control"
 )
@@ -115,6 +117,78 @@ func (s *Server) handleTaskPlanAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, preview)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleTaskExecutions(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		limit := 0
+		if raw := r.URL.Query().Get("limit"); strings.TrimSpace(raw) != "" {
+			if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+				limit = v
+			}
+		}
+		writeJSON(w, http.StatusOK, s.tasks.ListExecutions(limit))
+	case http.MethodPost:
+		var req control.TaskExecutionInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := s.tasks.StartExecution(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.recordEvent(control.Event{
+			Type:    "tasks.execution.started",
+			Message: "task execution started",
+			Fields: map[string]any{
+				"execution_id":     item.ID,
+				"plan_id":          item.PlanID,
+				"timeout_seconds":  item.TimeoutSeconds,
+				"poll_interval_ms": item.PollIntervalMS,
+			},
+		}, true)
+		writeJSON(w, http.StatusAccepted, item)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleTaskExecutionAction(w http.ResponseWriter, r *http.Request) {
+	parts := splitPath(r.URL.Path)
+	// /v1/tasks/executions/{id}
+	if len(parts) < 4 || parts[0] != "v1" || parts[1] != "tasks" || parts[2] != "executions" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	switch {
+	case len(parts) == 4 && r.Method == http.MethodGet:
+		item, ok := s.tasks.GetExecution(parts[3])
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "task execution not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	case len(parts) == 5 && parts[4] == "cancel" && r.Method == http.MethodPost:
+		item, err := s.tasks.CancelExecution(parts[3])
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		s.recordEvent(control.Event{
+			Type:    "tasks.execution.canceled",
+			Message: "task execution canceled",
+			Fields: map[string]any{
+				"execution_id": item.ID,
+				"plan_id":      item.PlanID,
+			},
+		}, true)
+		writeJSON(w, http.StatusOK, item)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

@@ -1,6 +1,9 @@
 package control
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestTaskFrameworkStore_RegisterAndMaskPlan(t *testing.T) {
 	store := NewTaskFrameworkStore()
@@ -110,5 +113,119 @@ func TestTaskFrameworkStore_ParameterValidation(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected unknown parameter validation error")
+	}
+}
+
+func TestTaskFrameworkStore_AsyncExecution(t *testing.T) {
+	store := NewTaskFrameworkStore()
+	task, err := store.RegisterTask(TaskDefinitionInput{
+		Name:   "Deploy",
+		Module: "packs/web",
+		Action: "deploy",
+		Parameters: []TaskParameterSpec{
+			{Name: "service", Type: "string", Required: true},
+			{Name: "token", Type: "string", Sensitive: true, Required: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("register task failed: %v", err)
+	}
+	plan, err := store.RegisterPlan(TaskPlanInput{
+		Name: "prod",
+		Steps: []TaskPlanStep{
+			{
+				Name:   "deploy-step",
+				TaskID: task.ID,
+				Parameters: map[string]any{
+					"service": "api",
+					"token":   "secret",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("register plan failed: %v", err)
+	}
+	exec, err := store.StartExecution(TaskExecutionInput{PlanID: plan.ID, TimeoutSeconds: 5, PollIntervalMS: 100})
+	if err != nil {
+		t.Fatalf("start execution failed: %v", err)
+	}
+	if exec.Status != TaskExecutionPending {
+		t.Fatalf("expected pending execution on start, got %+v", exec)
+	}
+
+	var final TaskExecution
+	for i := 0; i < 50; i++ {
+		current, ok := store.GetExecution(exec.ID)
+		if !ok {
+			t.Fatalf("execution disappeared")
+		}
+		if current.Status == TaskExecutionSucceeded {
+			final = current
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if final.Status != TaskExecutionSucceeded {
+		t.Fatalf("expected execution to succeed, got %+v", final)
+	}
+	if len(final.Steps) != 1 {
+		t.Fatalf("expected one executed step, got %+v", final)
+	}
+	if got := final.Steps[0].Parameters["token"]; got != "***REDACTED***" {
+		t.Fatalf("expected masked token in execution step, got %#v", got)
+	}
+}
+
+func TestTaskFrameworkStore_AsyncExecutionTimeout(t *testing.T) {
+	store := NewTaskFrameworkStore()
+	task, err := store.RegisterTask(TaskDefinitionInput{
+		Name:   "Deploy",
+		Module: "packs/web",
+		Action: "deploy",
+		Parameters: []TaskParameterSpec{
+			{Name: "service", Type: "string", Required: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("register task failed: %v", err)
+	}
+	steps := make([]TaskPlanStep, 0, 200)
+	for i := 0; i < 200; i++ {
+		steps = append(steps, TaskPlanStep{
+			Name:   "step-" + itoa(int64(i+1)),
+			TaskID: task.ID,
+			Parameters: map[string]any{
+				"service": "api",
+			},
+		})
+	}
+	plan, err := store.RegisterPlan(TaskPlanInput{Name: "big-plan", Steps: steps})
+	if err != nil {
+		t.Fatalf("register plan failed: %v", err)
+	}
+	exec, err := store.StartExecution(TaskExecutionInput{
+		PlanID:         plan.ID,
+		TimeoutSeconds: 1,
+		PollIntervalMS: 100,
+	})
+	if err != nil {
+		t.Fatalf("start execution failed: %v", err)
+	}
+
+	var final TaskExecution
+	for i := 0; i < 200; i++ {
+		current, ok := store.GetExecution(exec.ID)
+		if !ok {
+			t.Fatalf("execution disappeared")
+		}
+		if current.Status == TaskExecutionTimedOut || current.Status == TaskExecutionSucceeded {
+			final = current
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if final.Status != TaskExecutionTimedOut {
+		t.Fatalf("expected timed out execution, got %+v", final)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTaskFrameworkEndpoints(t *testing.T) {
@@ -179,5 +180,106 @@ resources:
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected bad request for invalid type, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestTaskFrameworkExecutionEndpoints(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: marker
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "marker.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(":0", tmp)
+	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
+
+	taskReq := []byte(`{"name":"Deploy","module":"packs/web","action":"deploy","parameters":[{"name":"service","type":"string","required":true},{"name":"token","type":"string","required":true,"sensitive":true}]}`)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/definitions", bytes.NewReader(taskReq))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("task create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var task struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &task); err != nil {
+		t.Fatalf("decode task failed: %v", err)
+	}
+
+	planReq := []byte(`{"name":"prod","steps":[{"name":"deploy-step","task_id":"` + task.ID + `","parameters":{"service":"api","token":"secret"}}]}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/tasks/plans", bytes.NewReader(planReq))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("plan create failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var plan struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &plan); err != nil {
+		t.Fatalf("decode plan failed: %v", err)
+	}
+
+	execReq := []byte(`{"plan_id":"` + plan.ID + `","timeout_seconds":5,"poll_interval_ms":100}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/tasks/executions", bytes.NewReader(execReq))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("execution start failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var exec struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &exec); err != nil {
+		t.Fatalf("decode execution start failed: %v", err)
+	}
+	if exec.ID == "" {
+		t.Fatalf("expected execution id")
+	}
+
+	var finalBody string
+	for i := 0; i < 60; i++ {
+		rr = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/v1/tasks/executions/"+exec.ID, nil)
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("execution get failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+		finalBody = rr.Body.String()
+		if strings.Contains(finalBody, `"status":"succeeded"`) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(finalBody, `"status":"succeeded"`) {
+		t.Fatalf("expected execution to succeed, got %s", finalBody)
+	}
+	if strings.Contains(finalBody, "secret") {
+		t.Fatalf("expected masked sensitive value in execution result: %s", finalBody)
+	}
+	if !strings.Contains(finalBody, "***REDACTED***") {
+		t.Fatalf("expected redacted marker in execution output: %s", finalBody)
 	}
 }
