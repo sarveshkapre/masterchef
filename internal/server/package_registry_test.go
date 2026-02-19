@@ -210,6 +210,27 @@ resources:
 	}
 
 	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/scaffold/templates?kind=module", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("module scaffold template list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Contains(rr.Body.Bytes(), []byte(`"module-best-practice"`)) {
+		t.Fatalf("expected module scaffold template in list: %s", rr.Body.String())
+	}
+
+	scaffoldGenerate := []byte(`{"template_id":"module-best-practice","output_dir":"./scaffold/module-best-practice-test","overwrite":true}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/scaffold/generate", bytes.NewReader(scaffoldGenerate))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("module scaffold generate failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Contains(rr.Body.Bytes(), []byte(`"best_practices"`)) {
+		t.Fatalf("expected best practices in scaffold response: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/v1/packages/artifacts?visibility=public", nil)
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {

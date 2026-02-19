@@ -54,6 +54,7 @@ type Server struct {
 	bulk                  *control.BulkManager
 	actionDocs            *control.ActionDocCatalog
 	objectModel           *control.ObjectModelRegistry
+	moduleScaffold        *control.ModuleScaffoldCatalog
 	migrations            *control.MigrationStore
 	solutionPacks         *control.SolutionPackCatalog
 	useCaseTemplates      *control.UseCaseTemplateCatalog
@@ -175,6 +176,7 @@ func New(addr, baseDir string) *Server {
 	bulk := control.NewBulkManager(15 * time.Minute)
 	actionDocs := control.NewActionDocCatalog()
 	objectModel := control.NewObjectModelRegistry()
+	moduleScaffold := control.NewModuleScaffoldCatalog()
 	migrations := control.NewMigrationStore()
 	solutionPacks := control.NewSolutionPackCatalog()
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
@@ -288,6 +290,7 @@ func New(addr, baseDir string) *Server {
 		bulk:                  bulk,
 		actionDocs:            actionDocs,
 		objectModel:           objectModel,
+		moduleScaffold:        moduleScaffold,
 		migrations:            migrations,
 		solutionPacks:         solutionPacks,
 		useCaseTemplates:      useCaseTemplates,
@@ -568,6 +571,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/content-channels/sync-policy", s.handleContentChannelPolicy)
 	mux.HandleFunc("/v1/packages/content-channels/remotes", s.handleContentChannelRemotes)
 	mux.HandleFunc("/v1/packages/content-channels/remotes/", s.handleContentChannelRemoteAction)
+	mux.HandleFunc("/v1/packages/scaffold/templates", s.handleModuleScaffoldTemplates)
+	mux.HandleFunc("/v1/packages/scaffold/generate", s.handleModuleScaffoldGenerate(baseDir))
 	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
 	mux.HandleFunc("/v1/agents/catalogs", s.handleAgentCatalogs(baseDir))
 	mux.HandleFunc("/v1/agents/catalogs/replay", s.handleAgentCatalogReplay(baseDir))
@@ -2451,6 +2456,8 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/packages/content-channels/remotes",
 			"GET /v1/packages/content-channels/remotes/{id}",
 			"POST /v1/packages/content-channels/remotes/{id}/rotate-token",
+			"GET /v1/packages/scaffold/templates",
+			"POST /v1/packages/scaffold/generate",
 			"GET /v1/agents/cert-policy",
 			"POST /v1/agents/cert-policy",
 			"GET /v1/agents/catalogs",
