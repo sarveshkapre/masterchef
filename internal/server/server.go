@@ -80,6 +80,7 @@ type Server struct {
 	secretIntegrations *control.SecretsIntegrationStore
 	packageRegistry    *control.PackageRegistryStore
 	agentPKI           *control.AgentPKIStore
+	agentAttestation   *control.AgentAttestationStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -157,6 +158,7 @@ func New(addr, baseDir string) *Server {
 	secretIntegrations := control.NewSecretsIntegrationStore()
 	packageRegistry := control.NewPackageRegistryStore()
 	agentPKI := control.NewAgentPKIStore()
+	agentAttestation := control.NewAgentAttestationStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -226,6 +228,7 @@ func New(addr, baseDir string) *Server {
 		secretIntegrations: secretIntegrations,
 		packageRegistry:    packageRegistry,
 		agentPKI:           agentPKI,
+		agentAttestation:   agentAttestation,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -332,6 +335,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/packages/signing-policy", s.handlePackageSigningPolicy)
 	mux.HandleFunc("/v1/packages/verify", s.handlePackageVerify)
 	mux.HandleFunc("/v1/agents/cert-policy", s.handleAgentCertPolicy)
+	mux.HandleFunc("/v1/agents/attestation/policy", s.handleAgentAttestationPolicy)
+	mux.HandleFunc("/v1/agents/attestations", s.handleAgentAttestations)
+	mux.HandleFunc("/v1/agents/attestations/check", s.handleAgentAttestationCheck)
+	mux.HandleFunc("/v1/agents/attestations/", s.handleAgentAttestationAction)
 	mux.HandleFunc("/v1/agents/csrs", s.handleAgentCSRs)
 	mux.HandleFunc("/v1/agents/csrs/", s.handleAgentCSRAction)
 	mux.HandleFunc("/v1/agents/certificates", s.handleAgentCertificates)
@@ -2028,6 +2035,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/packages/verify",
 			"GET /v1/agents/cert-policy",
 			"POST /v1/agents/cert-policy",
+			"GET /v1/agents/attestation/policy",
+			"POST /v1/agents/attestation/policy",
+			"GET /v1/agents/attestations",
+			"POST /v1/agents/attestations",
+			"GET /v1/agents/attestations/{id}",
+			"POST /v1/agents/attestations/check",
 			"GET /v1/agents/csrs",
 			"POST /v1/agents/csrs",
 			"POST /v1/agents/csrs/{id}/approve",

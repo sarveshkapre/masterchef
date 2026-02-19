@@ -145,6 +145,16 @@ func (s *AgentPKIStore) ListCSRs() []AgentCSR {
 	return out
 }
 
+func (s *AgentPKIStore) GetCSR(id string) (AgentCSR, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.csrs[strings.TrimSpace(id)]
+	if !ok {
+		return AgentCSR{}, false
+	}
+	return cloneAgentCSR(*item), true
+}
+
 func (s *AgentPKIStore) DecideCSR(id, decision, reason string) (AgentCSR, error) {
 	id = strings.TrimSpace(id)
 	decision = strings.ToLower(strings.TrimSpace(decision))

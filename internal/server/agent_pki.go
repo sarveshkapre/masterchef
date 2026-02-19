@@ -44,6 +44,13 @@ func (s *Server) handleAgentCSRs(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		attestation := s.agentAttestation.CheckForCertificate(req.AgentID)
+		if !attestation.Allowed {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "certificate issuance blocked by attestation policy: " + attestation.Reason,
+			})
+			return
+		}
 		item, err := s.agentPKI.SubmitCSR(req)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -89,6 +96,18 @@ func (s *Server) handleAgentCSRAction(w http.ResponseWriter, r *http.Request) {
 	)
 	switch action {
 	case "approve":
+		csr, ok := s.agentPKI.GetCSR(parts[3])
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "csr not found"})
+			return
+		}
+		attestation := s.agentAttestation.CheckForCertificate(csr.AgentID)
+		if !attestation.Allowed {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "certificate issuance blocked by attestation policy: " + attestation.Reason,
+			})
+			return
+		}
 		item, err = s.agentPKI.DecideCSR(parts[3], "approve", req.Reason)
 	case "reject":
 		item, err = s.agentPKI.DecideCSR(parts[3], "reject", req.Reason)

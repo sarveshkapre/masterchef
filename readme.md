@@ -140,6 +140,7 @@ Secrets manager integrations plus secret-usage tracing with redaction-by-default
 Signed module/provider package artifacts with provenance metadata and policy-driven verification are available via `/v1/packages/artifacts`, `/v1/packages/signing-policy`, and `/v1/packages/verify`.
 Agent certificate issuance, policy-based autosigning/manual approval fallback, rotation, and revocation workflows are available via `/v1/agents/cert-policy`, `/v1/agents/csrs`, and `/v1/agents/certificates`.
 Certificate expiry SLO visibility and automatic renewal workflows are available via `/v1/agents/certificates/expiry-report` and `/v1/agents/certificates/renew-expiring`.
+Identity bootstrap attestation gates (TPM/cloud IID evidence) are available via `/v1/agents/attestation/policy`, `/v1/agents/attestations`, and `/v1/agents/attestations/check` to enforce verification before certificate issuance.
 Branch-based ephemeral environment previews are available via `/v1/gitops/previews` with lifecycle actions for promote/close and queued preview applies.
 Branch-per-environment control-repo materialization is available via `/v1/gitops/environments/materialize` with generated environment configs and optional queued apply.
 Webhook/API deployment triggers are available via `/v1/gitops/deployments/webhook` and `/v1/gitops/deployments/trigger`; CLI deployments are available via `masterchef deploy`.
