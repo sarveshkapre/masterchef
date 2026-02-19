@@ -81,6 +81,7 @@ type Server struct {
 	schedulerPartitions   *control.SchedulerPartitionStore
 	workerAutoscaling     *control.WorkerAutoscalingStore
 	costScheduling        *control.CostSchedulingStore
+	artifactDistribution  *control.ArtifactDistributionStore
 	tenantLimits          *control.TenantLimitStore
 	schemaMigs            *control.SchemaMigrationManager
 	openSchemas           *control.OpenSchemaStore
@@ -217,6 +218,7 @@ func New(addr, baseDir string) *Server {
 	schedulerPartitions := control.NewSchedulerPartitionStore()
 	workerAutoscaling := control.NewWorkerAutoscalingStore()
 	costScheduling := control.NewCostSchedulingStore()
+	artifactDistribution := control.NewArtifactDistributionStore()
 	tenantLimits := control.NewTenantLimitStore()
 	schemaMigs := control.NewSchemaMigrationManager(1)
 	openSchemas := control.NewOpenSchemaStore()
@@ -345,6 +347,7 @@ func New(addr, baseDir string) *Server {
 		schedulerPartitions:   schedulerPartitions,
 		workerAutoscaling:     workerAutoscaling,
 		costScheduling:        costScheduling,
+		artifactDistribution:  artifactDistribution,
 		tenantLimits:          tenantLimits,
 		schemaMigs:            schemaMigs,
 		openSchemas:           openSchemas,
@@ -819,6 +822,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/autoscaling/recommend", s.handleWorkerAutoscalingRecommend)
 	mux.HandleFunc("/v1/control/cost-scheduling/policies", s.handleCostSchedulingPolicies)
 	mux.HandleFunc("/v1/control/cost-scheduling/admit", s.handleCostSchedulingAdmit)
+	mux.HandleFunc("/v1/control/artifact-distribution/policies", s.handleArtifactDistributionPolicies)
+	mux.HandleFunc("/v1/control/artifact-distribution/plan", s.handleArtifactDistributionPlan)
 	mux.HandleFunc("/v1/control/tenancy/policies", s.handleTenantPolicies)
 	mux.HandleFunc("/v1/control/tenancy/admit-check", s.handleTenantAdmissionCheck)
 	mux.HandleFunc("/v1/control/multi-master/nodes", s.handleMultiMasterNodes)
@@ -2870,6 +2875,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/cost-scheduling/policies",
 			"POST /v1/control/cost-scheduling/policies",
 			"POST /v1/control/cost-scheduling/admit",
+			"GET /v1/control/artifact-distribution/policies",
+			"POST /v1/control/artifact-distribution/policies",
+			"POST /v1/control/artifact-distribution/plan",
 			"GET /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/policies",
 			"POST /v1/control/tenancy/admit-check",
