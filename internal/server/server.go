@@ -345,6 +345,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
+	mux.HandleFunc("/v1/inventory/import/cmdb", s.handleInventoryCMDBImport)
 	mux.HandleFunc("/v1/inventory/discovery-sources", s.handleDiscoverySources)
 	mux.HandleFunc("/v1/inventory/discovery-sources/sync", s.handleDiscoverySourceSync)
 	mux.HandleFunc("/v1/inventory/discovery-sources/", s.handleDiscoverySourceAction)
@@ -2078,6 +2079,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/policy/pull/execute",
 			"GET /v1/policy/pull/results",
 			"GET /v1/inventory/groups",
+			"POST /v1/inventory/import/cmdb",
 			"GET /v1/inventory/discovery-sources",
 			"POST /v1/inventory/discovery-sources",
 			"GET /v1/inventory/discovery-sources/{id}",
