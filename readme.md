@@ -109,6 +109,7 @@ Unified CLI now includes `observe` and `drift` commands for local run telemetry 
 Interactive CLI TUI inspection is available via `masterchef tui` with run browsing and per-step detail views.
 Ansible-compatible plugin extension points (`callback`, `lookup`, `filter`, `vars`, `strategy`) are available via `/v1/plugins/extensions`.
 Execution strategy controls (`linear`, `free`, `serial`) with failure thresholds (`max_fail_percentage`, `any_errors_fatal`) are supported in config and executor runtime.
+Failure-domain-aware serial orchestration is supported with `execution.failure_domain` (`rack|zone|region`) to interleave hosts across domains.
 Privilege escalation controls for command resources are supported via `become` and `become_user`, with explicit run-result audit markers.
 Session recording artifacts for privileged remote command executions are emitted under `.masterchef/sessions` and linked from run output.
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-resources`, `-tags`, and `-skip-tags`.

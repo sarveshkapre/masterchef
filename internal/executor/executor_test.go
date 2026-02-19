@@ -231,6 +231,24 @@ func TestApply_MaxFailPercentageStopsFreeStrategy(t *testing.T) {
 	}
 }
 
+func TestSerialOrderedSteps_FailureDomainInterleaving(t *testing.T) {
+	steps := []planner.Step{
+		{Order: 1, Host: config.Host{Name: "b", Topology: map[string]string{"zone": "zone-a"}}, Resource: config.Resource{ID: "b1", Host: "b"}},
+		{Order: 2, Host: config.Host{Name: "a", Topology: map[string]string{"zone": "zone-a"}}, Resource: config.Resource{ID: "a1", Host: "a"}},
+		{Order: 3, Host: config.Host{Name: "d", Topology: map[string]string{"zone": "zone-b"}}, Resource: config.Resource{ID: "d1", Host: "d"}},
+		{Order: 4, Host: config.Host{Name: "c", Topology: map[string]string{"zone": "zone-b"}}, Resource: config.Resource{ID: "c1", Host: "c"}},
+	}
+	ordered := serialOrderedSteps(steps, 1, "zone")
+	got := make([]string, 0, len(ordered))
+	for _, step := range ordered {
+		got = append(got, step.Host.Name)
+	}
+	want := []string{"a", "c", "b", "d"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected failure-domain order: got=%v want=%v", got, want)
+	}
+}
+
 func TestApply_CommandRetriesUntilSuccess(t *testing.T) {
 	tmp := t.TempDir()
 	marker := filepath.Join(tmp, "retry.marker")

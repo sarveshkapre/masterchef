@@ -25,6 +25,12 @@ func Validate(cfg *Config) error {
 	if cfg.Execution.MaxFailPercentage < 0 || cfg.Execution.MaxFailPercentage > 100 {
 		return fmt.Errorf("execution.max_fail_percentage must be between 0 and 100")
 	}
+	cfg.Execution.FailureDomain = strings.ToLower(strings.TrimSpace(cfg.Execution.FailureDomain))
+	switch cfg.Execution.FailureDomain {
+	case "", "rack", "zone", "region":
+	default:
+		return fmt.Errorf("execution.failure_domain must be one of rack, zone, region")
+	}
 
 	hostSet := map[string]struct{}{}
 	for i, h := range cfg.Inventory.Hosts {

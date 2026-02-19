@@ -41,6 +41,7 @@ func TestValidate_ExecutionPolicy(t *testing.T) {
 		},
 		Execution: Execution{
 			Strategy:          "free",
+			FailureDomain:     "zone",
 			MaxFailPercentage: 25,
 		},
 		Resources: []Resource{
@@ -55,6 +56,11 @@ func TestValidate_ExecutionPolicy(t *testing.T) {
 		t.Fatalf("expected invalid strategy error")
 	}
 	cfg.Execution.Strategy = "linear"
+	cfg.Execution.FailureDomain = "invalid"
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected failure_domain validation error")
+	}
+	cfg.Execution.FailureDomain = "zone"
 	cfg.Execution.MaxFailPercentage = 200
 	if err := Validate(cfg); err == nil {
 		t.Fatalf("expected max_fail_percentage validation error")

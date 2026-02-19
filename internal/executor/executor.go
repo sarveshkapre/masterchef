@@ -68,7 +68,7 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 	steps := p.Steps
 	switch strategy {
 	case "serial":
-		steps = serialOrderedSteps(p.Steps, policy.Serial)
+		steps = serialOrderedSteps(p.Steps, policy.Serial, policy.FailureDomain)
 	}
 
 	failedSteps := 0
@@ -412,10 +412,11 @@ func (e *Executor) applyLocalResource(r config.Resource) (provider.Result, error
 	return h.Apply(ctx, r)
 }
 
-func serialOrderedSteps(in []planner.Step, serial int) []planner.Step {
+func serialOrderedSteps(in []planner.Step, serial int, failureDomain string) []planner.Step {
 	if serial <= 0 {
 		serial = 1
 	}
+	hostByName := map[string]config.Host{}
 	hostSeen := map[string]struct{}{}
 	hostOrder := make([]string, 0)
 	for _, step := range in {
@@ -426,13 +427,16 @@ func serialOrderedSteps(in []planner.Step, serial int) []planner.Step {
 		if host == "" {
 			host = "unknown-host"
 		}
+		if _, ok := hostByName[host]; !ok {
+			hostByName[host] = step.Host
+		}
 		if _, ok := hostSeen[host]; ok {
 			continue
 		}
 		hostSeen[host] = struct{}{}
 		hostOrder = append(hostOrder, host)
 	}
-	sort.Strings(hostOrder)
+	hostOrder = orderedHostsByFailureDomain(hostOrder, hostByName, failureDomain)
 
 	out := make([]planner.Step, 0, len(in))
 	for i := 0; i < len(hostOrder); i += serial {
@@ -458,6 +462,49 @@ func serialOrderedSteps(in []planner.Step, serial int) []planner.Step {
 		}
 	}
 	return out
+}
+
+func orderedHostsByFailureDomain(hostOrder []string, hostByName map[string]config.Host, failureDomain string) []string {
+	sort.Strings(hostOrder)
+	failureDomain = strings.ToLower(strings.TrimSpace(failureDomain))
+	if failureDomain == "" {
+		return hostOrder
+	}
+
+	grouped := map[string][]string{}
+	domainOrder := make([]string, 0)
+	for _, host := range hostOrder {
+		domain := strings.ToLower(strings.TrimSpace(hostByName[host].Topology[failureDomain]))
+		if domain == "" {
+			domain = "unknown-" + failureDomain
+		}
+		if _, ok := grouped[domain]; !ok {
+			domainOrder = append(domainOrder, domain)
+		}
+		grouped[domain] = append(grouped[domain], host)
+	}
+	for domain := range grouped {
+		sort.Strings(grouped[domain])
+	}
+	sort.Strings(domainOrder)
+
+	ordered := make([]string, 0, len(hostOrder))
+	for {
+		progressed := false
+		for _, domain := range domainOrder {
+			queue := grouped[domain]
+			if len(queue) == 0 {
+				continue
+			}
+			ordered = append(ordered, queue[0])
+			grouped[domain] = queue[1:]
+			progressed = true
+		}
+		if !progressed {
+			break
+		}
+	}
+	return ordered
 }
 
 func (e *Executor) applyOverSSH(step planner.Step, r config.Resource) (bool, bool, string, error) {

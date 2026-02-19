@@ -59,6 +59,7 @@ type Resource struct {
 type Execution struct {
 	Strategy          string `json:"strategy,omitempty" yaml:"strategy,omitempty"` // linear|free|serial
 	Serial            int    `json:"serial,omitempty" yaml:"serial,omitempty"`     // host batch size for serial strategy
+	FailureDomain     string `json:"failure_domain,omitempty" yaml:"failure_domain,omitempty"`
 	MaxFailPercentage int    `json:"max_fail_percentage,omitempty" yaml:"max_fail_percentage,omitempty"`
 	AnyErrorsFatal    bool   `json:"any_errors_fatal,omitempty" yaml:"any_errors_fatal,omitempty"`
 }
