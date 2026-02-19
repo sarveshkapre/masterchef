@@ -136,6 +136,7 @@ type Server struct {
 	hostSecurityProfiles   *control.HostSecurityProfileStore
 	signatureAdmission     *control.SignatureAdmissionStore
 	runtimeSecrets         *control.RuntimeSecretStore
+	encryptedSecrets       *control.EncryptedSecretStore
 	delegationTokens       *control.DelegationTokenStore
 	accessApprovals        *control.AccessApprovalStore
 	jitGrants              *control.JITAccessGrantStore
@@ -292,6 +293,7 @@ func New(addr, baseDir string) *Server {
 	hostSecurityProfiles := control.NewHostSecurityProfileStore()
 	signatureAdmission := control.NewSignatureAdmissionStore()
 	runtimeSecrets := control.NewRuntimeSecretStore()
+	encryptedSecrets := control.NewEncryptedSecretStore()
 	delegationTokens := control.NewDelegationTokenStore()
 	accessApprovals := control.NewAccessApprovalStore()
 	jitGrants := control.NewJITAccessGrantStore()
@@ -440,6 +442,7 @@ func New(addr, baseDir string) *Server {
 		hostSecurityProfiles:   hostSecurityProfiles,
 		signatureAdmission:     signatureAdmission,
 		runtimeSecrets:         runtimeSecrets,
+		encryptedSecrets:       encryptedSecrets,
 		delegationTokens:       delegationTokens,
 		accessApprovals:        accessApprovals,
 		jitGrants:              jitGrants,
@@ -680,6 +683,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/secrets/runtime/sessions", s.handleRuntimeSecretSessions)
 	mux.HandleFunc("/v1/secrets/runtime/sessions/", s.handleRuntimeSecretSessionAction)
 	mux.HandleFunc("/v1/secrets/runtime/consume", s.handleRuntimeSecretConsume)
+	mux.HandleFunc("/v1/secrets/encrypted-store/items", s.handleEncryptedSecrets)
+	mux.HandleFunc("/v1/secrets/encrypted-store/items/", s.handleEncryptedSecretAction)
+	mux.HandleFunc("/v1/secrets/encrypted-store/expired", s.handleEncryptedSecretExpired)
 	mux.HandleFunc("/v1/access/delegation-tokens", s.handleDelegationTokens)
 	mux.HandleFunc("/v1/access/delegation-tokens/validate", s.handleDelegationTokenValidate)
 	mux.HandleFunc("/v1/access/delegation-tokens/", s.handleDelegationTokenAction)
@@ -2596,6 +2602,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/secrets/runtime/sessions/{id}",
 			"POST /v1/secrets/runtime/sessions/{id}/destroy",
 			"POST /v1/secrets/runtime/consume",
+			"GET /v1/secrets/encrypted-store/items",
+			"POST /v1/secrets/encrypted-store/items",
+			"GET /v1/secrets/encrypted-store/items/{name}",
+			"POST /v1/secrets/encrypted-store/items/{name}/resolve",
+			"POST /v1/secrets/encrypted-store/items/{name}/rotate",
+			"GET /v1/secrets/encrypted-store/expired",
 			"GET /v1/access/delegation-tokens",
 			"POST /v1/access/delegation-tokens",
 			"POST /v1/access/delegation-tokens/validate",

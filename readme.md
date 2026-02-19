@@ -148,6 +148,7 @@ Hermetic execution environments with pinned image digests are available via `/v1
 Short-lived execution credentials are available via `/v1/execution/credentials` with scope-aware validation and explicit revoke workflows.
 Signed collection/image admission with client-side verification keyrings is available via `/v1/security/signatures/keyrings` and `/v1/security/signatures/admit-check`.
 Runtime secret materialization with in-memory session lifecycle and consume-time zeroization is available via `/v1/secrets/runtime/sessions` and `/v1/secrets/runtime/consume`.
+Built-in encrypted secrets store with envelope encryption, rotation workflows, and expiry enforcement is available via `/v1/secrets/encrypted-store/items`, `POST /v1/secrets/encrypted-store/items/{name}/rotate`, and `GET /v1/secrets/encrypted-store/expired`.
 Time-bound delegation tokens for automated run pipelines are available via `/v1/access/delegation-tokens` with validation and revoke endpoints.
 Multi-stage approval policies with quorum rules are available via `/v1/access/approval-policies`.
 Break-glass workflows with audited approvals are available via `/v1/access/break-glass/requests` including approve/reject/revoke actions.
