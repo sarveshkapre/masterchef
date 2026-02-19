@@ -72,6 +72,7 @@ type Server struct {
 	jitGrants          *control.JITAccessGrantStore
 	compliance         *control.ComplianceStore
 	rbac               *control.RBACStore
+	abac               *control.ABACStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -141,6 +142,7 @@ func New(addr, baseDir string) *Server {
 	jitGrants := control.NewJITAccessGrantStore()
 	compliance := control.NewComplianceStore()
 	rbac := control.NewRBACStore()
+	abac := control.NewABACStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -202,6 +204,7 @@ func New(addr, baseDir string) *Server {
 		jitGrants:          jitGrants,
 		compliance:         compliance,
 		rbac:               rbac,
+		abac:               abac,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -280,6 +283,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/access/rbac/roles/", s.handleRBACRoleAction)
 	mux.HandleFunc("/v1/access/rbac/bindings", s.handleRBACBindings)
 	mux.HandleFunc("/v1/access/rbac/check", s.handleRBACAccessCheck)
+	mux.HandleFunc("/v1/access/abac/policies", s.handleABACPolicies)
+	mux.HandleFunc("/v1/access/abac/check", s.handleABACCheck)
 	mux.HandleFunc("/v1/compliance/profiles", s.handleComplianceProfiles)
 	mux.HandleFunc("/v1/compliance/profiles/", s.handleComplianceProfileAction)
 	mux.HandleFunc("/v1/compliance/scans", s.handleComplianceScans)
@@ -1928,6 +1933,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/access/rbac/bindings",
 			"POST /v1/access/rbac/bindings",
 			"POST /v1/access/rbac/check",
+			"GET /v1/access/abac/policies",
+			"POST /v1/access/abac/policies",
+			"POST /v1/access/abac/check",
 			"GET /v1/compliance/profiles",
 			"POST /v1/compliance/profiles",
 			"GET /v1/compliance/profiles/{id}",

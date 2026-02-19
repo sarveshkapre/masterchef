@@ -131,6 +131,7 @@ Just-in-time access grants for sensitive operations are available via `/v1/acces
 Compliance profile engine (CIS/STIG/custom), continuous scan configuration, and evidence exports (JSON/CSV/SARIF) are available via `/v1/compliance/profiles`, `/v1/compliance/continuous`, and `/v1/compliance/scans/{id}/evidence`.
 Compliance exceptions with expiry + approval workflow and compliance scorecards by team/environment/service are available via `/v1/compliance/exceptions` and `/v1/compliance/scorecards`.
 RBAC with scoped permissions is available via `/v1/access/rbac/roles`, `/v1/access/rbac/bindings`, and `/v1/access/rbac/check`.
+ABAC with context-aware policy conditions is available via `/v1/access/abac/policies` and `/v1/access/abac/check`.
 Branch-based ephemeral environment previews are available via `/v1/gitops/previews` with lifecycle actions for promote/close and queued preview applies.
 Branch-per-environment control-repo materialization is available via `/v1/gitops/environments/materialize` with generated environment configs and optional queued apply.
 Webhook/API deployment triggers are available via `/v1/gitops/deployments/webhook` and `/v1/gitops/deployments/trigger`; CLI deployments are available via `masterchef deploy`.
