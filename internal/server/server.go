@@ -52,6 +52,7 @@ type Server struct {
 	shortcuts             *control.UIShortcutCatalog
 	bulk                  *control.BulkManager
 	actionDocs            *control.ActionDocCatalog
+	objectModel           *control.ObjectModelRegistry
 	migrations            *control.MigrationStore
 	solutionPacks         *control.SolutionPackCatalog
 	useCaseTemplates      *control.UseCaseTemplateCatalog
@@ -170,6 +171,7 @@ func New(addr, baseDir string) *Server {
 	shortcuts := control.NewUIShortcutCatalog()
 	bulk := control.NewBulkManager(15 * time.Minute)
 	actionDocs := control.NewActionDocCatalog()
+	objectModel := control.NewObjectModelRegistry()
 	migrations := control.NewMigrationStore()
 	solutionPacks := control.NewSolutionPackCatalog()
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
@@ -280,6 +282,7 @@ func New(addr, baseDir string) *Server {
 		shortcuts:             shortcuts,
 		bulk:                  bulk,
 		actionDocs:            actionDocs,
+		objectModel:           objectModel,
 		migrations:            migrations,
 		solutionPacks:         solutionPacks,
 		useCaseTemplates:      useCaseTemplates,
@@ -411,6 +414,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/offline/mirrors/sync", s.handleOfflineMirrorSync)
 	mux.HandleFunc("/v1/docs/actions", s.handleActionDocs)
 	mux.HandleFunc("/v1/docs/actions/", s.handleActionDocByID)
+	mux.HandleFunc("/v1/model/objects", s.handleObjectModel)
+	mux.HandleFunc("/v1/model/objects/resolve", s.handleObjectModelResolve)
 	mux.HandleFunc("/v1/docs/inline", s.handleInlineDocs)
 	mux.HandleFunc("/v1/docs/generate", s.handleDocsGenerate)
 	mux.HandleFunc("/v1/docs/examples/verify", s.handleDocsExampleVerify)
@@ -2497,6 +2502,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/features/summary",
 			"GET /v1/docs/actions",
 			"GET /v1/docs/actions/{id}",
+			"GET /v1/model/objects",
+			"GET /v1/model/objects/resolve",
 			"GET /v1/docs/inline",
 			"POST /v1/plans/explain",
 			"POST /v1/plans/graph",

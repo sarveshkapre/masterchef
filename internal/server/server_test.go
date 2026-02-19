@@ -1766,6 +1766,26 @@ resources:
 	if !strings.Contains(rr.Body.String(), `"inline_examples":true`) || !strings.Contains(rr.Body.String(), `"count":1`) {
 		t.Fatalf("expected inline docs query response metadata: %s", rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/model/objects", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("object model list failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"canonical":"runbook"`) {
+		t.Fatalf("expected runbook object model entry: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/model/objects/resolve?term=playbook", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("object model resolve failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"canonical":"runbook"`) {
+		t.Fatalf("expected playbook alias to resolve to runbook: %s", rr.Body.String())
+	}
 }
 
 func TestWorkflowWizardEndpoints(t *testing.T) {
