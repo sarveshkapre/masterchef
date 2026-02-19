@@ -123,6 +123,7 @@ Session recording artifacts for privileged remote command executions are emitted
 Selective and targeted execution filters are supported in `check`/`apply` via `-hosts`, `-resources`, `-tags`, and `-skip-tags`.
 Step-level retries and `until`-style retry conditions are supported for command resources via `retries`, `retry_delay_seconds`, and `until_contains`.
 Command resources support `rescue_command` and `always_command` hooks for block/rescue/always-style error handling flows.
+Explicit `require`/`before`/`notify`/`subscribe` resource relationships are supported in config and influence planner dependency ordering for event-driven orchestration.
 Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.
 Event bus integrations for webhook, Kafka, and NATS targets are available via `/v1/event-bus/targets`, `/v1/event-bus/publish`, and `/v1/event-bus/deliveries`.
 Hermetic execution environments with pinned image digests are available via `/v1/execution/environments` and admission evaluation endpoints.

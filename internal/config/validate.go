@@ -202,6 +202,26 @@ func Validate(cfg *Config) error {
 				return fmt.Errorf("resource %q depends on unknown resource %q", r.ID, dep)
 			}
 		}
+		for _, dep := range r.Require {
+			if _, ok := resSet[dep]; !ok {
+				return fmt.Errorf("resource %q require references unknown resource %q", r.ID, dep)
+			}
+		}
+		for _, dep := range r.Subscribe {
+			if _, ok := resSet[dep]; !ok {
+				return fmt.Errorf("resource %q subscribe references unknown resource %q", r.ID, dep)
+			}
+		}
+		for _, target := range r.Before {
+			if _, ok := resSet[target]; !ok {
+				return fmt.Errorf("resource %q before references unknown resource %q", r.ID, target)
+			}
+		}
+		for _, target := range r.Notify {
+			if _, ok := resSet[target]; !ok {
+				return fmt.Errorf("resource %q notify references unknown resource %q", r.ID, target)
+			}
+		}
 	}
 	return nil
 }

@@ -39,6 +39,10 @@ type Resource struct {
 	Host       string   `json:"host" yaml:"host"`
 	DelegateTo string   `json:"delegate_to,omitempty" yaml:"delegate_to,omitempty"`
 	DependsOn  []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	Require    []string `json:"require,omitempty" yaml:"require,omitempty"`
+	Before     []string `json:"before,omitempty" yaml:"before,omitempty"`
+	Notify     []string `json:"notify,omitempty" yaml:"notify,omitempty"`
+	Subscribe  []string `json:"subscribe,omitempty" yaml:"subscribe,omitempty"`
 	Tags       []string `json:"tags,omitempty" yaml:"tags,omitempty"`
 
 	// file

@@ -209,6 +209,10 @@ func cloneHost(in Host) Host {
 func cloneResource(in Resource) Resource {
 	out := in
 	out.DependsOn = append([]string{}, in.DependsOn...)
+	out.Require = append([]string{}, in.Require...)
+	out.Before = append([]string{}, in.Before...)
+	out.Notify = append([]string{}, in.Notify...)
+	out.Subscribe = append([]string{}, in.Subscribe...)
 	out.Tags = append([]string{}, in.Tags...)
 	return out
 }

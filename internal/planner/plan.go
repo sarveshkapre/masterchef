@@ -35,10 +35,30 @@ func Build(cfg *config.Config) (*Plan, error) {
 		hostByName[h.Name] = h
 	}
 
+	edgeSet := map[string]struct{}{}
+	addEdge := func(from, to string) {
+		if strings.TrimSpace(from) == "" || strings.TrimSpace(to) == "" {
+			return
+		}
+		key := from + "->" + to
+		if _, exists := edgeSet[key]; exists {
+			return
+		}
+		edgeSet[key] = struct{}{}
+		graph[from] = append(graph[from], to)
+		inDegree[to]++
+	}
 	for _, r := range cfg.Resources {
-		for _, dep := range r.DependsOn {
-			graph[dep] = append(graph[dep], r.ID)
-			inDegree[r.ID]++
+		deps := append([]string{}, r.DependsOn...)
+		deps = append(deps, r.Require...)
+		deps = append(deps, r.Subscribe...)
+		for _, dep := range deps {
+			addEdge(dep, r.ID)
+		}
+		targets := append([]string{}, r.Before...)
+		targets = append(targets, r.Notify...)
+		for _, target := range targets {
+			addEdge(r.ID, target)
 		}
 	}
 

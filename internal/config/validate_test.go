@@ -332,3 +332,23 @@ func TestValidate_AutoTransportCapabilities(t *testing.T) {
 		t.Fatalf("expected unsupported capability validation error")
 	}
 }
+
+func TestValidate_ResourceRelationshipReferences(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{ID: "a", Type: "file", Host: "localhost", Path: "/tmp/a"},
+			{ID: "b", Type: "command", Host: "localhost", Command: "echo b", Require: []string{"a"}, Subscribe: []string{"a"}},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected relationship references to validate, got %v", err)
+	}
+	cfg.Resources[1].Require = []string{"missing"}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected missing require reference validation error")
+	}
+}
