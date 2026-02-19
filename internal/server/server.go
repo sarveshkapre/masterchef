@@ -76,6 +76,7 @@ type Server struct {
 	networkTransports   *control.NetworkTransportCatalog
 	portableRunners     *control.PortableRunnerCatalog
 	nativeSchedulers    *control.NativeSchedulerCatalog
+	adaptiveConcurrency *control.AdaptiveConcurrencyStore
 	disruptionBudgets   *control.DisruptionBudgetStore
 	executionEnvs       *control.ExecutionEnvironmentStore
 	executionCreds      *control.ExecutionCredentialStore
@@ -177,6 +178,7 @@ func New(addr, baseDir string) *Server {
 	networkTransports := control.NewNetworkTransportCatalog()
 	portableRunners := control.NewPortableRunnerCatalog()
 	nativeSchedulers := control.NewNativeSchedulerCatalog()
+	adaptiveConcurrency := control.NewAdaptiveConcurrencyStore()
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
@@ -270,6 +272,7 @@ func New(addr, baseDir string) *Server {
 		networkTransports:   networkTransports,
 		portableRunners:     portableRunners,
 		nativeSchedulers:    nativeSchedulers,
+		adaptiveConcurrency: adaptiveConcurrency,
 		disruptionBudgets:   disruptionBudgets,
 		executionEnvs:       executionEnvs,
 		executionCreds:      executionCreds,
@@ -388,6 +391,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/portable-runners/select", s.handlePortableRunnerSelect)
 	mux.HandleFunc("/v1/execution/native-schedulers", s.handleNativeSchedulers)
 	mux.HandleFunc("/v1/execution/native-schedulers/select", s.handleNativeSchedulerSelect)
+	mux.HandleFunc("/v1/execution/adaptive-concurrency/policy", s.handleAdaptiveConcurrencyPolicy)
+	mux.HandleFunc("/v1/execution/adaptive-concurrency/recommend", s.handleAdaptiveConcurrencyRecommend)
 	mux.HandleFunc("/v1/execution/snapshots", s.handleStepSnapshots)
 	mux.HandleFunc("/v1/execution/snapshots/", s.handleStepSnapshotByID)
 	mux.HandleFunc("/v1/execution/environments", s.handleExecutionEnvironments)
@@ -2154,6 +2159,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/portable-runners/select",
 			"GET /v1/execution/native-schedulers",
 			"POST /v1/execution/native-schedulers/select",
+			"GET /v1/execution/adaptive-concurrency/policy",
+			"POST /v1/execution/adaptive-concurrency/policy",
+			"POST /v1/execution/adaptive-concurrency/recommend",
 			"GET /v1/execution/snapshots",
 			"POST /v1/execution/snapshots",
 			"GET /v1/execution/snapshots/{id}",
