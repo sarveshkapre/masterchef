@@ -116,6 +116,7 @@ Step-level retries and `until`-style retry conditions are supported for command 
 Command resources support `rescue_command` and `always_command` hooks for block/rescue/always-style error handling flows.
 Delegated execution (`delegate_to`) is supported in resource definitions, allowing execution on a different inventory host than the target host.
 Event bus integrations for webhook, Kafka, and NATS targets are available via `/v1/event-bus/targets`, `/v1/event-bus/publish`, and `/v1/event-bus/deliveries`.
+Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/beacon-reactor/rules` and `/v1/compat/beacon-reactor/emit`.
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).

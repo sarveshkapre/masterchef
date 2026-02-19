@@ -253,6 +253,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/webhooks/deliveries", s.handleWebhookDeliveries)
 	mux.HandleFunc("/v1/rules", s.handleRules)
 	mux.HandleFunc("/v1/rules/", s.handleRuleAction)
+	mux.HandleFunc("/v1/compat/beacon-reactor/rules", s.handleBeaconReactorRules)
+	mux.HandleFunc("/v1/compat/beacon-reactor/rules/", s.handleBeaconReactorRuleAction)
+	mux.HandleFunc("/v1/compat/beacon-reactor/emit", s.handleBeaconReactorEmit)
 	mux.HandleFunc("/v1/runs", s.handleRuns(baseDir))
 	mux.HandleFunc("/v1/runs/digest", s.handleRunDigest(baseDir))
 	mux.HandleFunc("/v1/runs/compare", s.handleRunCompare(baseDir))
@@ -1921,6 +1924,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/rules/{id}",
 			"POST /v1/rules/{id}/enable",
 			"POST /v1/rules/{id}/disable",
+			"GET /v1/compat/beacon-reactor/rules",
+			"POST /v1/compat/beacon-reactor/rules",
+			"GET /v1/compat/beacon-reactor/rules/{id}",
+			"POST /v1/compat/beacon-reactor/rules/{id}/enable",
+			"POST /v1/compat/beacon-reactor/rules/{id}/disable",
+			"POST /v1/compat/beacon-reactor/emit",
 			"GET /v1/webhooks",
 			"POST /v1/webhooks",
 			"GET /v1/webhooks/{id}",
