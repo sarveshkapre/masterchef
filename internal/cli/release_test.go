@@ -102,6 +102,15 @@ func TestRunReleaseAttest(t *testing.T) {
 	if strings.TrimSpace(att.SourceCommit) == "" {
 		t.Fatalf("expected source commit to be present")
 	}
+	if strings.TrimSpace(att.SourceBranch) == "" {
+		t.Fatalf("expected source branch to be present")
+	}
+	if strings.TrimSpace(att.TestOutputSHA256) == "" {
+		t.Fatalf("expected test output sha to be present")
+	}
+	if att.ProvenanceVersion != "v2" {
+		t.Fatalf("expected provenance version v2, got %q", att.ProvenanceVersion)
+	}
 	if !att.TestPassed {
 		t.Fatalf("expected test command to pass")
 	}

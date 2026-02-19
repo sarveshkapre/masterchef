@@ -20,6 +20,12 @@ func TestGenerateAttestationGitAndDirtyState(t *testing.T) {
 	if strings.TrimSpace(att.SourceCommit) == "" {
 		t.Fatalf("expected source commit to be populated")
 	}
+	if strings.TrimSpace(att.SourceBranch) == "" {
+		t.Fatalf("expected source branch to be populated")
+	}
+	if att.ProvenanceVersion != "v2" {
+		t.Fatalf("expected provenance version v2, got %q", att.ProvenanceVersion)
+	}
 	if att.SourceDirty {
 		t.Fatalf("expected clean repository")
 	}
@@ -47,6 +53,9 @@ func TestGenerateAndSaveAttestationWithTestCommand(t *testing.T) {
 	if !att.TestPassed {
 		t.Fatalf("expected test command to pass, output=%q", att.TestOutput)
 	}
+	if strings.TrimSpace(att.TestOutputSHA256) == "" {
+		t.Fatalf("expected test output sha to be present")
+	}
 	if att.TestCommand != "echo ok" {
 		t.Fatalf("unexpected test command: %q", att.TestCommand)
 	}
@@ -65,6 +74,9 @@ func TestGenerateAndSaveAttestationWithTestCommand(t *testing.T) {
 	}
 	if strings.TrimSpace(loaded.SourceCommit) == "" {
 		t.Fatalf("expected persisted source commit")
+	}
+	if loaded.ProvenanceVersion != "v2" {
+		t.Fatalf("expected persisted provenance version, got %q", loaded.ProvenanceVersion)
 	}
 }
 

@@ -210,6 +210,8 @@ Curated use-case templates for rollout/patching/DR/migration workflows are avail
 - `masterchef release upgrade-assist -baseline baseline-api.json -current current-api.json -format human`
 - `masterchef release toolchain-check -root . -format human`
 
+Release provenance attestations include source commit/branch/tag/remote linkage, test-run output digest, and build-environment metadata.
+
 ## Repository Documents
 
 - `README.md`: project overview and design decisions
