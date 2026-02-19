@@ -80,6 +80,7 @@ Managed file resources now emit filebucket-style backups under `.masterchef/file
 File integrity enforcement is available on file resources via `content_checksum` and optional ed25519 signed metadata (`content_signature` + `content_signing_pubkey`) with apply-time verification.
 Regional failover drills with recovery-time scorecards are available via `/v1/control/failover-drills` and `/v1/control/failover-drills/scorecards`.
 Fault-injection and chaos testing workflows for orchestrator resilience are available via `/v1/control/chaos/experiments`.
+Memory and resource leak detection for long-running control-plane components is available via `/v1/control/leak-detection/policy`, `/v1/control/leak-detection/snapshots`, and `/v1/control/leak-detection/reports`.
 API contract governance includes deprecation lifecycle checks plus an upgrade-assistant endpoint for migration guidance.
 Schema evolution controls enforce migration plans and stepwise compatibility for control-plane state model upgrades.
 Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to detect deterministic plan regressions.
