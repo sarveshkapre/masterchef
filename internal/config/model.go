@@ -53,7 +53,10 @@ type Resource struct {
 	// command
 	Command           string `json:"command,omitempty" yaml:"command,omitempty"`
 	Creates           string `json:"creates,omitempty" yaml:"creates,omitempty"`
+	OnlyIf            string `json:"only_if,omitempty" yaml:"only_if,omitempty"`
 	Unless            string `json:"unless,omitempty" yaml:"unless,omitempty"`
+	RefreshOnly       bool   `json:"refresh_only,omitempty" yaml:"refresh_only,omitempty"`
+	RefreshCommand    string `json:"refresh_command,omitempty" yaml:"refresh_command,omitempty"`
 	Become            bool   `json:"become,omitempty" yaml:"become,omitempty"`
 	BecomeUser        string `json:"become_user,omitempty" yaml:"become_user,omitempty"`
 	RescueCommand     string `json:"rescue_command,omitempty" yaml:"rescue_command,omitempty"`

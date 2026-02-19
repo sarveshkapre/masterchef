@@ -99,6 +99,157 @@ func TestApply_CommandCreatesSkipsSecondRun(t *testing.T) {
 	}
 }
 
+func TestApply_CommandOnlyIfGuardSkips(t *testing.T) {
+	tmp := t.TempDir()
+	marker := filepath.Join(tmp, "should-not-exist")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "guarded",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "touch " + marker,
+					OnlyIf:  "exit 1",
+				},
+			},
+		},
+	}
+	ex := New(tmp)
+	run, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	if run.Status != state.RunSucceeded {
+		t.Fatalf("expected guarded run to succeed with skip, got %s", run.Status)
+	}
+	if len(run.Results) != 1 || !run.Results[0].Skipped {
+		t.Fatalf("expected guarded command to be skipped, got %#v", run.Results)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("expected marker not to be created, stat err=%v", err)
+	}
+}
+
+func TestApply_RefreshOnlyResourceRunsOnTrigger(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yaml")
+	reloadMarker := filepath.Join(tmp, "reload.marker")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "config-file",
+					Type:    "file",
+					Host:    "localhost",
+					Path:    cfgPath,
+					Content: "version=1\n",
+					Notify:  []string{"reload-service"},
+				},
+			},
+			{
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:          "reload-service",
+					Type:        "command",
+					Host:        "localhost",
+					Command:     "echo reload >> " + reloadMarker,
+					RefreshOnly: true,
+					Subscribe:   []string{"config-file"},
+				},
+			},
+		},
+	}
+
+	ex := New(tmp)
+	first, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("first apply failed: %v", err)
+	}
+	if len(first.Results) != 2 || first.Results[1].Skipped {
+		t.Fatalf("expected refresh-only command to run on first trigger, got %#v", first.Results)
+	}
+	if !strings.Contains(first.Results[1].Message, "refresh triggered by: config-file") {
+		t.Fatalf("expected refresh trigger marker, got %q", first.Results[1].Message)
+	}
+
+	second, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("second apply failed: %v", err)
+	}
+	if len(second.Results) != 2 || !second.Results[1].Skipped {
+		t.Fatalf("expected refresh-only command to skip without trigger, got %#v", second.Results)
+	}
+	if second.Results[1].Message != "refresh-only resource not triggered" {
+		t.Fatalf("unexpected refresh-only skip message %q", second.Results[1].Message)
+	}
+}
+
+func TestApply_RefreshCommandRunsWhenTriggered(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "settings.ini")
+	normalMarker := filepath.Join(tmp, "normal.marker")
+	refreshMarker := filepath.Join(tmp, "refresh.marker")
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "settings",
+					Type:    "file",
+					Host:    "localhost",
+					Path:    cfgPath,
+					Content: "a=1\n",
+				},
+			},
+			{
+				Order: 2,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:             "service-hook",
+					Type:           "command",
+					Host:           "localhost",
+					Command:        "echo normal > " + normalMarker,
+					RefreshCommand: "echo refresh > " + refreshMarker,
+					Subscribe:      []string{"settings"},
+				},
+			},
+		},
+	}
+
+	ex := New(tmp)
+	first, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("first apply failed: %v", err)
+	}
+	if first.Status != state.RunSucceeded {
+		t.Fatalf("expected first run success, got %s", first.Status)
+	}
+	if _, err := os.Stat(refreshMarker); err != nil {
+		t.Fatalf("expected refresh command marker on trigger, got %v", err)
+	}
+	if _, err := os.Stat(normalMarker); !os.IsNotExist(err) {
+		t.Fatalf("expected normal command marker to be absent on trigger run, stat err=%v", err)
+	}
+
+	second, err := ex.Apply(p)
+	if err != nil {
+		t.Fatalf("second apply failed: %v", err)
+	}
+	if second.Status != state.RunSucceeded {
+		t.Fatalf("expected second run success, got %s", second.Status)
+	}
+	if _, err := os.Stat(normalMarker); err != nil {
+		t.Fatalf("expected normal command marker when no refresh trigger, got %v", err)
+	}
+}
+
 func TestApply_FreeStrategyContinuesAfterFailure(t *testing.T) {
 	tmp := t.TempDir()
 	target := filepath.Join(tmp, "after-failure.txt")
@@ -528,6 +679,7 @@ func TestPrepareResourceForExecution_SudoWrap(t *testing.T) {
 		ID:         "c1",
 		Type:       "command",
 		Command:    "echo ok",
+		OnlyIf:     "test -f /tmp/gate",
 		Unless:     "test -f /tmp/skip",
 		Become:     true,
 		BecomeUser: "root",
@@ -538,6 +690,9 @@ func TestPrepareResourceForExecution_SudoWrap(t *testing.T) {
 	}
 	if !strings.Contains(prepared.Command, "sudo -u 'root' sh -lc ") {
 		t.Fatalf("expected command to be wrapped with sudo, got %q", prepared.Command)
+	}
+	if !strings.Contains(prepared.OnlyIf, "sudo -u 'root' sh -lc ") {
+		t.Fatalf("expected only_if to be wrapped with sudo, got %q", prepared.OnlyIf)
 	}
 	if !strings.Contains(prepared.Unless, "sudo -u 'root' sh -lc ") {
 		t.Fatalf("expected unless to be wrapped with sudo, got %q", prepared.Unless)

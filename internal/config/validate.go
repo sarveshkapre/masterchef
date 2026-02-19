@@ -156,6 +156,12 @@ func Validate(cfg *Config) error {
 			if r.Become {
 				return fmt.Errorf("resource %q privilege escalation is only supported for command resources", r.ID)
 			}
+			if strings.TrimSpace(r.OnlyIf) != "" || strings.TrimSpace(r.Unless) != "" {
+				return fmt.Errorf("resource %q only_if/unless guards are only supported for command resources", r.ID)
+			}
+			if strings.TrimSpace(r.RefreshCommand) != "" {
+				return fmt.Errorf("resource %q refresh_command is only supported for command resources", r.ID)
+			}
 			if strings.TrimSpace(r.RescueCommand) != "" || strings.TrimSpace(r.AlwaysCommand) != "" {
 				return fmt.Errorf("resource %q block/rescue/always hooks are only supported for command resources", r.ID)
 			}
@@ -166,6 +172,9 @@ func Validate(cfg *Config) error {
 			if strings.TrimSpace(r.Command) == "" {
 				return fmt.Errorf("resource %q command.command is required", r.ID)
 			}
+			r.OnlyIf = strings.TrimSpace(r.OnlyIf)
+			r.Unless = strings.TrimSpace(r.Unless)
+			r.RefreshCommand = strings.TrimSpace(r.RefreshCommand)
 			r.RescueCommand = strings.TrimSpace(r.RescueCommand)
 			r.AlwaysCommand = strings.TrimSpace(r.AlwaysCommand)
 			if r.Retries < 0 {
@@ -196,6 +205,7 @@ func Validate(cfg *Config) error {
 		}
 	}
 
+	notifiedBy := map[string]struct{}{}
 	for _, r := range cfg.Resources {
 		for _, dep := range r.DependsOn {
 			if _, ok := resSet[dep]; !ok {
@@ -221,7 +231,20 @@ func Validate(cfg *Config) error {
 			if _, ok := resSet[target]; !ok {
 				return fmt.Errorf("resource %q notify references unknown resource %q", r.ID, target)
 			}
+			notifiedBy[target] = struct{}{}
 		}
+	}
+	for _, r := range cfg.Resources {
+		if !r.RefreshOnly {
+			continue
+		}
+		if len(r.Subscribe) > 0 {
+			continue
+		}
+		if _, ok := notifiedBy[r.ID]; ok {
+			continue
+		}
+		return fmt.Errorf("resource %q refresh_only requires subscribe dependencies or upstream notify references", r.ID)
 	}
 	return nil
 }

@@ -70,6 +70,8 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 	case "serial":
 		steps = serialOrderedSteps(p.Steps, policy.Serial, policy.FailureDomain)
 	}
+	refreshSources := buildRefreshSourceIndex(steps)
+	changedByResource := map[string]bool{}
 
 	failedSteps := 0
 	executedSteps := 0
@@ -93,8 +95,31 @@ func (e *Executor) Apply(p *planner.Plan) (state.RunRecord, error) {
 	}
 
 	for _, step := range steps {
+		triggeredSources := refreshTriggeredSources(step.Resource, refreshSources, changedByResource)
+		if step.Resource.RefreshOnly && len(triggeredSources) == 0 {
+			run.Results = append(run.Results, state.ResourceRun{
+				ResourceID: step.Resource.ID,
+				Type:       step.Resource.Type,
+				Host:       step.Resource.Host,
+				Skipped:    true,
+				Message:    "refresh-only resource not triggered",
+			})
+			changedByResource[step.Resource.ID] = false
+			executedSteps++
+			continue
+		}
+		if len(triggeredSources) > 0 && step.Resource.Type == "command" && strings.TrimSpace(step.Resource.RefreshCommand) != "" {
+			step.Resource.Command = strings.TrimSpace(step.Resource.RefreshCommand)
+			step.Resource.Creates = ""
+			step.Resource.OnlyIf = ""
+			step.Resource.Unless = ""
+		}
 		res, failed := e.executeStep(step)
+		if len(triggeredSources) > 0 {
+			res.Message = appendAuditMessage(res.Message, "refresh triggered by: "+strings.Join(triggeredSources, ", "))
+		}
 		run.Results = append(run.Results, res)
+		changedByResource[step.Resource.ID] = res.Changed
 		executedSteps++
 		if failed {
 			failedSteps++
@@ -225,6 +250,7 @@ func (e *Executor) runCommandHook(step planner.Step, handler transportApplyFunc,
 	hookResource := base
 	hookResource.Command = command
 	hookResource.Creates = ""
+	hookResource.OnlyIf = ""
 	hookResource.Unless = ""
 	hookResource.Retries = 0
 	hookResource.RetryDelaySeconds = 0
@@ -268,6 +294,9 @@ func prepareResourceForExecution(host config.Host, r config.Resource) (config.Re
 	switch transport {
 	case "local", "ssh":
 		r.Command = wrapWithSudo(r.Command, r.BecomeUser)
+		if strings.TrimSpace(r.OnlyIf) != "" {
+			r.OnlyIf = wrapWithSudo(r.OnlyIf, r.BecomeUser)
+		}
 		if strings.TrimSpace(r.Unless) != "" {
 			r.Unless = wrapWithSudo(r.Unless, r.BecomeUser)
 		}
@@ -278,6 +307,53 @@ func prepareResourceForExecution(host config.Host, r config.Resource) (config.Re
 		// plugin and future transports can inspect become flags directly.
 		return r, audit, nil
 	}
+}
+
+func buildRefreshSourceIndex(steps []planner.Step) map[string][]string {
+	index := map[string][]string{}
+	seen := map[string]map[string]struct{}{}
+	addSource := func(target, source string) {
+		target = strings.TrimSpace(target)
+		source = strings.TrimSpace(source)
+		if target == "" || source == "" {
+			return
+		}
+		if seen[target] == nil {
+			seen[target] = map[string]struct{}{}
+		}
+		if _, ok := seen[target][source]; ok {
+			return
+		}
+		seen[target][source] = struct{}{}
+		index[target] = append(index[target], source)
+	}
+	for _, step := range steps {
+		r := step.Resource
+		for _, target := range r.Notify {
+			addSource(target, r.ID)
+		}
+		for _, source := range r.Subscribe {
+			addSource(r.ID, source)
+		}
+	}
+	for target := range index {
+		sort.Strings(index[target])
+	}
+	return index
+}
+
+func refreshTriggeredSources(resource config.Resource, refreshSources map[string][]string, changedByResource map[string]bool) []string {
+	sources := refreshSources[resource.ID]
+	if len(sources) == 0 {
+		return nil
+	}
+	triggered := make([]string, 0, len(sources))
+	for _, src := range sources {
+		if changedByResource[src] {
+			triggered = append(triggered, src)
+		}
+	}
+	return triggered
 }
 
 func wrapWithSudo(command, user string) string {

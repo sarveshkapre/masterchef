@@ -81,6 +81,13 @@ func Run(p *planner.Plan) Report {
 						break
 					}
 				}
+				if r.OnlyIf != "" {
+					if err := exec.Command("sh", "-c", r.OnlyIf).Run(); err != nil {
+						it.WouldChange = false
+						it.Reason = "only_if condition failed"
+						break
+					}
+				}
 				if r.Unless != "" {
 					if err := exec.Command("sh", "-c", r.Unless).Run(); err == nil {
 						it.WouldChange = false

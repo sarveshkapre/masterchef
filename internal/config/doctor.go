@@ -37,8 +37,8 @@ func Analyze(cfg *Config) []Diagnostic {
 	for i, r := range cfg.Resources {
 		switch r.Type {
 		case "command":
-			if r.Creates == "" && r.Unless == "" {
-				diags = append(diags, Diagnostic{Severity: SeverityWarn, Code: "CMD_NON_IDEMPOTENT", Message: fmt.Sprintf("resources[%d] command should set creates or unless for idempotency", i)})
+			if r.Creates == "" && r.OnlyIf == "" && r.Unless == "" {
+				diags = append(diags, Diagnostic{Severity: SeverityWarn, Code: "CMD_NON_IDEMPOTENT", Message: fmt.Sprintf("resources[%d] command should set creates, only_if, or unless for idempotency", i)})
 			}
 		case "file":
 			if r.Mode == "" {

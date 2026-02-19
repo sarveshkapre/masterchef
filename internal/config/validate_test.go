@@ -352,3 +352,44 @@ func TestValidate_ResourceRelationshipReferences(t *testing.T) {
 		t.Fatalf("expected missing require reference validation error")
 	}
 }
+
+func TestValidate_RefreshOnlyRequiresTrigger(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{ID: "svc", Type: "command", Host: "localhost", Command: "echo restart", RefreshOnly: true},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected refresh_only without trigger to fail validation")
+	}
+	cfg.Resources = []Resource{
+		{ID: "cfg", Type: "file", Host: "localhost", Path: "/tmp/cfg"},
+		{ID: "svc", Type: "command", Host: "localhost", Command: "echo restart", RefreshOnly: true, Subscribe: []string{"cfg"}},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected refresh_only with subscribe trigger to validate, got %v", err)
+	}
+}
+
+func TestValidate_FileGuardsAndRefreshCommandRejected(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{ID: "f1", Type: "file", Host: "localhost", Path: "/tmp/f1", OnlyIf: "test -f /tmp/gate"},
+		},
+	}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected file only_if guard to fail validation")
+	}
+	cfg.Resources[0] = Resource{ID: "f1", Type: "file", Host: "localhost", Path: "/tmp/f1", RefreshCommand: "echo no"}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected file refresh_command to fail validation")
+	}
+}

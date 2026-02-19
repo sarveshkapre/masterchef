@@ -101,8 +101,17 @@ func buildPlanDiffPreview(plan *planner.Plan, baseDir string) ([]planDiffPreview
 		case "command":
 			item.Changed = true
 			parts := []string{fmt.Sprintf("run command: %s", strings.TrimSpace(step.Resource.Command))}
+			if strings.TrimSpace(step.Resource.RefreshCommand) != "" {
+				parts = append(parts, "refresh command: "+strings.TrimSpace(step.Resource.RefreshCommand))
+			}
+			if step.Resource.RefreshOnly {
+				parts = append(parts, "refresh_only: true")
+			}
 			if strings.TrimSpace(step.Resource.Creates) != "" {
 				parts = append(parts, "creates guard: "+strings.TrimSpace(step.Resource.Creates))
+			}
+			if strings.TrimSpace(step.Resource.OnlyIf) != "" {
+				parts = append(parts, "only_if guard: "+strings.TrimSpace(step.Resource.OnlyIf))
 			}
 			if strings.TrimSpace(step.Resource.Unless) != "" {
 				parts = append(parts, "unless guard: "+strings.TrimSpace(step.Resource.Unless))

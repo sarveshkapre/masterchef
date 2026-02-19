@@ -40,6 +40,11 @@ func (h *CommandHandler) Apply(_ context.Context, resource config.Resource) (Res
 			return Result{Skipped: true, Message: "command skipped: creates path already exists"}, nil
 		}
 	}
+	if resource.OnlyIf != "" {
+		if err := exec.Command("sh", "-c", resource.OnlyIf).Run(); err != nil {
+			return Result{Skipped: true, Message: "command skipped: only_if condition failed"}, nil
+		}
+	}
 	if resource.Unless != "" {
 		if err := exec.Command("sh", "-c", resource.Unless).Run(); err == nil {
 			return Result{Skipped: true, Message: "command skipped: unless condition succeeded"}, nil

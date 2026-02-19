@@ -34,6 +34,10 @@ resources:
     type: command
     host: localhost
     command: "echo restart"
+    subscribe: ["update-file"]
+    refresh_command: "echo reload"
+    refresh_only: true
+    only_if: "test -f /tmp/reload-ready"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -65,5 +69,8 @@ resources:
 	}
 	if !strings.Contains(rr.Body.String(), `--- current`) || !strings.Contains(rr.Body.String(), `+++ desired`) {
 		t.Fatalf("expected inline diff markers: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `refresh_only: true`) || !strings.Contains(rr.Body.String(), `only_if guard`) {
+		t.Fatalf("expected command refresh/guard markers in preview: %s", rr.Body.String())
 	}
 }

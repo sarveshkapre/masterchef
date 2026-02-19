@@ -103,3 +103,31 @@ func TestRun_WinRMSimulation(t *testing.T) {
 		t.Fatalf("expected winrm to be simulatable, got %+v", r)
 	}
 }
+
+func TestRun_CommandOnlyIfGuard(t *testing.T) {
+	p := &planner.Plan{
+		Steps: []planner.Step{
+			{
+				Order: 1,
+				Host:  config.Host{Name: "localhost", Transport: "local"},
+				Resource: config.Resource{
+					ID:      "cmd-only-if",
+					Type:    "command",
+					Host:    "localhost",
+					Command: "echo should-not-run",
+					OnlyIf:  "exit 1",
+				},
+			},
+		},
+	}
+	r := Run(p)
+	if len(r.Items) != 1 {
+		t.Fatalf("expected one report item, got %+v", r)
+	}
+	if r.Items[0].WouldChange {
+		t.Fatalf("expected only_if failure to skip simulated change, got %+v", r.Items[0])
+	}
+	if r.Items[0].Reason != "only_if condition failed" {
+		t.Fatalf("unexpected reason %q", r.Items[0].Reason)
+	}
+}
