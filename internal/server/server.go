@@ -122,6 +122,7 @@ type Server struct {
 	disruptionBudgets      *control.DisruptionBudgetStore
 	executionEnvs          *control.ExecutionEnvironmentStore
 	executionCreds         *control.ExecutionCredentialStore
+	packageManagers        *control.PackageManagerAbstractionStore
 	systemdUnits           *control.SystemdUnitStore
 	rebootOrchestration    *control.RebootOrchestrationStore
 	patchManagement        *control.PatchManagementStore
@@ -277,6 +278,7 @@ func New(addr, baseDir string) *Server {
 	disruptionBudgets := control.NewDisruptionBudgetStore()
 	executionEnvs := control.NewExecutionEnvironmentStore()
 	executionCreds := control.NewExecutionCredentialStore()
+	packageManagers := control.NewPackageManagerAbstractionStore()
 	systemdUnits := control.NewSystemdUnitStore()
 	rebootOrchestration := control.NewRebootOrchestrationStore()
 	patchManagement := control.NewPatchManagementStore()
@@ -424,6 +426,7 @@ func New(addr, baseDir string) *Server {
 		disruptionBudgets:      disruptionBudgets,
 		executionEnvs:          executionEnvs,
 		executionCreds:         executionCreds,
+		packageManagers:        packageManagers,
 		systemdUnits:           systemdUnits,
 		rebootOrchestration:    rebootOrchestration,
 		patchManagement:        patchManagement,
@@ -629,6 +632,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/execution/portable-runners/select", s.handlePortableRunnerSelect)
 	mux.HandleFunc("/v1/execution/native-schedulers", s.handleNativeSchedulers)
 	mux.HandleFunc("/v1/execution/native-schedulers/select", s.handleNativeSchedulerSelect)
+	mux.HandleFunc("/v1/execution/package-managers", s.handlePackageManagers)
+	mux.HandleFunc("/v1/execution/package-managers/resolve", s.handlePackageManagerResolve)
+	mux.HandleFunc("/v1/execution/package-managers/render-action", s.handlePackageManagerRenderAction)
 	mux.HandleFunc("/v1/execution/systemd/units", s.handleSystemdUnits)
 	mux.HandleFunc("/v1/execution/systemd/units/", s.handleSystemdUnitAction)
 	mux.HandleFunc("/v1/execution/systemd/units/render", s.handleSystemdRender)
@@ -2517,6 +2523,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/execution/portable-runners/select",
 			"GET /v1/execution/native-schedulers",
 			"POST /v1/execution/native-schedulers/select",
+			"GET /v1/execution/package-managers",
+			"POST /v1/execution/package-managers/resolve",
+			"POST /v1/execution/package-managers/render-action",
 			"GET /v1/execution/systemd/units",
 			"POST /v1/execution/systemd/units",
 			"GET /v1/execution/systemd/units/{name}",
