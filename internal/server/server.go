@@ -656,6 +656,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/ui/progressive-disclosure", s.handleProgressiveDisclosure)
 	mux.HandleFunc("/v1/ui/progressive-disclosure/reveal", s.handleProgressiveDisclosureReveal)
 	mux.HandleFunc("/v1/ui/shortcuts", s.handleUIShortcuts)
+	mux.HandleFunc("/v1/ui/navigation-map", s.handleUINavigationMap)
 	mux.HandleFunc("/v1/migrations/assess", s.handleMigrationAssess)
 	mux.HandleFunc("/v1/migrations/reports", s.handleMigrationReports)
 	mux.HandleFunc("/v1/migrations/reports/", s.handleMigrationReportByID)
@@ -2552,6 +2553,7 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/ui/progressive-disclosure/reveal",
 			"POST /v1/ui/progressive-disclosure/reveal",
 			"GET /v1/ui/shortcuts",
+			"GET /v1/ui/navigation-map",
 			"POST /v1/migrations/assess",
 			"GET /v1/migrations/reports",
 			"GET /v1/migrations/reports/{id}",

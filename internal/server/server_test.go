@@ -2175,6 +2175,16 @@ resources:
 	if !strings.Contains(rr.Body.String(), `"blast-radius"`) || !strings.Contains(rr.Body.String(), `"revealed_by_flow"`) {
 		t.Fatalf("expected revealed controls in response: %s", rr.Body.String())
 	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/ui/navigation-map?workflow=rollout", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("navigation map failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"workflow":"rollout"`) || !strings.Contains(rr.Body.String(), `"no_mouse_coverage_percent"`) {
+		t.Fatalf("expected rollout navigation workflow with coverage details: %s", rr.Body.String())
+	}
 }
 
 func TestPlanExplainEndpoint(t *testing.T) {
