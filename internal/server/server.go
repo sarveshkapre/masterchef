@@ -31,6 +31,7 @@ type Server struct {
 	checkpoints         *control.ExecutionCheckpointStore
 	scheduler           *control.Scheduler
 	templates           *control.TemplateStore
+	wizards             *control.WorkflowWizardCatalog
 	tasks               *control.TaskFrameworkStore
 	workflows           *control.WorkflowStore
 	runbooks            *control.RunbookStore
@@ -145,6 +146,7 @@ func New(addr, baseDir string) *Server {
 	queue.StartWorker(runCtx, runner)
 	scheduler := control.NewScheduler(queue)
 	templates := control.NewTemplateStore()
+	wizards := control.NewWorkflowWizardCatalog()
 	tasks := control.NewTaskFrameworkStore()
 	workflows := control.NewWorkflowStore(queue, templates)
 	runbooks := control.NewRunbookStore()
@@ -251,6 +253,7 @@ func New(addr, baseDir string) *Server {
 		checkpoints:         checkpoints,
 		scheduler:           scheduler,
 		templates:           templates,
+		wizards:             wizards,
 		tasks:               tasks,
 		workflows:           workflows,
 		runbooks:            runbooks,
@@ -382,6 +385,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/features/summary", s.handleFeatureSummary(baseDir))
 	mux.HandleFunc("/v1/tasks/definitions", s.handleTaskDefinitions)
 	mux.HandleFunc("/v1/tasks/definitions/", s.handleTaskDefinitionByID)
+	mux.HandleFunc("/v1/wizards", s.handleWorkflowWizards)
+	mux.HandleFunc("/v1/wizards/", s.handleWorkflowWizardAction)
 	mux.HandleFunc("/v1/tasks/plans", s.handleTaskPlans)
 	mux.HandleFunc("/v1/tasks/plans/", s.handleTaskPlanAction)
 	mux.HandleFunc("/v1/tasks/executions", s.handleTaskExecutions)
@@ -2186,6 +2191,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/tasks/definitions",
 			"POST /v1/tasks/definitions",
 			"GET /v1/tasks/definitions/{id}",
+			"GET /v1/wizards",
+			"GET /v1/wizards/{id}",
+			"POST /v1/wizards/{id}/launch",
 			"GET /v1/tasks/plans",
 			"POST /v1/tasks/plans",
 			"GET /v1/tasks/plans/{id}",

@@ -101,6 +101,7 @@ Saved views with share tokens and dashboard pinning are available via `/v1/views
 Bulk operation staging with preview/conflict detection/confirmed execution is available via `/v1/bulk/preview` and `/v1/bulk/execute`.
 Persona-based home views for SRE/platform/release/service-owner workflows are available via `GET /v1/views/home`.
 Workload-centric operational views grouped by service/application are available via `GET /v1/views/workloads`.
+Guided workflow wizards for bootstrap, rollout, rollback, and incident remediation are available via `/v1/wizards` and `/v1/wizards/{id}/launch`.
 Fleet node views with cursor-based incremental loading plus `compact`, `virtualized`, and `low-bandwidth` render modes are available via `GET /v1/fleet/nodes`.
 Fleet health SLO/error-budget views are available via `GET /v1/fleet/health`.
 Universal command-palette search across hosts, services, runs, policies, and modules is available via `GET /v1/search`.
