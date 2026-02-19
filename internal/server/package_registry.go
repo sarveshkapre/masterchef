@@ -191,3 +191,55 @@ func (s *Server) handlePackagePublicationCheck(w http.ResponseWriter, r *http.Re
 	}
 	writeJSON(w, code, result)
 }
+
+func (s *Server) handlePackageMaintainerHealth(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.packageRegistry.ListMaintainerHealth())
+	case http.MethodPost:
+		var req control.MaintainerHealthInput
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		report, err := s.packageRegistry.UpsertMaintainerHealth(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		s.recordEvent(control.Event{
+			Type:    "packages.maintainer.health.updated",
+			Message: "maintainer health report updated",
+			Fields: map[string]any{
+				"maintainer":           report.Maintainer,
+				"score":                report.Score,
+				"tier":                 report.Tier,
+				"test_pass_rate":       report.TestPassRate,
+				"issue_latency_hours":  report.IssueLatencyHours,
+				"release_cadence_days": report.ReleaseCadenceDays,
+			},
+		}, true)
+		writeJSON(w, http.StatusCreated, report)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handlePackageMaintainerHealthAction(w http.ResponseWriter, r *http.Request) {
+	parts := splitPath(r.URL.Path)
+	// /v1/packages/maintainers/health/{maintainer}
+	if len(parts) != 5 || parts[0] != "v1" || parts[1] != "packages" || parts[2] != "maintainers" || parts[3] != "health" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	item, ok := s.packageRegistry.GetMaintainerHealth(parts[4])
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "maintainer health report not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}

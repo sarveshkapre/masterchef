@@ -174,6 +174,7 @@ Offline registry mirroring and synchronization workflows are available via `/v1/
 FIPS-compatible cryptography mode controls and validation are available via `/v1/security/crypto/fips-mode` and `/v1/security/crypto/fips/validate`.
 Masterless execution mode with local state/pillar rendering is available via `/v1/execution/masterless/mode` and `POST /v1/execution/masterless/render`.
 Public plugin/module certification pipelines and publication quality gates are available via `/v1/packages/certify`, `/v1/packages/certification-policy`, and `POST /v1/packages/publication/check`.
+Maintainer health metrics (test pass rate, issue latency, release cadence, open security issues) are available via `/v1/packages/maintainers/health`.
 Control-plane canary upgrade workflow with automatic rollback on regression is available via `/v1/control/canary-upgrades`.
 gRPC automation API is available from `masterchef serve -grpc-addr :9090` with methods `/masterchef.v1.Control/Health` and `/masterchef.v1.Control/ListRuns`.
 Agentless WinRM execution is supported in the executor for command/file resources (including deterministic localhost shim mode for CI/test paths).

@@ -109,6 +109,25 @@ type PackagePublicationCheckResult struct {
 	CheckedAt         time.Time `json:"checked_at"`
 }
 
+type MaintainerHealthInput struct {
+	Maintainer         string  `json:"maintainer"`
+	TestPassRate       float64 `json:"test_pass_rate"`
+	IssueLatencyHours  float64 `json:"issue_latency_hours"`
+	ReleaseCadenceDays float64 `json:"release_cadence_days"`
+	OpenSecurityIssues int     `json:"open_security_issues"`
+}
+
+type MaintainerHealthReport struct {
+	Maintainer         string    `json:"maintainer"`
+	TestPassRate       float64   `json:"test_pass_rate"`
+	IssueLatencyHours  float64   `json:"issue_latency_hours"`
+	ReleaseCadenceDays float64   `json:"release_cadence_days"`
+	OpenSecurityIssues int       `json:"open_security_issues"`
+	Score              int       `json:"score"`
+	Tier               string    `json:"tier"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
 type PackageRegistryStore struct {
 	mu             sync.RWMutex
 	nextID         int64
@@ -117,6 +136,7 @@ type PackageRegistryStore struct {
 	policy         PackageSigningPolicy
 	certPolicy     PackageCertificationPolicy
 	certifications map[string]*PackageCertificationReport
+	maintainers    map[string]*MaintainerHealthReport
 }
 
 func NewPackageRegistryStore() *PackageRegistryStore {
@@ -136,6 +156,7 @@ func NewPackageRegistryStore() *PackageRegistryStore {
 			UpdatedAt:          time.Now().UTC(),
 		},
 		certifications: map[string]*PackageCertificationReport{},
+		maintainers:    map[string]*MaintainerHealthReport{},
 	}
 }
 
@@ -446,6 +467,74 @@ func (s *PackageRegistryStore) PublicationGateCheck(in PackagePublicationCheckIn
 	}
 	result.Allowed = len(result.Reasons) == 0
 	return result
+}
+
+func (s *PackageRegistryStore) UpsertMaintainerHealth(in MaintainerHealthInput) (MaintainerHealthReport, error) {
+	maintainer := strings.ToLower(strings.TrimSpace(in.Maintainer))
+	if maintainer == "" {
+		return MaintainerHealthReport{}, errors.New("maintainer is required")
+	}
+	if in.TestPassRate < 0 || in.TestPassRate > 1 {
+		return MaintainerHealthReport{}, errors.New("test_pass_rate must be between 0 and 1")
+	}
+	if in.IssueLatencyHours < 0 || in.ReleaseCadenceDays < 0 {
+		return MaintainerHealthReport{}, errors.New("issue_latency_hours and release_cadence_days must be non-negative")
+	}
+	if in.OpenSecurityIssues < 0 {
+		return MaintainerHealthReport{}, errors.New("open_security_issues cannot be negative")
+	}
+
+	score := 100
+	score -= maxInt(0, int((1.0-in.TestPassRate)*100))
+	score -= maxInt(0, int(in.IssueLatencyHours/12))
+	score -= maxInt(0, int(in.ReleaseCadenceDays/14))
+	score -= in.OpenSecurityIssues * 10
+	if score < 0 {
+		score = 0
+	}
+	tier := "bronze"
+	switch {
+	case score >= 95:
+		tier = "gold"
+	case score >= 85:
+		tier = "silver"
+	}
+
+	report := MaintainerHealthReport{
+		Maintainer:         maintainer,
+		TestPassRate:       in.TestPassRate,
+		IssueLatencyHours:  in.IssueLatencyHours,
+		ReleaseCadenceDays: in.ReleaseCadenceDays,
+		OpenSecurityIssues: in.OpenSecurityIssues,
+		Score:              score,
+		Tier:               tier,
+		UpdatedAt:          time.Now().UTC(),
+	}
+	s.mu.Lock()
+	s.maintainers[maintainer] = &report
+	s.mu.Unlock()
+	return report, nil
+}
+
+func (s *PackageRegistryStore) ListMaintainerHealth() []MaintainerHealthReport {
+	s.mu.RLock()
+	out := make([]MaintainerHealthReport, 0, len(s.maintainers))
+	for _, item := range s.maintainers {
+		out = append(out, *item)
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	return out
+}
+
+func (s *PackageRegistryStore) GetMaintainerHealth(maintainer string) (MaintainerHealthReport, bool) {
+	s.mu.RLock()
+	item, ok := s.maintainers[strings.ToLower(strings.TrimSpace(maintainer))]
+	s.mu.RUnlock()
+	if !ok {
+		return MaintainerHealthReport{}, false
+	}
+	return *item, true
 }
 
 func clonePackageArtifact(in PackageArtifact) PackageArtifact {

@@ -112,3 +112,31 @@ func TestPackageRegistryCertificationAndPublicationGates(t *testing.T) {
 		t.Fatalf("expected public publication to pass, got %+v", pubGate)
 	}
 }
+
+func TestPackageRegistryMaintainerHealthMetrics(t *testing.T) {
+	store := NewPackageRegistryStore()
+	report, err := store.UpsertMaintainerHealth(MaintainerHealthInput{
+		Maintainer:         "platform-team",
+		TestPassRate:       0.99,
+		IssueLatencyHours:  4,
+		ReleaseCadenceDays: 7,
+		OpenSecurityIssues: 0,
+	})
+	if err != nil {
+		t.Fatalf("upsert maintainer health failed: %v", err)
+	}
+	if report.Score <= 0 || report.Tier != "gold" {
+		t.Fatalf("unexpected maintainer report %+v", report)
+	}
+	list := store.ListMaintainerHealth()
+	if len(list) != 1 {
+		t.Fatalf("expected one maintainer health report")
+	}
+	got, ok := store.GetMaintainerHealth("platform-team")
+	if !ok {
+		t.Fatalf("expected maintainer lookup to succeed")
+	}
+	if got.Maintainer != "platform-team" {
+		t.Fatalf("unexpected maintainer lookup %+v", got)
+	}
+}

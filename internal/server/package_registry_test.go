@@ -105,4 +105,19 @@ resources:
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected public gate failure without sbom/attestation digests: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	health := []byte(`{"maintainer":"platform-team","test_pass_rate":0.99,"issue_latency_hours":4,"release_cadence_days":7,"open_security_issues":0}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/packages/maintainers/health", bytes.NewReader(health))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("maintainer health upsert failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/packages/maintainers/health/platform-team", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("maintainer health get failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }
