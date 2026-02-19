@@ -57,6 +57,7 @@ type Server struct {
 	nodes              *control.NodeLifecycleStore
 	gitopsPreviews     *control.GitOpsPreviewStore
 	gitopsPromotions   *control.GitOpsPromotionStore
+	gitopsEnvironments *control.GitOpsEnvironmentStore
 	objectStore        storage.ObjectStore
 	events             *control.EventStore
 	runCancel          context.CancelFunc
@@ -111,6 +112,7 @@ func New(addr, baseDir string) *Server {
 	nodes := control.NewNodeLifecycleStore()
 	gitopsPreviews := control.NewGitOpsPreviewStore()
 	gitopsPromotions := control.NewGitOpsPromotionStore()
+	gitopsEnvironments := control.NewGitOpsEnvironmentStore()
 	objectStore, err := storage.NewObjectStoreFromEnv(baseDir)
 	if err != nil {
 		// Fallback to local filesystem object store under workspace state.
@@ -157,6 +159,7 @@ func New(addr, baseDir string) *Server {
 		nodes:              nodes,
 		gitopsPreviews:     gitopsPreviews,
 		gitopsPromotions:   gitopsPromotions,
+		gitopsEnvironments: gitopsEnvironments,
 		objectStore:        objectStore,
 		events:             events,
 		metrics:            map[string]int64{},
@@ -205,6 +208,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/enroll", s.handleRuntimeEnrollAlias)
 	mux.HandleFunc("/v1/gitops/previews", s.handleGitOpsPreviews(baseDir))
 	mux.HandleFunc("/v1/gitops/previews/", s.handleGitOpsPreviewAction)
+	mux.HandleFunc("/v1/gitops/environments", s.handleGitOpsEnvironments(baseDir))
+	mux.HandleFunc("/v1/gitops/environments/materialize", s.handleGitOpsEnvironmentMaterializeAlias(baseDir))
+	mux.HandleFunc("/v1/gitops/environments/", s.handleGitOpsEnvironmentAction)
 	mux.HandleFunc("/v1/gitops/promotions", s.handleGitOpsPromotions)
 	mux.HandleFunc("/v1/gitops/promotions/", s.handleGitOpsPromotionAction)
 	mux.HandleFunc("/v1/gitops/reconcile", s.handleGitOpsReconcile(baseDir))
@@ -1781,6 +1787,10 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/gitops/previews/{id}",
 			"POST /v1/gitops/previews/{id}/promote",
 			"POST /v1/gitops/previews/{id}/close",
+			"GET /v1/gitops/environments",
+			"POST /v1/gitops/environments",
+			"POST /v1/gitops/environments/materialize",
+			"GET /v1/gitops/environments/{name}",
 			"GET /v1/gitops/promotions",
 			"POST /v1/gitops/promotions",
 			"GET /v1/gitops/promotions/{id}",
