@@ -19,6 +19,7 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg = expandConfigResources(cfg)
 	if err := Validate(cfg); err != nil {
 		return nil, err
 	}
@@ -220,6 +221,14 @@ func cloneResource(in Resource) Resource {
 	out.Subscribe = append([]string{}, in.Subscribe...)
 	out.NotifyHandlers = append([]string{}, in.NotifyHandlers...)
 	out.Tags = append([]string{}, in.Tags...)
+	if len(in.Matrix) > 0 {
+		out.Matrix = make(map[string][]string, len(in.Matrix))
+		for k, values := range in.Matrix {
+			out.Matrix[k] = append([]string{}, values...)
+		}
+	} else {
+		out.Matrix = map[string][]string{}
+	}
 	return out
 }
 

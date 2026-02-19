@@ -444,3 +444,39 @@ func TestValidate_HandlerGraphRelationsRejected(t *testing.T) {
 		t.Fatalf("expected handler relation validation error")
 	}
 }
+
+func TestValidate_MatrixNormalizationAndValidation(t *testing.T) {
+	cfg := &Config{
+		Version: "v0",
+		Inventory: Inventory{
+			Hosts: []Host{{Name: "localhost", Transport: "local"}},
+		},
+		Resources: []Resource{
+			{
+				ID:      "m1",
+				Type:    "command",
+				Host:    "localhost",
+				Command: "echo hi",
+				Matrix: map[string][]string{
+					" env ": []string{"prod", "prod", " staging "},
+				},
+			},
+		},
+	}
+	if err := Validate(cfg); err != nil {
+		t.Fatalf("expected matrix to normalize and validate, got %v", err)
+	}
+	values := cfg.Resources[0].Matrix["env"]
+	if len(values) != 2 || values[0] != "prod" || values[1] != "staging" {
+		t.Fatalf("expected normalized matrix values, got %#v", cfg.Resources[0].Matrix)
+	}
+
+	cfg.Resources[0].Matrix = map[string][]string{"": []string{"x"}}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected empty matrix key validation error")
+	}
+	cfg.Resources[0].Matrix = map[string][]string{"region": []string{" ", ""}}
+	if err := Validate(cfg); err == nil {
+		t.Fatalf("expected empty matrix values validation error")
+	}
+}

@@ -148,6 +148,10 @@ func Validate(cfg *Config) error {
 				return fmt.Errorf("resource %q delegate_to references unknown host %q", r.ID, r.DelegateTo)
 			}
 		}
+		r.When = strings.TrimSpace(r.When)
+		if err := normalizeMatrix(&r.Matrix, fmt.Sprintf("resource %q", r.ID)); err != nil {
+			return err
+		}
 		r.BecomeUser = strings.TrimSpace(r.BecomeUser)
 		if r.BecomeUser != "" {
 			r.Become = true
@@ -221,6 +225,10 @@ func Validate(cfg *Config) error {
 			if _, ok := hostSet[h.DelegateTo]; !ok {
 				return fmt.Errorf("handler %q delegate_to references unknown host %q", h.ID, h.DelegateTo)
 			}
+		}
+		h.When = strings.TrimSpace(h.When)
+		if err := normalizeMatrix(&h.Matrix, fmt.Sprintf("handler %q", h.ID)); err != nil {
+			return err
 		}
 		h.BecomeUser = strings.TrimSpace(h.BecomeUser)
 		if h.BecomeUser != "" {
@@ -312,5 +320,38 @@ func Validate(cfg *Config) error {
 		}
 		return fmt.Errorf("resource %q refresh_only requires subscribe dependencies or upstream notify references", r.ID)
 	}
+	return nil
+}
+
+func normalizeMatrix(matrix *map[string][]string, owner string) error {
+	if matrix == nil || len(*matrix) == 0 {
+		return nil
+	}
+	out := map[string][]string{}
+	for key, values := range *matrix {
+		name := strings.TrimSpace(key)
+		if name == "" {
+			return fmt.Errorf("%s matrix contains an empty key", owner)
+		}
+		seen := map[string]struct{}{}
+		clean := make([]string, 0, len(values))
+		for _, value := range values {
+			item := strings.TrimSpace(value)
+			if item == "" {
+				continue
+			}
+			if _, ok := seen[item]; ok {
+				continue
+			}
+			seen[item] = struct{}{}
+			clean = append(clean, item)
+		}
+		if len(clean) == 0 {
+			return fmt.Errorf("%s matrix key %q must include at least one non-empty value", owner, name)
+		}
+		sort.Strings(clean)
+		out[name] = clean
+	}
+	*matrix = out
 	return nil
 }

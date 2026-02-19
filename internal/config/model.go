@@ -35,17 +35,19 @@ type Host struct {
 // Resource is a compact typed resource model for v0.
 // Type-specific fields are optional and validated by Validate.
 type Resource struct {
-	ID             string   `json:"id" yaml:"id"`
-	Type           string   `json:"type" yaml:"type"` // file, command
-	Host           string   `json:"host" yaml:"host"`
-	DelegateTo     string   `json:"delegate_to,omitempty" yaml:"delegate_to,omitempty"`
-	DependsOn      []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	Require        []string `json:"require,omitempty" yaml:"require,omitempty"`
-	Before         []string `json:"before,omitempty" yaml:"before,omitempty"`
-	Notify         []string `json:"notify,omitempty" yaml:"notify,omitempty"`
-	Subscribe      []string `json:"subscribe,omitempty" yaml:"subscribe,omitempty"`
-	NotifyHandlers []string `json:"notify_handlers,omitempty" yaml:"notify_handlers,omitempty"`
-	Tags           []string `json:"tags,omitempty" yaml:"tags,omitempty"`
+	ID             string              `json:"id" yaml:"id"`
+	Type           string              `json:"type" yaml:"type"` // file, command
+	Host           string              `json:"host" yaml:"host"`
+	DelegateTo     string              `json:"delegate_to,omitempty" yaml:"delegate_to,omitempty"`
+	DependsOn      []string            `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	Require        []string            `json:"require,omitempty" yaml:"require,omitempty"`
+	Before         []string            `json:"before,omitempty" yaml:"before,omitempty"`
+	Notify         []string            `json:"notify,omitempty" yaml:"notify,omitempty"`
+	Subscribe      []string            `json:"subscribe,omitempty" yaml:"subscribe,omitempty"`
+	NotifyHandlers []string            `json:"notify_handlers,omitempty" yaml:"notify_handlers,omitempty"`
+	When           string              `json:"when,omitempty" yaml:"when,omitempty"`
+	Matrix         map[string][]string `json:"matrix,omitempty" yaml:"matrix,omitempty"`
+	Tags           []string            `json:"tags,omitempty" yaml:"tags,omitempty"`
 
 	// file
 	Path    string `json:"path,omitempty" yaml:"path,omitempty"`
