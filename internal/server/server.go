@@ -1020,6 +1020,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/run-leases/release", s.handleRunLeaseRelease)
 	mux.HandleFunc("/v1/control/run-leases/recover", s.handleRunLeaseRecover)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
+	mux.HandleFunc("/v1/control/recover-stuck/history", s.handleRecoverStuckHistory)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/workflows", s.handleWorkflows)
@@ -3231,6 +3232,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/run-leases/release",
 			"POST /v1/control/run-leases/recover",
 			"POST /v1/control/recover-stuck",
+			"GET /v1/control/recover-stuck/history",
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
 			"GET /v1/runs/compare",
@@ -4308,6 +4310,20 @@ func (s *Server) handleHandoff(w http.ResponseWriter, r *http.Request) {
 	if len(activeMaintenance) > 0 {
 		blocked = append(blocked, "scheduled dispatch suppressed by maintenance targets")
 	}
+	stuckRecoveries := s.events.Query(control.EventQuery{
+		Since:      time.Now().UTC().Add(-24 * time.Hour),
+		TypePrefix: "control.recover_stuck.",
+		Limit:      20,
+		Desc:       true,
+	})
+	recoveredJobs := 0
+	for _, evt := range stuckRecoveries {
+		recoveredJobs += eventFieldInt(evt.Fields, "recovered_count")
+	}
+	if recoveredJobs > 0 {
+		risks = append(risks, "Stuck-run recoveries occurred recently; verify root-cause before further rollout.")
+		blocked = append(blocked, "review recovered stuck runs before high-risk apply")
+	}
 	if len(risks) == 0 {
 		risks = append(risks, "No critical control-plane risks detected at handoff time.")
 	}
@@ -4320,9 +4336,10 @@ func (s *Server) handleHandoff(w http.ResponseWriter, r *http.Request) {
 		"maintenance":           maintenance,
 		"canary_health":         canary,
 		"active_rollouts":       activeRollouts,
+		"stuck_run_recoveries":  stuckRecoveries,
 		"blocked_actions":       blocked,
 		"risks":                 risks,
-		"handoff_checklist":     []string{"review blocked actions", "review active rollouts", "acknowledge degraded canaries", "confirm queue mode before handoff"},
+		"handoff_checklist":     []string{"review blocked actions", "review active rollouts", "inspect stuck-run recoveries", "acknowledge degraded canaries", "confirm queue mode before handoff"},
 		"next_operator_actions": []string{"clear stale freeze/emergency flags if no longer needed", "resume queue if paused intentionally", "triage unhealthy canaries before major rollout"},
 	})
 }
@@ -4768,9 +4785,67 @@ func (s *Server) handleRecoverStuck(w http.ResponseWriter, r *http.Request) {
 		req.MaxAgeSeconds = 300
 	}
 	recovered := s.queue.RecoverStuckJobs(time.Duration(req.MaxAgeSeconds) * time.Second)
+	jobIDs := make([]string, 0, len(recovered))
+	for _, job := range recovered {
+		jobIDs = append(jobIDs, job.ID)
+	}
+	typ := "control.recover_stuck.noop"
+	msg := "stuck-run recovery check completed with no recovered jobs"
+	if len(recovered) > 0 {
+		typ = "control.recover_stuck.recovered"
+		msg = "stuck-run recovery completed with recovered jobs"
+	}
+	s.recordEvent(control.Event{
+		Type:    typ,
+		Message: msg,
+		Fields: map[string]any{
+			"recovered_count": len(recovered),
+			"max_age_seconds": req.MaxAgeSeconds,
+			"job_ids":         jobIDs,
+		},
+	}, true)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"recovered_count": len(recovered),
 		"jobs":            recovered,
+	})
+}
+
+func (s *Server) handleRecoverStuckHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	hours := parseIntQuery(r, "hours", 24)
+	if hours <= 0 {
+		hours = 24
+	}
+	if hours > 24*30 {
+		hours = 24 * 30
+	}
+	limit := parseIntQuery(r, "limit", 100)
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
+	items := s.events.Query(control.EventQuery{
+		Since:      since,
+		TypePrefix: "control.recover_stuck.",
+		Limit:      limit,
+		Desc:       true,
+	})
+	recoveredTotal := 0
+	for _, evt := range items {
+		recoveredTotal += eventFieldInt(evt.Fields, "recovered_count")
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"window_hours":    hours,
+		"since":           since,
+		"count":           len(items),
+		"recovered_total": recoveredTotal,
+		"items":           items,
 	})
 }
 
@@ -5095,6 +5170,28 @@ func readIntEnv(name string, defaultValue int) int {
 		return defaultValue
 	}
 	return n
+}
+
+func eventFieldInt(fields map[string]any, key string) int {
+	if len(fields) == 0 {
+		return 0
+	}
+	v, ok := fields[key]
+	if !ok {
+		return 0
+	}
+	switch t := v.(type) {
+	case int:
+		return t
+	case int64:
+		return int(t)
+	case float64:
+		return int(t)
+	case float32:
+		return int(t)
+	default:
+		return 0
+	}
 }
 
 func boolToInt64(v bool) int64 {

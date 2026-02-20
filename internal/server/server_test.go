@@ -588,6 +588,82 @@ resources:
 	}
 }
 
+func TestRecoverStuckHistoryAndHandoffSignals(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := filepath.Join(tmp, "c.yaml")
+	features := filepath.Join(tmp, "features.md")
+
+	if err := os.WriteFile(cfg, []byte(`version: v0
+inventory:
+  hosts:
+    - name: localhost
+      transport: local
+resources:
+  - id: f1
+    type: file
+    host: localhost
+    path: `+filepath.Join(tmp, "x-recover-history.txt")+`
+    content: "ok"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(features, []byte(`# Features
+- foo
+## Competitor Feature Traceability Matrix (Strict 1:1)
+### Chef -> Masterchef
+| ID | Chef Feature | Masterchef 1:1 Mapping |
+|---|---|---|
+| CHEF-1 | X | foo |
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(":0", tmp)
+	t.Cleanup(func() {
+		_ = s.Shutdown(context.Background())
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/control/recover-stuck", bytes.NewReader([]byte(`{"max_age_seconds":1}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("recover-stuck invocation failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/recover-stuck/history?hours=1&limit=10", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("recover-stuck history failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var hist struct {
+		Count int `json:"count"`
+		Items []struct {
+			Type string `json:"type"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &hist); err != nil {
+		t.Fatalf("decode recover-stuck history failed: %v body=%s", err, rr.Body.String())
+	}
+	if hist.Count == 0 || len(hist.Items) == 0 {
+		t.Fatalf("expected recover-stuck history items, got %+v", hist)
+	}
+	if !strings.HasPrefix(hist.Items[0].Type, "control.recover_stuck.") {
+		t.Fatalf("expected recover-stuck history event type, got %+v", hist.Items[0])
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/handoff", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("handoff endpoint failed after recover-stuck: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"stuck_run_recoveries"`) || !strings.Contains(body, `control.recover_stuck.`) {
+		t.Fatalf("expected stuck-run recovery context in handoff output: %s", body)
+	}
+}
+
 func TestTemplateLaunchSurveyValidation(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := filepath.Join(tmp, "c.yaml")

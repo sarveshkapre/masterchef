@@ -85,6 +85,7 @@ API contract governance includes deprecation lifecycle checks plus an upgrade-as
 Schema evolution controls enforce migration plans and stepwise compatibility for control-plane state model upgrades.
 Plan snapshot baselines are available via `masterchef plan -snapshot <file>` to detect deterministic plan regressions.
 On-call handoff packages are available via `GET /v1/control/handoff` to summarize risks, active rollouts, and blocked actions.
+Stuck-run recovery attempts and operator-handoff context are available via `POST /v1/control/recover-stuck`, `GET /v1/control/recover-stuck/history`, and the `stuck_run_recoveries` section in `GET /v1/control/handoff`.
 Deployment-window change digests are available via `GET /v1/runs/digest` with latent-risk scoring.
 Time-travel run timelines (before/during/after change windows) are available via `GET /v1/runs/{id}/timeline`.
 One-click retry and safe rollback actions from run failure context are available via `POST /v1/runs/{id}/retry` and `POST /v1/runs/{id}/rollback`.
