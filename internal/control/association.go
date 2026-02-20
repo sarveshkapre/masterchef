@@ -126,6 +126,16 @@ func (s *AssociationStore) List() []Association {
 	return out
 }
 
+func (s *AssociationStore) Get(id string) (Association, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.items[strings.TrimSpace(id)]
+	if !ok {
+		return Association{}, errors.New("association not found")
+	}
+	return cloneAssociation(*item), nil
+}
+
 func (s *AssociationStore) Revisions(id string) ([]AssociationRevision, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

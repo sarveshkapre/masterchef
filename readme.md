@@ -255,6 +255,7 @@ Cross-platform package manager abstraction for `apt`, `yum/dnf`, `zypper`, `brew
 SELinux/AppArmor policy and context management resources are available via `/v1/security/host-profiles` and `POST /v1/security/host-profiles/evaluate`.
 Pythonless managed-node execution path using portable remote runners is available via `/v1/execution/portable-runners` and `POST /v1/execution/portable-runners/select`.
 Native scheduler-first recurring execution planning (systemd timers, cron, Windows Task Scheduler, with embedded fallback) is available via `/v1/execution/native-schedulers` and `POST /v1/execution/native-schedulers/select`, and association creation stores the selected scheduler backend.
+Association execution outputs can be queried and exported to object storage for long-term evidence retention via `GET /v1/associations/{id}/executions` and `POST /v1/associations/{id}/export`.
 Systemd unit management and drop-in override resources are available via `/v1/execution/systemd/units` and `POST /v1/execution/systemd/units/render`.
 Reboot orchestration with dependency-safe wave planning is available via `/v1/execution/reboot/policies` and `POST /v1/execution/reboot/plan`.
 Patch management for scheduled OS update windows is available via `/v1/execution/patch/policies` and `POST /v1/execution/patch/plan`.

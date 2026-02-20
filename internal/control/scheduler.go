@@ -116,6 +116,16 @@ func (s *Scheduler) List() []Schedule {
 	return out
 }
 
+func (s *Scheduler) Get(id string) (Schedule, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.schedules[strings.TrimSpace(id)]
+	if !ok {
+		return Schedule{}, false
+	}
+	return *cloneSchedule(item), true
+}
+
 func (s *Scheduler) Disable(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

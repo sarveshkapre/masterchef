@@ -39,6 +39,7 @@ type Server struct {
 	workflows              *control.WorkflowStore
 	runbooks               *control.RunbookStore
 	assocs                 *control.AssociationStore
+	associationExecutions  *control.AssociationExecutionStore
 	commands               *control.CommandIngestStore
 	adhocCommands          *control.AdHocCommandStore
 	convergeTriggers       *control.ConvergeTriggerStore
@@ -207,6 +208,7 @@ func New(addr, baseDir string) *Server {
 	workflows := control.NewWorkflowStore(queue, templates)
 	runbooks := control.NewRunbookStore()
 	assocs := control.NewAssociationStore(scheduler)
+	associationExecutions := control.NewAssociationExecutionStore(5000)
 	commands := control.NewCommandIngestStore(5000)
 	adhocCommands := control.NewAdHocCommandStore(5000)
 	convergeTriggers := control.NewConvergeTriggerStore(5000)
@@ -367,6 +369,7 @@ func New(addr, baseDir string) *Server {
 		workflows:              workflows,
 		runbooks:               runbooks,
 		assocs:                 assocs,
+		associationExecutions:  associationExecutions,
 		commands:               commands,
 		adhocCommands:          adhocCommands,
 		convergeTriggers:       convergeTriggers,
@@ -532,6 +535,14 @@ func New(addr, baseDir string) *Server {
 				"priority": job.Priority,
 			},
 		}, true)
+		if s.associationExecutions != nil {
+			for _, assoc := range s.assocs.List() {
+				if strings.TrimSpace(assoc.ConfigPath) != strings.TrimSpace(job.ConfigPath) {
+					continue
+				}
+				s.associationExecutions.RecordJob(assoc.ID, job)
+			}
+		}
 		s.observeQueueBacklog()
 	})
 	s.observeQueueBacklog()
@@ -3282,6 +3293,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/associations/{id}/enable",
 			"POST /v1/associations/{id}/disable",
 			"POST /v1/associations/{id}/replay",
+			"GET /v1/associations/{id}/executions",
 			"POST /v1/associations/{id}/export",
 			"GET /v1/schedules",
 			"POST /v1/schedules",
@@ -4047,7 +4059,7 @@ func (s *Server) handleAssociations(baseDir string) http.HandlerFunc {
 }
 
 func (s *Server) handleAssociationAction(w http.ResponseWriter, r *http.Request) {
-	// /v1/associations/{id}/revisions|enable|disable|replay
+	// /v1/associations/{id}/revisions|enable|disable|replay|executions|export
 	parts := splitPath(r.URL.Path)
 	if len(parts) < 4 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid association action path"})
@@ -4068,6 +4080,27 @@ func (s *Server) handleAssociationAction(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		writeJSON(w, http.StatusOK, rev)
+	case "executions":
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		limit := parseIntQuery(r, "limit", 200)
+		if limit <= 0 {
+			limit = 200
+		}
+		if limit > 5000 {
+			limit = 5000
+		}
+		items := []control.AssociationExecutionRecord{}
+		if s.associationExecutions != nil {
+			items = s.associationExecutions.List(id, limit)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"association_id":    id,
+			"count":             len(items),
+			"execution_outputs": items,
+		})
 	case "enable", "disable":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -4112,9 +4145,38 @@ func (s *Server) handleAssociationAction(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
+		assoc, err := s.assocs.Get(id)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		executionOutputs := []control.AssociationExecutionRecord{}
+		if s.associationExecutions != nil {
+			executionOutputs = s.associationExecutions.List(id, 1000)
+		}
+		schedule := map[string]any{}
+		if snapshot, ok := s.scheduler.Get(assoc.ScheduleID); ok {
+			schedule = map[string]any{
+				"id":               snapshot.ID,
+				"config_path":      snapshot.ConfigPath,
+				"priority":         snapshot.Priority,
+				"execution_cost":   snapshot.ExecutionCost,
+				"host":             snapshot.Host,
+				"cluster":          snapshot.Cluster,
+				"environment":      snapshot.Environment,
+				"interval_seconds": int(snapshot.Interval.Seconds()),
+				"jitter_seconds":   int(snapshot.Jitter.Seconds()),
+				"enabled":          snapshot.Enabled,
+				"last_run_at":      snapshot.LastRunAt,
+				"next_run_at":      snapshot.NextRunAt,
+			}
+		}
 		payload, err := json.MarshalIndent(map[string]any{
-			"association_id": id,
-			"revisions":      revisions,
+			"association_id":    id,
+			"association":       assoc,
+			"schedule_snapshot": schedule,
+			"revisions":         revisions,
+			"execution_outputs": executionOutputs,
 		}, "", "  ")
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -4127,8 +4189,9 @@ func (s *Server) handleAssociationAction(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"association_id": id,
-			"object":         obj,
+			"association_id":          id,
+			"execution_outputs_count": len(executionOutputs),
+			"object":                  obj,
 		})
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown association action"})
