@@ -73,6 +73,7 @@ type Server struct {
 	flakes                 *control.FlakeQuarantineStore
 	scenarioTests          *control.ScenarioTestStore
 	providerConformance    *control.ProviderConformanceStore
+	providerFixtureHarness *control.ProviderFixtureHarnessStore
 	ephemeralTestEnv       *control.EphemeralEnvironmentStore
 	chaosExperiments       *control.ChaosExperimentStore
 	leakDetection          *control.LeakDetectionStore
@@ -242,6 +243,7 @@ func New(addr, baseDir string) *Server {
 	flakes := control.NewFlakeQuarantineStore()
 	scenarioTests := control.NewScenarioTestStore()
 	providerConformance := control.NewProviderConformanceStore()
+	providerFixtureHarness := control.NewProviderFixtureHarnessStore(3000)
 	ephemeralTestEnv := control.NewEphemeralEnvironmentStore()
 	chaosExperiments := control.NewChaosExperimentStore()
 	leakDetection := control.NewLeakDetectionStore()
@@ -403,6 +405,7 @@ func New(addr, baseDir string) *Server {
 		flakes:                 flakes,
 		scenarioTests:          scenarioTests,
 		providerConformance:    providerConformance,
+		providerFixtureHarness: providerFixtureHarness,
 		ephemeralTestEnv:       ephemeralTestEnv,
 		chaosExperiments:       chaosExperiments,
 		leakDetection:          leakDetection,
@@ -617,6 +620,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/providers/conformance/suites", s.handleProviderConformanceSuites)
 	mux.HandleFunc("/v1/providers/conformance/runs", s.handleProviderConformanceRuns)
 	mux.HandleFunc("/v1/providers/conformance/runs/", s.handleProviderConformanceRunAction)
+	mux.HandleFunc("/v1/providers/conformance/fixtures", s.handleProviderConformanceFixtures)
+	mux.HandleFunc("/v1/providers/conformance/fixtures/", s.handleProviderConformanceFixtureAction)
+	mux.HandleFunc("/v1/providers/conformance/harness/runs", s.handleProviderConformanceHarnessRuns)
+	mux.HandleFunc("/v1/providers/conformance/harness/runs/", s.handleProviderConformanceHarnessRunAction)
 	mux.HandleFunc("/v1/providers/catalog", s.handleProviderCatalog)
 	mux.HandleFunc("/v1/providers/catalog/validate", s.handleProviderCatalogValidate)
 	mux.HandleFunc("/v1/providers/sandbox/profiles", s.handleProviderSandboxProfiles)
@@ -3053,6 +3060,12 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/providers/conformance/runs",
 			"POST /v1/providers/conformance/runs",
 			"GET /v1/providers/conformance/runs/{id}",
+			"GET /v1/providers/conformance/fixtures",
+			"POST /v1/providers/conformance/fixtures",
+			"GET /v1/providers/conformance/fixtures/{id}",
+			"GET /v1/providers/conformance/harness/runs",
+			"POST /v1/providers/conformance/harness/runs",
+			"GET /v1/providers/conformance/harness/runs/{id}",
 			"GET /v1/providers/catalog",
 			"POST /v1/providers/catalog/validate",
 			"GET /v1/providers/sandbox/profiles",

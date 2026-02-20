@@ -144,6 +144,20 @@ func (s *ProviderConformanceStore) ListSuites() []ProviderConformanceSuite {
 	return out
 }
 
+func (s *ProviderConformanceStore) GetSuite(id string) (ProviderConformanceSuite, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ProviderConformanceSuite{}, errors.New("suite id is required")
+	}
+	s.mu.RLock()
+	item, ok := s.suites[id]
+	s.mu.RUnlock()
+	if !ok {
+		return ProviderConformanceSuite{}, errors.New("suite not found")
+	}
+	return cloneProviderConformanceSuite(*item), nil
+}
+
 func (s *ProviderConformanceStore) Run(in ProviderConformanceRunInput) (ProviderConformanceRun, error) {
 	suiteID := strings.TrimSpace(in.SuiteID)
 	if suiteID == "" {
