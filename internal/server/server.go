@@ -121,6 +121,7 @@ type Server struct {
 	gitopsPreviews         *control.GitOpsPreviewStore
 	gitopsPromotions       *control.GitOpsPromotionStore
 	gitopsEnvironments     *control.GitOpsEnvironmentStore
+	gitopsPRReviews        *control.GitOpsPRReviewStore
 	deployments            *control.DeploymentStore
 	rolloutControls        *control.RolloutControlStore
 	fileSync               *control.FileSyncStore
@@ -291,6 +292,7 @@ func New(addr, baseDir string) *Server {
 	gitopsPreviews := control.NewGitOpsPreviewStore()
 	gitopsPromotions := control.NewGitOpsPromotionStore()
 	gitopsEnvironments := control.NewGitOpsEnvironmentStore()
+	gitopsPRReviews := control.NewGitOpsPRReviewStore()
 	deployments := control.NewDeploymentStore()
 	rolloutControls := control.NewRolloutControlStore()
 	fileSync := control.NewFileSyncStore()
@@ -453,6 +455,7 @@ func New(addr, baseDir string) *Server {
 		gitopsPreviews:         gitopsPreviews,
 		gitopsPromotions:       gitopsPromotions,
 		gitopsEnvironments:     gitopsEnvironments,
+		gitopsPRReviews:        gitopsPRReviews,
 		deployments:            deployments,
 		rolloutControls:        rolloutControls,
 		fileSync:               fileSync,
@@ -845,6 +848,10 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/gitops/filesync/pipelines/", s.handleGitOpsFileSyncPipelineAction)
 	mux.HandleFunc("/v1/gitops/promotions", s.handleGitOpsPromotions)
 	mux.HandleFunc("/v1/gitops/promotions/", s.handleGitOpsPromotionAction)
+	mux.HandleFunc("/v1/gitops/pr-comments", s.handleGitOpsPRComments)
+	mux.HandleFunc("/v1/gitops/approval-gates", s.handleGitOpsApprovalGates)
+	mux.HandleFunc("/v1/gitops/approval-gates/evaluate", s.handleGitOpsApprovalGateEvaluate)
+	mux.HandleFunc("/v1/gitops/approval-gates/", s.handleGitOpsApprovalGateAction)
 	mux.HandleFunc("/v1/gitops/reconcile", s.handleGitOpsReconcile(baseDir))
 	mux.HandleFunc("/v1/gitops/plan-artifacts/sign", s.handleGitOpsPlanArtifactSign(baseDir))
 	mux.HandleFunc("/v1/gitops/plan-artifacts/verify", s.handleGitOpsPlanArtifactVerify(baseDir))
@@ -2883,6 +2890,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/gitops/promotions",
 			"GET /v1/gitops/promotions/{id}",
 			"POST /v1/gitops/promotions/{id}/advance",
+			"GET /v1/gitops/pr-comments",
+			"POST /v1/gitops/pr-comments",
+			"GET /v1/gitops/approval-gates",
+			"POST /v1/gitops/approval-gates",
+			"GET /v1/gitops/approval-gates/{id}",
+			"POST /v1/gitops/approval-gates/evaluate",
 			"POST /v1/gitops/reconcile",
 			"POST /v1/gitops/plan-artifacts/sign",
 			"POST /v1/gitops/plan-artifacts/verify",
