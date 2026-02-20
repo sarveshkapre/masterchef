@@ -1589,6 +1589,26 @@ resources:
 	}
 
 	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/health-probes", bytes.NewReader([]byte(`{"name":"payments-api","service":"payments","endpoint":"https://payments/healthz","enabled":true}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("create health probe target failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var target struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &target); err != nil {
+		t.Fatalf("decode health probe target failed: %v body=%s", err, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/health-probes/checks", bytes.NewReader([]byte(`{"target_id":"`+target.ID+`","status":"degraded","latency_ms":450,"message":"high latency"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("record health probe check failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/v1/incidents/view?workload=payments&hours=24", nil)
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -1608,6 +1628,15 @@ resources:
 		ObservabilityLinks []struct {
 			URL string `json:"url"`
 		} `json:"observability_links"`
+		DriftSignals struct {
+			Changed int `json:"changed"`
+		} `json:"drift_signals"`
+		HealthSignals struct {
+			MatchedTargets int `json:"matched_targets"`
+			Gate           struct {
+				Decision string `json:"decision"`
+			} `json:"gate"`
+		} `json:"health_signals"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode incident view failed: %v body=%s", err, rr.Body.String())
@@ -1620,6 +1649,12 @@ resources:
 	}
 	if len(resp.ObservabilityLinks) == 0 {
 		t.Fatalf("expected observability links in incident response")
+	}
+	if resp.DriftSignals.Changed == 0 {
+		t.Fatalf("expected drift signals in incident response: %+v", resp.DriftSignals)
+	}
+	if resp.HealthSignals.MatchedTargets == 0 || resp.HealthSignals.Gate.Decision != "block" {
+		t.Fatalf("expected correlated health gate signals in incident response: %+v", resp.HealthSignals)
 	}
 
 	rr = httptest.NewRecorder()

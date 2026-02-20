@@ -263,7 +263,7 @@ Virtual/exported resource discovery patterns are supported via `GET/POST /v1/res
 Per-node execution backend auto-selection is supported via `transport: auto` with host capability and metadata discovery (local/ssh/winrm).
 Connection plugin architecture is available via executor transport handlers with support for custom `plugin/*` transports.
 SSH bastion/jump-host and proxy-aware routing are supported via host fields `jump_address`, `jump_user`, `jump_port`, and `proxy_command`.
-Cross-signal incident views that correlate events, alerts, runs, canary status, and observability links are available via `GET /v1/incidents/view`.
+Cross-signal incident views that correlate events, alerts, runs, drift signals, health-probe gates, canary status, and observability links are available via `GET /v1/incidents/view`.
 Built-in action docs with inline endpoint examples are available via `GET /v1/docs/actions`.
 Documentation generator for modules/providers/policy APIs is available via `GET/POST /v1/docs/generate`.
 Executable documentation examples verification is available via `POST /v1/docs/examples/verify` and `masterchef docs verify-examples`.
