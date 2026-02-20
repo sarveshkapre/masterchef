@@ -3124,6 +3124,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/checklists",
 			"GET /v1/control/checklists/{id}",
 			"POST /v1/control/checklists/{id}/complete",
+			"POST /v1/control/checklists/{id}/gate",
 			"POST /v1/control/bootstrap/ha",
 			"POST /v1/control/capacity",
 			"GET /v1/control/capacity",
@@ -4382,7 +4383,7 @@ func (s *Server) handleChecklists(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleChecklistAction(w http.ResponseWriter, r *http.Request) {
-	// /v1/control/checklists/{id} or /v1/control/checklists/{id}/complete
+	// /v1/control/checklists/{id} or /v1/control/checklists/{id}/complete|gate
 	parts := splitPath(r.URL.Path)
 	if len(parts) < 4 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid checklist action path"})
@@ -4402,24 +4403,50 @@ func (s *Server) handleChecklistAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, item)
 		return
 	}
-	if len(parts) < 5 || parts[4] != "complete" || r.Method != http.MethodPost {
+	if len(parts) < 5 || r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	var req struct {
-		ItemID string `json:"item_id"`
-		Notes  string `json:"notes"`
+	switch parts[4] {
+	case "complete":
+		var req struct {
+			ItemID string `json:"item_id"`
+			Notes  string `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		item, err := s.checklists.CompleteItem(id, req.ItemID, req.Notes)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	case "gate":
+		var req struct {
+			Phase string `json:"phase"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		if strings.TrimSpace(req.Phase) == "" {
+			req.Phase = "pre"
+		}
+		result, err := s.checklists.EvaluateGate(id, req.Phase)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if !result.Allowed {
+			writeJSON(w, http.StatusConflict, result)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown checklist action"})
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
-		return
-	}
-	item, err := s.checklists.CompleteItem(id, req.ItemID, req.Notes)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
 }
 
 func (s *Server) handleCapacity(w http.ResponseWriter, r *http.Request) {

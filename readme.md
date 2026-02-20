@@ -100,7 +100,7 @@ Report processor plugin registry and post-run dispatch workflows are available v
 Change records and approval workflows are exposed via `/v1/change-records` to tie execution to ticketed change control.
 Ticketing system integrations for change records and approval sync are available via `/v1/change-records/ticket-integrations` and `/v1/change-records/tickets/sync`.
 Self-service runbook catalog with approval-gated launches is available via `/v1/runbooks`.
-Operator checklist mode for high-risk changes is available via `/v1/control/checklists`.
+Operator checklist mode for high-risk changes is available via `/v1/control/checklists`, with explicit pre/post verification gate enforcement via `POST /v1/control/checklists/{id}/gate`.
 Guided topology advisor for scaling from small teams to large fleets is available via `GET /v1/control/topology-advisor`.
 One-command bootstrap planning for single-region HA control planes is available via `POST /v1/control/bootstrap/ha`.
 Saved views with share tokens plus pin-to-dashboard widget workflows are available via `/v1/views` and `/v1/ui/dashboard/widgets`.

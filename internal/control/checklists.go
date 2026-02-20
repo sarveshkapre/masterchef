@@ -36,6 +36,16 @@ type ChecklistRun struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
+type ChecklistGateResult struct {
+	ChecklistID       string          `json:"checklist_id"`
+	Phase             string          `json:"phase"` // pre|post
+	Allowed           bool            `json:"allowed"`
+	Blockers          []ChecklistItem `json:"blockers,omitempty"`
+	CheckedRequired   int             `json:"checked_required"`
+	CompletedRequired int             `json:"completed_required"`
+	EvaluatedAt       time.Time       `json:"evaluated_at"`
+}
+
 type ChecklistStore struct {
 	mu         sync.RWMutex
 	nextID     int64
@@ -138,6 +148,47 @@ func (s *ChecklistStore) CompleteItem(checklistID, itemID, notes string) (Checkl
 	return cloneChecklist(*item), nil
 }
 
+func (s *ChecklistStore) EvaluateGate(checklistID, phase string) (ChecklistGateResult, error) {
+	s.mu.RLock()
+	item, ok := s.checklists[strings.TrimSpace(checklistID)]
+	if !ok {
+		s.mu.RUnlock()
+		return ChecklistGateResult{}, errors.New("checklist not found")
+	}
+	run := cloneChecklist(*item)
+	s.mu.RUnlock()
+
+	normalizedPhase := normalizeChecklistPhase(phase)
+	if normalizedPhase == "" {
+		return ChecklistGateResult{}, errors.New("phase must be pre or post")
+	}
+
+	blockers := make([]ChecklistItem, 0)
+	checkedRequired := 0
+	completedRequired := 0
+	for _, c := range run.Items {
+		if c.Phase != normalizedPhase || !c.Required {
+			continue
+		}
+		checkedRequired++
+		if c.Completed {
+			completedRequired++
+			continue
+		}
+		blockers = append(blockers, c)
+	}
+
+	return ChecklistGateResult{
+		ChecklistID:       run.ID,
+		Phase:             normalizedPhase,
+		Allowed:           len(blockers) == 0,
+		Blockers:          blockers,
+		CheckedRequired:   checkedRequired,
+		CompletedRequired: completedRequired,
+		EvaluatedAt:       time.Now().UTC(),
+	}, nil
+}
+
 func defaultChecklistItems(risk string) []ChecklistItem {
 	base := []ChecklistItem{
 		{
@@ -207,4 +258,15 @@ func copyContext(in map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+func normalizeChecklistPhase(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "pre":
+		return "pre"
+	case "post":
+		return "post"
+	default:
+		return ""
+	}
 }

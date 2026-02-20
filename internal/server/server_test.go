@@ -545,6 +545,7 @@ resources:
 		ID    string `json:"id"`
 		Items []struct {
 			ID       string `json:"id"`
+			Phase    string `json:"phase"`
 			Required bool   `json:"required"`
 		} `json:"items"`
 	}
@@ -556,21 +557,53 @@ resources:
 	}
 
 	firstRequired := ""
+	preRequired := make([]string, 0, len(created.Items))
 	for _, item := range created.Items {
-		if item.Required {
+		if !item.Required {
+			continue
+		}
+		if firstRequired == "" {
 			firstRequired = item.ID
-			break
+		}
+		if item.Phase == "pre" {
+			preRequired = append(preRequired, item.ID)
 		}
 	}
 	if firstRequired == "" {
 		t.Fatalf("expected required checklist item")
 	}
+	if len(preRequired) == 0 {
+		t.Fatalf("expected required pre checklist items")
+	}
 
 	rr = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/v1/control/checklists/"+created.ID+"/complete", bytes.NewReader([]byte(`{"item_id":"`+firstRequired+`","notes":"validated"}`)))
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/checklists/"+created.ID+"/gate", bytes.NewReader([]byte(`{"phase":"pre"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected pre gate conflict before completion: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	for _, itemID := range preRequired {
+		rr = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/v1/control/checklists/"+created.ID+"/complete", bytes.NewReader([]byte(`{"item_id":"`+itemID+`","notes":"validated"}`)))
+		s.httpServer.Handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("checklist complete failed: code=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/checklists/"+created.ID+"/gate", bytes.NewReader([]byte(`{"phase":"pre"}`)))
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("checklist complete failed: code=%d body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("expected pre gate to pass after pre checklist completion: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/checklists/"+created.ID+"/gate", bytes.NewReader([]byte(`{"phase":"post"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected post gate conflict before post checklist completion: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
 	rr = httptest.NewRecorder()
