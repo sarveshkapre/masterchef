@@ -60,6 +60,7 @@ type Server struct {
 	moduleScaffold         *control.ModuleScaffoldCatalog
 	migrations             *control.MigrationStore
 	migrationTooling       *control.MigrationToolingStore
+	compatibilityShims     *control.CompatibilityShimStore
 	solutionPacks          *control.SolutionPackCatalog
 	useCaseTemplates       *control.UseCaseTemplateCatalog
 	workspaceTemplates     *control.WorkspaceTemplateCatalog
@@ -223,6 +224,7 @@ func New(addr, baseDir string) *Server {
 	moduleScaffold := control.NewModuleScaffoldCatalog()
 	migrations := control.NewMigrationStore()
 	migrationTooling := control.NewMigrationToolingStore()
+	compatibilityShims := control.NewCompatibilityShimStore()
 	solutionPacks := control.NewSolutionPackCatalog()
 	useCaseTemplates := control.NewUseCaseTemplateCatalog()
 	workspaceTemplates := control.NewWorkspaceTemplateCatalog()
@@ -378,6 +380,7 @@ func New(addr, baseDir string) *Server {
 		moduleScaffold:         moduleScaffold,
 		migrations:             migrations,
 		migrationTooling:       migrationTooling,
+		compatibilityShims:     compatibilityShims,
 		solutionPacks:          solutionPacks,
 		useCaseTemplates:       useCaseTemplates,
 		workspaceTemplates:     workspaceTemplates,
@@ -636,6 +639,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/inventory/node-classifiers/", s.handleENCProviderAction)
 	mux.HandleFunc("/v1/compat/grains", s.handleCompatGrains)
 	mux.HandleFunc("/v1/compat/grains/query", s.handleCompatGrainsQuery)
+	mux.HandleFunc("/v1/compat/shims", s.handleCompatibilityShims)
+	mux.HandleFunc("/v1/compat/shims/", s.handleCompatibilityShimAction)
+	mux.HandleFunc("/v1/compat/shims/resolve", s.handleCompatibilityShimsResolve)
 	mux.HandleFunc("/v1/inventory/discovery-sources", s.handleDiscoverySources)
 	mux.HandleFunc("/v1/inventory/discovery-sources/sync", s.handleDiscoverySourceSync)
 	mux.HandleFunc("/v1/inventory/cloud-sync", s.handleCloudInventorySync)
@@ -2539,6 +2545,12 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/inventory/node-classifiers/classify",
 			"GET /v1/compat/grains",
 			"POST /v1/compat/grains/query",
+			"GET /v1/compat/shims",
+			"POST /v1/compat/shims",
+			"GET /v1/compat/shims/{id}",
+			"POST /v1/compat/shims/{id}/enable",
+			"POST /v1/compat/shims/{id}/disable",
+			"POST /v1/compat/shims/resolve",
 			"GET /v1/inventory/discovery-sources",
 			"POST /v1/inventory/discovery-sources",
 			"GET /v1/inventory/discovery-sources/{id}",
