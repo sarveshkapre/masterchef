@@ -71,3 +71,42 @@ func TestEventStore_SubscribeReceivesEvents(t *testing.T) {
 		t.Fatalf("timed out waiting for subscribed event")
 	}
 }
+
+func TestEventStore_VerifyIntegrity(t *testing.T) {
+	s := NewEventStore(5)
+	s.Append(Event{Type: "a", Message: "one"})
+	s.Append(Event{Type: "b", Message: "two"})
+	report := s.VerifyIntegrity()
+	if !report.Valid {
+		t.Fatalf("expected valid integrity report, got %+v", report)
+	}
+	if report.Checked != 2 || report.LastHash == "" {
+		t.Fatalf("unexpected integrity report details: %+v", report)
+	}
+}
+
+func TestEventStore_VerifyIntegrityDetectsTampering(t *testing.T) {
+	s := NewEventStore(5)
+	s.Append(Event{Type: "a", Message: "one"})
+	s.Append(Event{Type: "b", Message: "two"})
+	items := s.List()
+	if len(items) != 2 {
+		t.Fatalf("expected two events")
+	}
+	items[1].Message = "tampered"
+	s.Replace(items)
+	// Force tampering after re-seal by modifying hash.
+	items = s.List()
+	items[1].Hash = "sha256:tampered"
+	s.mu.Lock()
+	s.events = items
+	s.mu.Unlock()
+
+	report := s.VerifyIntegrity()
+	if report.Valid {
+		t.Fatalf("expected integrity verification to fail for tampered chain")
+	}
+	if len(report.Violations) == 0 {
+		t.Fatalf("expected integrity violations, got %+v", report)
+	}
+}
