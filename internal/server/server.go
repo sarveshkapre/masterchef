@@ -107,6 +107,7 @@ type Server struct {
 	varSources             *control.VariableSourceRegistry
 	discoveryInventory     *control.DiscoveryInventoryStore
 	inventoryDrift         *control.InventoryDriftStore
+	driftSLO               *control.DriftSLOStore
 	policyModes            *control.PolicyEnforcementStore
 	encProviders           *control.ENCProviderStore
 	nodeClassification     *control.NodeClassificationStore
@@ -272,6 +273,7 @@ func New(addr, baseDir string) *Server {
 	varSources := control.NewVariableSourceRegistry(baseDir)
 	discoveryInventory := control.NewDiscoveryInventoryStore()
 	inventoryDrift := control.NewInventoryDriftStore()
+	driftSLO := control.NewDriftSLOStore(2000)
 	policyModes := control.NewPolicyEnforcementStore()
 	encProviders := control.NewENCProviderStore()
 	nodeClassification := control.NewNodeClassificationStore()
@@ -429,6 +431,7 @@ func New(addr, baseDir string) *Server {
 		varSources:             varSources,
 		discoveryInventory:     discoveryInventory,
 		inventoryDrift:         inventoryDrift,
+		driftSLO:               driftSLO,
 		policyModes:            policyModes,
 		encProviders:           encProviders,
 		nodeClassification:     nodeClassification,
@@ -857,6 +860,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/drift/allowlists", s.handleDriftAllowlists)
 	mux.HandleFunc("/v1/drift/allowlists/", s.handleDriftAllowlistByID)
 	mux.HandleFunc("/v1/drift/remediate", s.handleDriftRemediation(baseDir))
+	mux.HandleFunc("/v1/drift/slo/policy", s.handleDriftSLOPolicy)
+	mux.HandleFunc("/v1/drift/slo/evaluate", s.handleDriftSLOEvaluate(baseDir))
+	mux.HandleFunc("/v1/drift/slo/evaluations", s.handleDriftSLOEvaluations)
 	mux.HandleFunc("/v1/activity", s.handleActivity)
 	mux.HandleFunc("/v1/activity/stream", s.handleActivityStream)
 	mux.HandleFunc("/v1/activity/integrity", s.handleActivityIntegrity)
@@ -2847,6 +2853,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/drift/allowlists",
 			"DELETE /v1/drift/allowlists/{id}",
 			"POST /v1/drift/remediate",
+			"GET /v1/drift/slo/policy",
+			"POST /v1/drift/slo/policy",
+			"POST /v1/drift/slo/evaluate",
+			"GET /v1/drift/slo/evaluations",
 			"GET /v1/metrics",
 			"GET /v1/features/summary",
 			"GET /v1/docs/actions",
