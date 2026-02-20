@@ -45,6 +45,13 @@ type RunbookStore struct {
 	runbooks map[string]*Runbook
 }
 
+type RunbookCatalogQuery struct {
+	Owner        string `json:"owner,omitempty"`
+	Tag          string `json:"tag,omitempty"`
+	MaxRiskLevel string `json:"max_risk_level,omitempty"` // low|medium|high
+	Limit        int    `json:"limit,omitempty"`
+}
+
 func NewRunbookStore() *RunbookStore {
 	return &RunbookStore{
 		runbooks: map[string]*Runbook{},
@@ -96,6 +103,45 @@ func (s *RunbookStore) List() []Runbook {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].CreatedAt.After(out[j].CreatedAt)
 	})
+	return out
+}
+
+func (s *RunbookStore) Catalog(query RunbookCatalogQuery) []Runbook {
+	owner := strings.ToLower(strings.TrimSpace(query.Owner))
+	tag := strings.ToLower(strings.TrimSpace(query.Tag))
+	maxRisk := normalizeRiskLevel(query.MaxRiskLevel)
+	limit := query.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+
+	s.mu.RLock()
+	out := make([]Runbook, 0, len(s.runbooks))
+	for _, rb := range s.runbooks {
+		if rb.Status != RunbookApproved {
+			continue
+		}
+		if owner != "" && strings.ToLower(strings.TrimSpace(rb.Owner)) != owner {
+			continue
+		}
+		if tag != "" && !containsRunbookTag(rb.Tags, tag) {
+			continue
+		}
+		if riskLevelRank(rb.RiskLevel) > riskLevelRank(maxRisk) {
+			continue
+		}
+		out = append(out, cloneRunbook(*rb))
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].UpdatedAt.After(out[j].UpdatedAt)
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
 	return out
 }
 
@@ -157,6 +203,17 @@ func normalizeRiskLevel(raw string) string {
 	}
 }
 
+func riskLevelRank(level string) int {
+	switch normalizeRiskLevel(level) {
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	default:
+		return 3
+	}
+}
+
 func normalizeTags(in []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(in))
@@ -179,4 +236,17 @@ func cloneRunbook(in Runbook) Runbook {
 	out := in
 	out.Tags = append([]string{}, in.Tags...)
 	return out
+}
+
+func containsRunbookTag(tags []string, tag string) bool {
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	if tag == "" {
+		return false
+	}
+	for _, item := range tags {
+		if strings.ToLower(strings.TrimSpace(item)) == tag {
+			return true
+		}
+	}
+	return false
 }

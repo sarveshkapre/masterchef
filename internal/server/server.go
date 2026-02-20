@@ -1056,6 +1056,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/workflows", s.handleWorkflows)
 	mux.HandleFunc("/v1/runbooks", s.handleRunbooks(baseDir))
+	mux.HandleFunc("/v1/runbooks/catalog", s.handleRunbookCatalog)
 	mux.HandleFunc("/v1/runbooks/", s.handleRunbookAction(baseDir))
 	mux.HandleFunc("/v1/workflows/", s.handleWorkflowAction)
 	mux.HandleFunc("/v1/workflow-runs", s.handleWorkflowRuns)
@@ -3302,6 +3303,7 @@ func currentAPISpec() control.APISpec {
 			"DELETE /v1/templates/{id}/delete",
 			"GET /v1/runbooks",
 			"POST /v1/runbooks",
+			"GET /v1/runbooks/catalog",
 			"GET /v1/runbooks/{id}",
 			"POST /v1/runbooks/{id}/approve",
 			"POST /v1/runbooks/{id}/deprecate",

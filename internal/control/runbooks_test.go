@@ -38,3 +38,64 @@ func TestRunbookStoreLifecycle(t *testing.T) {
 		t.Fatalf("expected deprecated status, got %s", rb.Status)
 	}
 }
+
+func TestRunbookStoreCatalog(t *testing.T) {
+	store := NewRunbookStore()
+
+	dbRunbook, err := store.Create(Runbook{
+		Name:       "DB maintenance",
+		TargetType: RunbookTargetConfig,
+		ConfigPath: "db.yaml",
+		RiskLevel:  "high",
+		Owner:      "db-team",
+		Tags:       []string{"database", "maintenance"},
+	})
+	if err != nil {
+		t.Fatalf("create db runbook failed: %v", err)
+	}
+	if _, err := store.Approve(dbRunbook.ID); err != nil {
+		t.Fatalf("approve db runbook failed: %v", err)
+	}
+
+	webRunbook, err := store.Create(Runbook{
+		Name:       "Web restart",
+		TargetType: RunbookTargetConfig,
+		ConfigPath: "web.yaml",
+		RiskLevel:  "low",
+		Owner:      "web-team",
+		Tags:       []string{"web", "restart"},
+	})
+	if err != nil {
+		t.Fatalf("create web runbook failed: %v", err)
+	}
+	if _, err := store.Approve(webRunbook.ID); err != nil {
+		t.Fatalf("approve web runbook failed: %v", err)
+	}
+
+	_, err = store.Create(Runbook{
+		Name:       "Draft-only",
+		TargetType: RunbookTargetConfig,
+		ConfigPath: "draft.yaml",
+		RiskLevel:  "medium",
+		Owner:      "web-team",
+	})
+	if err != nil {
+		t.Fatalf("create draft runbook failed: %v", err)
+	}
+
+	catalog := store.Catalog(RunbookCatalogQuery{
+		Owner:        "web-team",
+		MaxRiskLevel: "medium",
+	})
+	if len(catalog) != 1 || catalog[0].Name != "Web restart" {
+		t.Fatalf("unexpected owner-filtered catalog: %+v", catalog)
+	}
+
+	catalog = store.Catalog(RunbookCatalogQuery{
+		Tag:          "database",
+		MaxRiskLevel: "high",
+	})
+	if len(catalog) != 1 || catalog[0].Name != "DB maintenance" {
+		t.Fatalf("unexpected tag-filtered catalog: %+v", catalog)
+	}
+}
