@@ -38,6 +38,7 @@ type Server struct {
 	runbooks               *control.RunbookStore
 	assocs                 *control.AssociationStore
 	commands               *control.CommandIngestStore
+	adhocCommands          *control.AdHocCommandStore
 	convergeTriggers       *control.ConvergeTriggerStore
 	exportedResources      *control.ExportedResourceStore
 	canaries               *control.CanaryStore
@@ -202,6 +203,7 @@ func New(addr, baseDir string) *Server {
 	runbooks := control.NewRunbookStore()
 	assocs := control.NewAssociationStore(scheduler)
 	commands := control.NewCommandIngestStore(5000)
+	adhocCommands := control.NewAdHocCommandStore(5000)
 	convergeTriggers := control.NewConvergeTriggerStore(5000)
 	exportedResources := control.NewExportedResourceStore(5000)
 	canaries := control.NewCanaryStore(queue)
@@ -358,6 +360,7 @@ func New(addr, baseDir string) *Server {
 		runbooks:               runbooks,
 		assocs:                 assocs,
 		commands:               commands,
+		adhocCommands:          adhocCommands,
 		convergeTriggers:       convergeTriggers,
 		exportedResources:      exportedResources,
 		canaries:               canaries,
@@ -908,6 +911,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/workspace-templates/", s.handleWorkspaceTemplateAction(baseDir))
 	mux.HandleFunc("/v1/commands/ingest", s.handleCommandIngest(baseDir))
 	mux.HandleFunc("/v1/commands/dead-letters", s.handleCommandDeadLetters)
+	mux.HandleFunc("/v1/commands/adhoc", s.handleAdHocCommands)
+	mux.HandleFunc("/v1/commands/adhoc/policy", s.handleAdHocPolicy)
 	mux.HandleFunc("/v1/object-store/objects", s.handleObjectStoreObjects)
 	mux.HandleFunc("/v1/control/backup", s.handleBackup(baseDir))
 	mux.HandleFunc("/v1/control/backups", s.handleBackups)
@@ -3062,6 +3067,10 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/resources/collect",
 			"POST /v1/commands/ingest",
 			"GET /v1/commands/dead-letters",
+			"GET /v1/commands/adhoc",
+			"POST /v1/commands/adhoc",
+			"GET /v1/commands/adhoc/policy",
+			"POST /v1/commands/adhoc/policy",
 			"GET /v1/object-store/objects",
 			"POST /v1/control/backup",
 			"GET /v1/control/backups",

@@ -219,6 +219,8 @@ Pluggable queue backend registry with active/failover policy and backend admissi
 Short-lived stateless worker execution mode (to reduce long-running process drift) is configurable via `GET/POST /v1/control/workers/lifecycle`, including max jobs per worker and restart delay controls.
 Long-running run leases with heartbeat and stale-lease recovery are available via `/v1/control/run-leases`, `/v1/control/run-leases/heartbeat`, and `/v1/control/run-leases/recover`.
 Per-step execution snapshots for forensic analysis are available via `/v1/execution/snapshots` with filterable run/job queries and snapshot-by-id retrieval.
+Asynchronous command ingestion with checksum validation and dead-letter capture is available via `POST /v1/commands/ingest` and `GET /v1/commands/dead-letters`.
+Ad-hoc command mode with guardrail policy controls and audited execution history is available via `/v1/commands/adhoc` and `/v1/commands/adhoc/policy`.
 Adaptive concurrency control (host-health and failure-rate aware) is available via `/v1/execution/adaptive-concurrency/policy` and `/v1/execution/adaptive-concurrency/recommend`.
 Transaction checkpoints and resumable execution are available via `/v1/execution/checkpoints` and `POST /v1/execution/checkpoints/resume`, which materializes a trimmed resume config for remaining steps.
 Distributed execution locks to prevent conflicting runs are available via `/v1/control/execution-locks`, with optional lock binding on `POST /v1/jobs` using `lock_key`.
