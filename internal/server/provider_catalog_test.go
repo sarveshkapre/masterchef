@@ -43,4 +43,12 @@ func TestProviderCatalogEndpoints(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("validate provider catalog failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
+
+	sideEffectBody := []byte(`{"provider_id":"cloud.aws","required_capabilities":["ec2_instance"],"denied_side_effects":["network"]}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/providers/catalog/validate", bytes.NewReader(sideEffectBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected side-effect policy conflict: code=%d body=%s", rr.Code, rr.Body.String())
+	}
 }
