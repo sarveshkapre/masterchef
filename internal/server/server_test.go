@@ -3449,7 +3449,15 @@ resources:
 			ID          string `json:"id"`
 			Fingerprint string `json:"fingerprint"`
 			Count       int    `json:"count"`
+			Route       string `json:"route"`
+			EventType   string `json:"event_type"`
 		} `json:"items"`
+		RoutingPolicy struct {
+			CriticalRoute string `json:"critical_route"`
+			HighRoute     string `json:"high_route"`
+			MediumRoute   string `json:"medium_route"`
+			LowRoute      string `json:"low_route"`
+		} `json:"routing_policy"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &inbox); err != nil {
 		t.Fatalf("alerts inbox decode failed: %v", err)
@@ -3457,8 +3465,49 @@ resources:
 	if len(inbox.Items) != 1 || inbox.Items[0].Count != 2 {
 		t.Fatalf("expected deduplicated alert count=2, got %+v", inbox.Items)
 	}
+	primaryAlertID := inbox.Items[0].ID
+	primaryFingerprint := inbox.Items[0].Fingerprint
+	if inbox.RoutingPolicy.HighRoute != "ticket" {
+		t.Fatalf("expected default high severity route policy, got %+v", inbox.RoutingPolicy)
+	}
 
-	suppressBody := []byte(`{"action":"suppress","fingerprint":"` + inbox.Items[0].Fingerprint + `","duration_seconds":300,"reason":"maintenance"}`)
+	setPolicyBody := []byte(`{"action":"set_routing_policy","critical_route":"pager","high_route":"pager","medium_route":"chatops","low_route":"digest"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/alerts/inbox", bytes.NewReader(setPolicyBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set alert routing policy failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	routedEvent := []byte(`{"type":"external.alert.cpu","message":"cpu hot","fields":{"sev":"high","host":"db-01","service":"storage"}}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(routedEvent))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("routed event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/alerts/inbox", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alerts inbox get after routing policy failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &inbox); err != nil {
+		t.Fatalf("alerts inbox decode after routing policy failed: %v body=%s", err, rr.Body.String())
+	}
+	foundPager := false
+	for _, item := range inbox.Items {
+		if item.EventType == "external.alert.cpu" && item.Route == "pager" {
+			foundPager = true
+			break
+		}
+	}
+	if !foundPager {
+		t.Fatalf("expected high-severity routed alert to use pager route, got %+v", inbox.Items)
+	}
+
+	suppressBody := []byte(`{"action":"suppress","fingerprint":"` + primaryFingerprint + `","duration_seconds":300,"reason":"maintenance"}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/alerts/inbox", bytes.NewReader(suppressBody))
 	s.httpServer.Handler.ServeHTTP(rr, req)
@@ -3473,7 +3522,7 @@ resources:
 		t.Fatalf("suppressed event ingest failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
-	ackBody := []byte(`{"action":"acknowledge","id":"` + inbox.Items[0].ID + `"}`)
+	ackBody := []byte(`{"action":"acknowledge","id":"` + primaryAlertID + `"}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/alerts/inbox", bytes.NewReader(ackBody))
 	s.httpServer.Handler.ServeHTTP(rr, req)
@@ -3481,7 +3530,7 @@ resources:
 		t.Fatalf("alert acknowledge failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
-	resolveBody := []byte(`{"action":"resolve","id":"` + inbox.Items[0].ID + `"}`)
+	resolveBody := []byte(`{"action":"resolve","id":"` + primaryAlertID + `"}`)
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/alerts/inbox", bytes.NewReader(resolveBody))
 	s.httpServer.Handler.ServeHTTP(rr, req)

@@ -87,3 +87,38 @@ func TestAlertInboxIngestEventInference(t *testing.T) {
 		t.Fatalf("expected medium severity route to chatops, got %s", items[0].Route)
 	}
 }
+
+func TestAlertInboxRoutingPolicyOverride(t *testing.T) {
+	inbox := NewAlertInbox()
+
+	updated, err := inbox.SetRoutingPolicy(AlertRoutingPolicy{
+		CriticalRoute: "pager",
+		HighRoute:     "pager",
+		MediumRoute:   "ticket",
+		LowRoute:      "digest",
+	})
+	if err != nil {
+		t.Fatalf("set routing policy failed: %v", err)
+	}
+	if updated.HighRoute != "pager" || updated.MediumRoute != "ticket" {
+		t.Fatalf("unexpected routing policy: %+v", updated)
+	}
+	if _, err := inbox.SetRoutingPolicy(AlertRoutingPolicy{
+		CriticalRoute: "unknown",
+		HighRoute:     "ticket",
+		MediumRoute:   "chatops",
+		LowRoute:      "digest",
+	}); err == nil {
+		t.Fatalf("expected invalid routing policy route failure")
+	}
+
+	res := inbox.Ingest(AlertIngest{
+		EventType: "external.alert.latency",
+		Message:   "latency high",
+		Severity:  "high",
+		Fields:    map[string]any{"service": "api"},
+	})
+	if res.Item.Route != "pager" {
+		t.Fatalf("expected high severity route override to pager, got %+v", res.Item)
+	}
+}

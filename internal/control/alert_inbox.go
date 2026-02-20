@@ -61,12 +61,21 @@ type AlertSummary struct {
 	Total              int `json:"total"`
 }
 
+type AlertRoutingPolicy struct {
+	CriticalRoute string    `json:"critical_route"`
+	HighRoute     string    `json:"high_route"`
+	MediumRoute   string    `json:"medium_route"`
+	LowRoute      string    `json:"low_route"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
 type AlertInbox struct {
 	mu            sync.RWMutex
 	nextID        int64
 	items         map[string]*AlertItem
 	byFingerprint map[string]string
 	suppressions  map[string]AlertSuppression
+	routingPolicy AlertRoutingPolicy
 }
 
 func NewAlertInbox() *AlertInbox {
@@ -74,6 +83,7 @@ func NewAlertInbox() *AlertInbox {
 		items:         map[string]*AlertItem{},
 		byFingerprint: map[string]string{},
 		suppressions:  map[string]AlertSuppression{},
+		routingPolicy: defaultAlertRoutingPolicy(),
 	}
 }
 
@@ -117,7 +127,7 @@ func (a *AlertInbox) Ingest(in AlertIngest) AlertIngestResult {
 		item.Fields = copyFields(in.Fields)
 		severity := normalizeSeverity(in.Severity)
 		item.Severity = chooseMaxSeverity(item.Severity, severity)
-		item.Route = routeForSeverity(item.Severity)
+		item.Route = routeForSeverityPolicy(item.Severity, a.routingPolicy)
 		if item.Status != AlertOpen {
 			item.Status = AlertOpen
 		}
@@ -136,7 +146,7 @@ func (a *AlertInbox) Ingest(in AlertIngest) AlertIngestResult {
 		EventType:   strings.TrimSpace(in.EventType),
 		Message:     defaultAlertMessage(in),
 		Severity:    severity,
-		Route:       routeForSeverity(severity),
+		Route:       routeForSeverityPolicy(severity, a.routingPolicy),
 		Count:       1,
 		FirstSeenAt: now,
 		LastSeenAt:  now,
@@ -294,6 +304,29 @@ func (a *AlertInbox) Summary() AlertSummary {
 	return s
 }
 
+func (a *AlertInbox) RoutingPolicy() AlertRoutingPolicy {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.routingPolicy
+}
+
+func (a *AlertInbox) SetRoutingPolicy(in AlertRoutingPolicy) (AlertRoutingPolicy, error) {
+	policy := AlertRoutingPolicy{
+		CriticalRoute: normalizeAlertRoute(strings.TrimSpace(in.CriticalRoute)),
+		HighRoute:     normalizeAlertRoute(strings.TrimSpace(in.HighRoute)),
+		MediumRoute:   normalizeAlertRoute(strings.TrimSpace(in.MediumRoute)),
+		LowRoute:      normalizeAlertRoute(strings.TrimSpace(in.LowRoute)),
+	}
+	if policy.CriticalRoute == "" || policy.HighRoute == "" || policy.MediumRoute == "" || policy.LowRoute == "" {
+		return AlertRoutingPolicy{}, errors.New("routing policy routes must be pager, ticket, chatops, or digest")
+	}
+	policy.UpdatedAt = time.Now().UTC()
+	a.mu.Lock()
+	a.routingPolicy = policy
+	a.mu.Unlock()
+	return policy, nil
+}
+
 func (a *AlertInbox) cleanupSuppressionsLocked(now time.Time) {
 	for fp, s := range a.suppressions {
 		if !now.Before(s.Until) {
@@ -369,6 +402,38 @@ func routeForSeverity(severity string) string {
 		return "chatops"
 	default:
 		return "digest"
+	}
+}
+
+func routeForSeverityPolicy(severity string, policy AlertRoutingPolicy) string {
+	switch normalizeSeverity(severity) {
+	case "critical":
+		return normalizeAlertRoute(policy.CriticalRoute)
+	case "high":
+		return normalizeAlertRoute(policy.HighRoute)
+	case "medium":
+		return normalizeAlertRoute(policy.MediumRoute)
+	default:
+		return normalizeAlertRoute(policy.LowRoute)
+	}
+}
+
+func defaultAlertRoutingPolicy() AlertRoutingPolicy {
+	return AlertRoutingPolicy{
+		CriticalRoute: "pager",
+		HighRoute:     "ticket",
+		MediumRoute:   "chatops",
+		LowRoute:      "digest",
+		UpdatedAt:     time.Now().UTC(),
+	}
+}
+
+func normalizeAlertRoute(in string) string {
+	switch strings.ToLower(strings.TrimSpace(in)) {
+	case "pager", "ticket", "chatops", "digest":
+		return strings.ToLower(strings.TrimSpace(in))
+	default:
+		return ""
 	}
 }
 

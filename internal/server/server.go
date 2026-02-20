@@ -1152,11 +1152,15 @@ func (s *Server) handleEventIngest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAlertInbox(w http.ResponseWriter, r *http.Request) {
 	type reqBody struct {
-		Action          string `json:"action"` // acknowledge|resolve|suppress|unsuppress
+		Action          string `json:"action"` // acknowledge|resolve|suppress|unsuppress|set_routing_policy
 		ID              string `json:"id"`
 		Fingerprint     string `json:"fingerprint"`
 		DurationSeconds int    `json:"duration_seconds"`
 		Reason          string `json:"reason"`
+		CriticalRoute   string `json:"critical_route"`
+		HighRoute       string `json:"high_route"`
+		MediumRoute     string `json:"medium_route"`
+		LowRoute        string `json:"low_route"`
 	}
 	switch r.Method {
 	case http.MethodGet:
@@ -1168,9 +1172,10 @@ func (s *Server) handleAlertInbox(w http.ResponseWriter, r *http.Request) {
 		}
 		status := strings.TrimSpace(r.URL.Query().Get("status"))
 		writeJSON(w, http.StatusOK, map[string]any{
-			"items":        s.alerts.List(status, limit),
-			"summary":      s.alerts.Summary(),
-			"suppressions": s.alerts.Suppressions(),
+			"items":          s.alerts.List(status, limit),
+			"summary":        s.alerts.Summary(),
+			"suppressions":   s.alerts.Suppressions(),
+			"routing_policy": s.alerts.RoutingPolicy(),
 		})
 	case http.MethodPost:
 		var req reqBody
@@ -1226,6 +1231,18 @@ func (s *Server) handleAlertInbox(w http.ResponseWriter, r *http.Request) {
 				"fingerprint": fp,
 				"cleared":     s.alerts.ClearSuppression(fp),
 			})
+		case "set_routing_policy":
+			item, err := s.alerts.SetRoutingPolicy(control.AlertRoutingPolicy{
+				CriticalRoute: req.CriticalRoute,
+				HighRoute:     req.HighRoute,
+				MediumRoute:   req.MediumRoute,
+				LowRoute:      req.LowRoute,
+			})
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, item)
 		default:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown action"})
 		}

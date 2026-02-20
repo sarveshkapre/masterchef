@@ -88,7 +88,7 @@ On-call handoff packages are available via `GET /v1/control/handoff` to summariz
 Deployment-window change digests are available via `GET /v1/runs/digest` with latent-risk scoring.
 Time-travel run timelines (before/during/after change windows) are available via `GET /v1/runs/{id}/timeline`.
 One-click retry and safe rollback actions from run failure context are available via `POST /v1/runs/{id}/retry` and `POST /v1/runs/{id}/rollback`.
-Noise-reduction alert inbox is available via `GET/POST /v1/alerts/inbox` with dedup, suppression windows, and routing.
+Noise-reduction alert inbox is available via `GET/POST /v1/alerts/inbox` with dedup, suppression windows, and configurable priority routing (`action=set_routing_policy`).
 Run failure triage bundles are exportable via `POST /v1/runs/{id}/triage-bundle` for incident debugging context.
 Cross-run diff analysis (failed vs successful execution comparison) is available via `GET /v1/runs/compare`.
 Drift trend analytics with suppression/allowlist filtering, root-cause hints/remediations, policy management, safe-mode auto-remediation, and desired-vs-observed diff history are available via `GET /v1/drift/insights`, `GET /v1/drift/history`, `/v1/drift/suppressions`, `/v1/drift/allowlists`, and `POST /v1/drift/remediate`.
