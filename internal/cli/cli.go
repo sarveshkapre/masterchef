@@ -31,6 +31,7 @@ import (
 	"github.com/masterchef/masterchef/internal/state"
 	"github.com/masterchef/masterchef/internal/testimpact"
 	"google.golang.org/grpc"
+	"gopkg.in/yaml.v3"
 )
 
 func Run(args []string) error {
@@ -70,6 +71,8 @@ func Run(args []string) error {
 		return runDev(args[1:])
 	case "policy":
 		return runPolicy(args[1:])
+	case "vars":
+		return runVars(args[1:])
 	case "features":
 		return runFeatures(args[1:])
 	case "docs":
@@ -98,6 +101,7 @@ masterchef commands:
   serve [-addr :8080] [-grpc-addr :9090]
   dev [-state-dir .masterchef/dev] [-addr :8080] [-grpc-addr :9090] [-dry-run]
   policy [keygen|sign|verify] ...
+  vars [explain] [-f vars.layers.yaml] [-format human|json] [-hard-fail]
   features [matrix|summary|verify] [-f features.md]
   docs [verify-examples] [-format human|json]
 `))
@@ -1092,6 +1096,67 @@ func runFeatures(args []string) error {
 		return fmt.Errorf("unknown features subcommand %q", sub)
 	}
 	return nil
+}
+
+func runVars(args []string) error {
+	sub := "explain"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		sub = strings.ToLower(strings.TrimSpace(args[0]))
+		args = args[1:]
+	}
+	fs := flag.NewFlagSet("vars", flag.ContinueOnError)
+	path := fs.String("f", "vars.layers.yaml", "layers input path (yaml/json)")
+	format := fs.String("format", "human", "output format: human|json")
+	hardFail := fs.Bool("hard-fail", false, "return error on variable conflicts")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	switch sub {
+	case "explain":
+		raw, err := os.ReadFile(*path)
+		if err != nil {
+			return err
+		}
+		var req struct {
+			Layers   []control.VariableLayer `json:"layers" yaml:"layers"`
+			HardFail bool                    `json:"hard_fail,omitempty" yaml:"hard_fail,omitempty"`
+		}
+		if err := json.Unmarshal(raw, &req); err != nil {
+			if err := yaml.Unmarshal(raw, &req); err != nil {
+				return fmt.Errorf("layers input must be valid json or yaml")
+			}
+		}
+		if len(req.Layers) == 0 {
+			return fmt.Errorf("layers input must include at least one layer")
+		}
+		resolveReq := control.VariableResolveRequest{
+			Layers:   req.Layers,
+			HardFail: req.HardFail || *hardFail,
+		}
+		res, err := control.ResolveVariables(resolveReq)
+		switch strings.ToLower(strings.TrimSpace(*format)) {
+		case "json":
+			b, _ := json.MarshalIndent(res, "", "  ")
+			fmt.Println(string(b))
+		default:
+			merged, _ := json.MarshalIndent(res.Merged, "", "  ")
+			fmt.Printf("merged:\n%s\n", string(merged))
+			fmt.Printf("precedence: %s\n", strings.Join(res.Precedence, " -> "))
+			fmt.Printf("conflicts: %d warnings: %d\n", len(res.Conflicts), len(res.Warnings))
+			for _, w := range res.Warnings {
+				fmt.Printf("- warning: %s\n", w)
+			}
+			for _, c := range res.Conflicts {
+				fmt.Printf("- conflict: path=%s previous=%s current=%s resolution=%s\n", c.Path, c.PreviousLayer, c.CurrentLayer, c.Resolution)
+			}
+		}
+		if err != nil {
+			return ExitError{Code: 4, Msg: err.Error()}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown vars subcommand %q", sub)
+	}
 }
 
 func runDocs(args []string) error {
