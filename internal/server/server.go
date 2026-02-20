@@ -980,6 +980,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/performance/diagnostics", s.handlePerformanceDiagnostics)
 	mux.HandleFunc("/v1/control/topology-placement/policies", s.handleTopologyPlacementPolicies)
 	mux.HandleFunc("/v1/control/topology-placement/decide", s.handleTopologyPlacementDecision)
+	mux.HandleFunc("/v1/control/scale-profiles", s.handleScaleProfiles)
 	mux.HandleFunc("/v1/control/chaos/experiments", s.handleChaosExperiments)
 	mux.HandleFunc("/v1/control/chaos/experiments/", s.handleChaosExperimentAction)
 	mux.HandleFunc("/v1/control/leak-detection/policy", s.handleLeakDetectionPolicy)
@@ -3168,6 +3169,8 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/topology-placement/policies",
 			"POST /v1/control/topology-placement/policies",
 			"POST /v1/control/topology-placement/decide",
+			"GET /v1/control/scale-profiles",
+			"POST /v1/control/scale-profiles",
 			"GET /v1/control/chaos/experiments",
 			"POST /v1/control/chaos/experiments",
 			"GET /v1/control/chaos/experiments/{id}",
