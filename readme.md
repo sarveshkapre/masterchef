@@ -292,6 +292,7 @@ Property-based testing harness for idempotency and convergence invariants is ava
 Built-in module/policy test harness workflows are available via `/v1/release/tests/harness/cases`, `/v1/release/tests/harness/runs`, and `/v1/release/tests/harness/runs/{id}`.
 Pinned toolchain reproducibility checks for local/CI pipelines are available via `masterchef release toolchain-check`.
 Activity timeline filtering for audit workflows is available via `GET /v1/activity` query filters and `GET /v1/activity/audit-timeline` identity/resource categories.
+Real-time activity/event subscriptions are available via SSE at `GET /v1/activity/stream` with replay and filter query support.
 Migration assessment reports with parity/risk/urgency scoring are available via `/v1/migrations/assess` and `/v1/migrations/reports`.
 Chef/Ansible/Puppet migration translation tooling with semantic equivalence checks and auto-generated diff reports is available via `/v1/migrations/translate`, `/v1/migrations/equivalence-check`, and `/v1/migrations/diff-report`.
 Compatibility shim catalog and resolver for common legacy platform patterns are available via `/v1/compat/shims` and `POST /v1/compat/shims/resolve`.

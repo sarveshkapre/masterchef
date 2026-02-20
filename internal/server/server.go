@@ -855,6 +855,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/drift/allowlists/", s.handleDriftAllowlistByID)
 	mux.HandleFunc("/v1/drift/remediate", s.handleDriftRemediation(baseDir))
 	mux.HandleFunc("/v1/activity", s.handleActivity)
+	mux.HandleFunc("/v1/activity/stream", s.handleActivityStream)
 	mux.HandleFunc("/v1/activity/audit-timeline", s.handleAuditTimeline)
 	mux.HandleFunc("/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/v1/events/ingest", s.handleEventIngest)
@@ -2475,6 +2476,7 @@ func currentAPISpec() control.APISpec {
 		Endpoints: []string{
 			"GET /healthz",
 			"GET /v1/activity",
+			"GET /v1/activity/stream",
 			"GET /v1/activity/audit-timeline",
 			"GET /v1/search",
 			"GET /v1/tasks/definitions",

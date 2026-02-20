@@ -55,3 +55,19 @@ func TestEventStore_QueryFiltersAndOrdering(t *testing.T) {
 		t.Fatalf("unexpected filtered event: %+v", out[0])
 	}
 }
+
+func TestEventStore_SubscribeReceivesEvents(t *testing.T) {
+	s := NewEventStore(10)
+	subID, ch := s.Subscribe(2)
+	t.Cleanup(func() { s.Unsubscribe(subID) })
+
+	s.Append(Event{Type: "test.event", Message: "first"})
+	select {
+	case got := <-ch:
+		if got.Type != "test.event" || got.Message != "first" {
+			t.Fatalf("unexpected subscribed event: %+v", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for subscribed event")
+	}
+}

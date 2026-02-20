@@ -14,9 +14,11 @@ type Event struct {
 }
 
 type EventStore struct {
-	mu     sync.RWMutex
-	events []Event
-	limit  int
+	mu               sync.RWMutex
+	events           []Event
+	limit            int
+	nextSubscriberID int64
+	subscribers      map[int64]chan Event
 }
 
 type EventQuery struct {
@@ -33,23 +35,34 @@ func NewEventStore(limit int) *EventStore {
 		limit = 10_000
 	}
 	return &EventStore{
-		events: make([]Event, 0, limit),
-		limit:  limit,
+		events:      make([]Event, 0, limit),
+		limit:       limit,
+		subscribers: map[int64]chan Event{},
 	}
 }
 
 func (s *EventStore) Append(e Event) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if e.Time.IsZero() {
 		e.Time = time.Now().UTC()
 	}
+	s.mu.Lock()
 	if len(s.events) >= s.limit {
 		copy(s.events[0:], s.events[1:])
 		s.events[len(s.events)-1] = e
-		return
+	} else {
+		s.events = append(s.events, e)
 	}
-	s.events = append(s.events, e)
+	subs := make([]chan Event, 0, len(s.subscribers))
+	for _, ch := range s.subscribers {
+		subs = append(subs, ch)
+	}
+	s.mu.Unlock()
+	for _, ch := range subs {
+		select {
+		case ch <- e:
+		default:
+		}
+	}
 }
 
 func (s *EventStore) List() []Event {
@@ -120,6 +133,31 @@ func (s *EventStore) Query(q EventQuery) []Event {
 		}
 	}
 	return out
+}
+
+func (s *EventStore) Subscribe(buffer int) (int64, <-chan Event) {
+	if buffer <= 0 {
+		buffer = 64
+	}
+	ch := make(chan Event, buffer)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nextSubscriberID++
+	id := s.nextSubscriberID
+	s.subscribers[id] = ch
+	return id, ch
+}
+
+func (s *EventStore) Unsubscribe(id int64) {
+	s.mu.Lock()
+	ch, ok := s.subscribers[id]
+	if ok {
+		delete(s.subscribers, id)
+	}
+	s.mu.Unlock()
+	if ok {
+		close(ch)
+	}
 }
 
 func minInt(a, b int) int {
