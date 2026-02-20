@@ -612,6 +612,7 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/plans/reproducibility-check", s.handlePlanReproducibility(baseDir))
 	mux.HandleFunc("/v1/plans/risk-summary", s.handlePlanRiskSummary(baseDir))
 	mux.HandleFunc("/v1/policy/simulate", s.handlePolicySimulation(baseDir))
+	mux.HandleFunc("/v1/policy/inputs/resolve", s.handlePolicyInputResolve)
 	mux.HandleFunc("/v1/policy/enforcement-modes", s.handlePolicyEnforcementModes)
 	mux.HandleFunc("/v1/policy/enforcement-modes/", s.handlePolicyEnforcementModeAction)
 	mux.HandleFunc("/v1/policy/pull/sources", s.handlePolicyPullSources)
@@ -2851,6 +2852,7 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/plans/reproducibility-check",
 			"POST /v1/plans/risk-summary",
 			"POST /v1/policy/simulate",
+			"POST /v1/policy/inputs/resolve",
 			"GET /v1/policy/enforcement-modes",
 			"POST /v1/policy/enforcement-modes",
 			"GET /v1/policy/enforcement-modes/{policy_ref}",

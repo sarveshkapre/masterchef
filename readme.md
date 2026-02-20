@@ -127,6 +127,7 @@ Fact caching with TTL/invalidation and Salt Mine-style cross-node fact queries a
 Variable precedence resolution with source graph, conflict detection, hard-fail policy, and explain output is available via `POST /v1/vars/resolve` and `POST /v1/vars/explain`.
 CLI explain workflow for final merged variable values is available via `masterchef vars explain -f vars.layers.yaml`.
 External variable source plugins (`inline`, `env`, `file`, `http`) are available via `POST /v1/vars/sources/resolve`.
+External policy-input source plugins (`inline`, `env`, `file`, `http`) with merge-strategy controls are available via `POST /v1/policy/inputs/resolve`.
 Unified CLI now includes `observe` and `drift` commands for local run telemetry and drift trend inspection.
 Contributor-friendly single-binary local dev runtime (control plane + worker + local registry/object store) is available via `masterchef dev -state-dir .masterchef/dev -grpc-addr :9090`.
 Interactive CLI TUI inspection is available via `masterchef tui` with run browsing and per-step detail views.
