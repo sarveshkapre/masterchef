@@ -72,3 +72,36 @@ func TestEncryptedVariableStorePersistsAcrossReload(t *testing.T) {
 		t.Fatalf("expected persisted encrypted file to decrypt: %v", err)
 	}
 }
+
+func TestEncryptedVariableStoreExportImport(t *testing.T) {
+	sourceDir := t.TempDir()
+	source := NewEncryptedVariableStore(sourceDir)
+	if _, err := source.Upsert("legacy-vars", map[string]any{"token": "abc"}, "migrate-pass"); err != nil {
+		t.Fatalf("source upsert failed: %v", err)
+	}
+	files := source.ExportFiles()
+	if len(files) != 1 || files[0].Name != "legacy-vars" {
+		t.Fatalf("unexpected exported files: %#v", files)
+	}
+
+	targetDir := t.TempDir()
+	target := NewEncryptedVariableStore(targetDir)
+	if target.Exists("legacy-vars") {
+		t.Fatalf("did not expect imported file to exist yet")
+	}
+	if _, created, err := target.UpsertEncryptedFile(files[0]); err != nil {
+		t.Fatalf("import encrypted file failed: %v", err)
+	} else if !created {
+		t.Fatalf("expected imported file to be created")
+	}
+	if !target.Exists("legacy-vars") {
+		t.Fatalf("expected imported file to exist")
+	}
+	data, _, err := target.Get("legacy-vars", "migrate-pass")
+	if err != nil {
+		t.Fatalf("expected imported encrypted file to decrypt: %v", err)
+	}
+	if data["token"] != "abc" {
+		t.Fatalf("unexpected imported data: %#v", data)
+	}
+}

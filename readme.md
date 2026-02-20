@@ -187,6 +187,7 @@ Salt-style beacon/reactor compatibility patterns are available via `/v1/compat/b
 Salt-style grains compatibility and grain-query translation are available via `GET /v1/compat/grains` and `POST /v1/compat/grains/query`.
 Inventory host grouping by roles, labels, and topology is available via `GET /v1/inventory/groups`.
 Bulk runtime-host import from CMDB/asset systems is available via `POST /v1/inventory/import/cmdb` with dry-run support.
+Inventory and variable portability bundles for migration/backup workflows are available via `POST /v1/inventory/export/bundle` and `POST /v1/inventory/import/bundle`.
 Import assistants for secrets, facts, and role/group hierarchies are available via `POST /v1/inventory/import/assist`.
 Brownfield bootstrap from observed host state into desired-state baselines is available via `POST /v1/inventory/import/brownfield-bootstrap`.
 Inventory drift detection and reconciliation planning are available via `POST /v1/inventory/drift/analyze`, `POST /v1/inventory/drift/reconcile`, and `GET /v1/inventory/drift/reports`.

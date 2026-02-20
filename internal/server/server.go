@@ -620,7 +620,9 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/query", s.handleQuery(baseDir))
 	mux.HandleFunc("/v1/search", s.handleSearch(baseDir))
 	mux.HandleFunc("/v1/inventory/groups", s.handleInventoryGroups(baseDir))
+	mux.HandleFunc("/v1/inventory/export/bundle", s.handleInventoryExportBundle)
 	mux.HandleFunc("/v1/inventory/import/cmdb", s.handleInventoryCMDBImport)
+	mux.HandleFunc("/v1/inventory/import/bundle", s.handleInventoryImportBundle)
 	mux.HandleFunc("/v1/inventory/import/assist", s.handleInventoryImportAssistant)
 	mux.HandleFunc("/v1/inventory/import/brownfield-bootstrap", s.handleInventoryBrownfieldBootstrap)
 	mux.HandleFunc("/v1/inventory/drift/analyze", s.handleInventoryDriftAnalyze)
@@ -2517,7 +2519,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/policy/bundles/{id}/promote",
 			"GET /v1/policy/bundles/{id}/promotions",
 			"GET /v1/inventory/groups",
+			"POST /v1/inventory/export/bundle",
 			"POST /v1/inventory/import/cmdb",
+			"POST /v1/inventory/import/bundle",
 			"POST /v1/inventory/import/assist",
 			"POST /v1/inventory/import/brownfield-bootstrap",
 			"POST /v1/inventory/drift/analyze",

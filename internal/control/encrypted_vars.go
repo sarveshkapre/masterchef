@@ -143,6 +143,77 @@ func (s *EncryptedVariableStore) List() []EncryptedVariableFileSummary {
 	return out
 }
 
+func (s *EncryptedVariableStore) Exists(name string) bool {
+	name = normalizeEncryptedVarName(name)
+	if name == "" {
+		return false
+	}
+	s.mu.RLock()
+	_, ok := s.files[name]
+	s.mu.RUnlock()
+	return ok
+}
+
+func (s *EncryptedVariableStore) ExportFiles() []EncryptedVariableFile {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]EncryptedVariableFile, 0, len(s.files))
+	for _, item := range s.files {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+func (s *EncryptedVariableStore) UpsertEncryptedFile(file EncryptedVariableFile) (EncryptedVariableFileSummary, bool, error) {
+	name := normalizeEncryptedVarName(file.Name)
+	if name == "" {
+		return EncryptedVariableFileSummary{}, false, errors.New("name is required")
+	}
+	ciphertext := strings.TrimSpace(file.Ciphertext)
+	nonce := strings.TrimSpace(file.Nonce)
+	if ciphertext == "" || nonce == "" {
+		return EncryptedVariableFileSummary{}, false, errors.New("ciphertext and nonce are required")
+	}
+	if _, err := base64.StdEncoding.DecodeString(ciphertext); err != nil {
+		return EncryptedVariableFileSummary{}, false, errors.New("ciphertext must be valid base64")
+	}
+	if _, err := base64.StdEncoding.DecodeString(nonce); err != nil {
+		return EncryptedVariableFileSummary{}, false, errors.New("nonce must be valid base64")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	item := EncryptedVariableFile{
+		Name:       name,
+		KeyVersion: file.KeyVersion,
+		Ciphertext: ciphertext,
+		Nonce:      nonce,
+		UpdatedAt:  file.UpdatedAt,
+	}
+	if item.KeyVersion <= 0 {
+		if s.currentKeyVersion > 0 {
+			item.KeyVersion = s.currentKeyVersion
+		} else {
+			item.KeyVersion = 1
+		}
+	}
+	if item.UpdatedAt.IsZero() {
+		item.UpdatedAt = time.Now().UTC()
+	}
+
+	_, exists := s.files[name]
+	s.files[name] = item
+	if item.KeyVersion > s.currentKeyVersion {
+		s.currentKeyVersion = item.KeyVersion
+	}
+	if err := s.persistLocked(); err != nil {
+		return EncryptedVariableFileSummary{}, false, err
+	}
+	return encryptedFileSummary(item), !exists, nil
+}
+
 func (s *EncryptedVariableStore) KeyStatus() EncryptedVariableKeyStatus {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
