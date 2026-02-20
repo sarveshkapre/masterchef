@@ -28,6 +28,7 @@ type Server struct {
 	queueBackends          *control.QueueBackendStore
 	queueBacklogSLO        *control.QueueBacklogSLOStore
 	runLeases              *control.RunLeaseStore
+	stuckRecovery          *control.StuckRecoveryStore
 	stepSnapshots          *control.StepSnapshotStore
 	executionLocks         *control.ExecutionLockStore
 	checkpoints            *control.ExecutionCheckpointStore
@@ -193,6 +194,7 @@ func New(addr, baseDir string) *Server {
 	backlogThreshold := readIntEnv("MC_QUEUE_BACKLOG_SLO_THRESHOLD", 100)
 	queueBacklogSLO := control.NewQueueBacklogSLOStore(backlogThreshold, 5000)
 	runLeases := control.NewRunLeaseStore()
+	stuckRecovery := control.NewStuckRecoveryStore()
 	stepSnapshots := control.NewStepSnapshotStore(20_000)
 	executionLocks := control.NewExecutionLockStore()
 	checkpoints := control.NewExecutionCheckpointStore()
@@ -354,6 +356,7 @@ func New(addr, baseDir string) *Server {
 		queueBackends:          queueBackends,
 		queueBacklogSLO:        queueBacklogSLO,
 		runLeases:              runLeases,
+		stuckRecovery:          stuckRecovery,
 		stepSnapshots:          stepSnapshots,
 		executionLocks:         executionLocks,
 		checkpoints:            checkpoints,
@@ -1021,6 +1024,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/run-leases/recover", s.handleRunLeaseRecover)
 	mux.HandleFunc("/v1/control/recover-stuck", s.handleRecoverStuck)
 	mux.HandleFunc("/v1/control/recover-stuck/history", s.handleRecoverStuckHistory)
+	mux.HandleFunc("/v1/control/recover-stuck/policy", s.handleRecoverStuckPolicy)
+	mux.HandleFunc("/v1/control/recover-stuck/status", s.handleRecoverStuckStatus)
 	mux.HandleFunc("/v1/templates", s.handleTemplates(baseDir))
 	mux.HandleFunc("/v1/templates/", s.handleTemplateAction)
 	mux.HandleFunc("/v1/workflows", s.handleWorkflows)
@@ -3234,6 +3239,9 @@ func currentAPISpec() control.APISpec {
 			"POST /v1/control/run-leases/recover",
 			"POST /v1/control/recover-stuck",
 			"GET /v1/control/recover-stuck/history",
+			"GET /v1/control/recover-stuck/policy",
+			"POST /v1/control/recover-stuck/policy",
+			"GET /v1/control/recover-stuck/status",
 			"GET /v1/runs",
 			"GET /v1/runs/digest",
 			"GET /v1/runs/compare",
@@ -4809,28 +4817,22 @@ func (s *Server) handleRecoverStuck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.MaxAgeSeconds <= 0 {
-		req.MaxAgeSeconds = 300
+		if s.stuckRecovery != nil {
+			req.MaxAgeSeconds = s.stuckRecovery.Policy().MaxAgeSeconds
+		}
+		if req.MaxAgeSeconds <= 0 {
+			req.MaxAgeSeconds = 300
+		}
 	}
 	recovered := s.queue.RecoverStuckJobs(time.Duration(req.MaxAgeSeconds) * time.Second)
+	if s.stuckRecovery != nil {
+		s.stuckRecovery.RecordManualRun(time.Now().UTC(), req.MaxAgeSeconds, len(recovered))
+	}
 	jobIDs := make([]string, 0, len(recovered))
 	for _, job := range recovered {
 		jobIDs = append(jobIDs, job.ID)
 	}
-	typ := "control.recover_stuck.noop"
-	msg := "stuck-run recovery check completed with no recovered jobs"
-	if len(recovered) > 0 {
-		typ = "control.recover_stuck.recovered"
-		msg = "stuck-run recovery completed with recovered jobs"
-	}
-	s.recordEvent(control.Event{
-		Type:    typ,
-		Message: msg,
-		Fields: map[string]any{
-			"recovered_count": len(recovered),
-			"max_age_seconds": req.MaxAgeSeconds,
-			"job_ids":         jobIDs,
-		},
-	}, true)
+	s.recordStuckRecoveryEvent("manual", req.MaxAgeSeconds, jobIDs)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"recovered_count": len(recovered),
 		"jobs":            recovered,
@@ -4874,6 +4876,86 @@ func (s *Server) handleRecoverStuckHistory(w http.ResponseWriter, r *http.Reques
 		"recovered_total": recoveredTotal,
 		"items":           items,
 	})
+}
+
+func (s *Server) handleRecoverStuckPolicy(w http.ResponseWriter, r *http.Request) {
+	if s.stuckRecovery == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "stuck recovery store unavailable"})
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.stuckRecovery.Policy())
+	case http.MethodPost:
+		var req control.StuckRecoveryPolicy
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+			return
+		}
+		item, err := s.stuckRecovery.SetPolicy(req)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleRecoverStuckStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if s.stuckRecovery == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "stuck recovery store unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.stuckRecovery.Status())
+}
+
+func (s *Server) maybeAutoRecoverStuck(now time.Time) {
+	if s.stuckRecovery == nil {
+		return
+	}
+	policy, ok := s.stuckRecovery.PrepareAutoRun(now)
+	if !ok {
+		return
+	}
+	recovered := s.queue.RecoverStuckJobs(time.Duration(policy.MaxAgeSeconds) * time.Second)
+	s.stuckRecovery.RecordAutoRunResult(now, len(recovered))
+	jobIDs := make([]string, 0, len(recovered))
+	for _, job := range recovered {
+		jobIDs = append(jobIDs, job.ID)
+	}
+	s.recordStuckRecoveryEvent("auto", policy.MaxAgeSeconds, jobIDs)
+}
+
+func (s *Server) recordStuckRecoveryEvent(mode string, maxAgeSeconds int, jobIDs []string) {
+	typ := "control.recover_stuck."
+	msg := "stuck-run recovery check completed"
+	if strings.EqualFold(mode, "auto") {
+		typ += "auto."
+		msg = "automatic stuck-run recovery check completed"
+	}
+	if len(jobIDs) > 0 {
+		typ += "recovered"
+		msg += " with recovered jobs"
+	} else {
+		typ += "noop"
+		msg += " with no recovered jobs"
+	}
+	s.recordEvent(control.Event{
+		Type:    typ,
+		Message: msg,
+		Fields: map[string]any{
+			"mode":            mode,
+			"recovered_count": len(jobIDs),
+			"max_age_seconds": maxAgeSeconds,
+			"job_ids":         append([]string{}, jobIDs...),
+		},
+	}, true)
 }
 
 func (s *Server) handleScheduleAction(w http.ResponseWriter, r *http.Request) {
@@ -5058,8 +5140,9 @@ func randomID() string {
 }
 
 func (s *Server) observeQueueBacklog() {
-	st := s.queue.ControlStatus()
 	now := time.Now().UTC()
+	s.maybeAutoRecoverStuck(now)
+	st := s.queue.ControlStatus()
 
 	var emit *control.Event
 

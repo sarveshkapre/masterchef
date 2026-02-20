@@ -657,10 +657,30 @@ resources:
 	})
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/control/recover-stuck", bytes.NewReader([]byte(`{"max_age_seconds":1}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/control/recover-stuck/policy", bytes.NewReader([]byte(`{"enabled":true,"max_age_seconds":1,"cooldown_seconds":0}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set recover-stuck policy failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/recover-stuck", bytes.NewReader([]byte(`{"max_age_seconds":1}`)))
 	s.httpServer.Handler.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("recover-stuck invocation failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/control/queue", bytes.NewReader([]byte(`{"action":"pause"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("pause queue for auto recover check failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/jobs", bytes.NewReader([]byte(`{"config_path":"c.yaml","priority":"low"}`)))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("enqueue job for auto recover check failed: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
 	rr = httptest.NewRecorder()
@@ -681,8 +701,24 @@ resources:
 	if hist.Count == 0 || len(hist.Items) == 0 {
 		t.Fatalf("expected recover-stuck history items, got %+v", hist)
 	}
-	if !strings.HasPrefix(hist.Items[0].Type, "control.recover_stuck.") {
-		t.Fatalf("expected recover-stuck history event type, got %+v", hist.Items[0])
+	hasAuto := false
+	for _, item := range hist.Items {
+		if strings.HasPrefix(item.Type, "control.recover_stuck.auto.") {
+			hasAuto = true
+		}
+	}
+	if !hasAuto {
+		t.Fatalf("expected automatic recover-stuck history events, got %+v", hist.Items)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/control/recover-stuck/status", nil)
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("recover-stuck status failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"total_checks"`) || !strings.Contains(rr.Body.String(), `"policy"`) {
+		t.Fatalf("expected recover-stuck status fields, got %s", rr.Body.String())
 	}
 
 	rr = httptest.NewRecorder()
