@@ -21,9 +21,19 @@ type planDiffPreviewItem struct {
 	Preview    string `json:"preview"`
 }
 
+type planDiffPatchOp struct {
+	Op         string `json:"op"` // create|replace|execute
+	ResourceID string `json:"resource_id"`
+	Type       string `json:"type"`
+	Path       string `json:"path,omitempty"`
+	Before     any    `json:"before,omitempty"`
+	After      any    `json:"after,omitempty"`
+}
+
 func (s *Server) handlePlanDiffPreview(baseDir string) http.HandlerFunc {
 	type reqBody struct {
 		ConfigPath string `json:"config_path"`
+		Format     string `json:"format,omitempty"` // human|json|patch
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -58,12 +68,40 @@ func (s *Server) handlePlanDiffPreview(baseDir string) http.HandlerFunc {
 			return
 		}
 		items, changed := buildPlanDiffPreview(plan, baseDir)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"config_path":     configPath,
-			"step_count":      len(items),
-			"changed_actions": changed,
-			"items":           items,
-		})
+		patch := buildPlanDiffPatch(plan, baseDir)
+		format := strings.ToLower(strings.TrimSpace(req.Format))
+		if format == "" {
+			format = "json"
+		}
+		switch format {
+		case "human":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"format":          format,
+				"config_path":     configPath,
+				"step_count":      len(items),
+				"changed_actions": changed,
+				"items":           items,
+			})
+		case "json":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"format":          format,
+				"config_path":     configPath,
+				"step_count":      len(items),
+				"changed_actions": changed,
+				"items":           items,
+				"patch":           patch,
+			})
+		case "patch":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"format":          format,
+				"config_path":     configPath,
+				"step_count":      len(items),
+				"changed_actions": changed,
+				"patch":           patch,
+			})
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "format must be one of human, json, patch"})
+		}
 	}
 }
 
@@ -130,6 +168,65 @@ func buildPlanDiffPreview(plan *planner.Plan, baseDir string) ([]planDiffPreview
 		items = append(items, item)
 	}
 	return items, changed
+}
+
+func buildPlanDiffPatch(plan *planner.Plan, baseDir string) []planDiffPatchOp {
+	if plan == nil {
+		return nil
+	}
+	ops := make([]planDiffPatchOp, 0, len(plan.Steps))
+	for _, step := range plan.Steps {
+		switch strings.ToLower(strings.TrimSpace(step.Resource.Type)) {
+		case "file":
+			path := strings.TrimSpace(step.Resource.Path)
+			if path != "" && !filepath.IsAbs(path) {
+				path = filepath.Join(baseDir, path)
+			}
+			current, readErr := os.ReadFile(path)
+			desired := step.Resource.Content
+			if readErr != nil {
+				ops = append(ops, planDiffPatchOp{
+					Op:         "create",
+					ResourceID: step.Resource.ID,
+					Type:       step.Resource.Type,
+					Path:       path,
+					After:      desired,
+				})
+				continue
+			}
+			if string(current) != desired {
+				ops = append(ops, planDiffPatchOp{
+					Op:         "replace",
+					ResourceID: step.Resource.ID,
+					Type:       step.Resource.Type,
+					Path:       path,
+					Before:     string(current),
+					After:      desired,
+				})
+			}
+		case "command":
+			ops = append(ops, planDiffPatchOp{
+				Op:         "execute",
+				ResourceID: step.Resource.ID,
+				Type:       step.Resource.Type,
+				After: map[string]any{
+					"command":         strings.TrimSpace(step.Resource.Command),
+					"refresh_command": strings.TrimSpace(step.Resource.RefreshCommand),
+					"refresh_only":    step.Resource.RefreshOnly,
+					"creates":         strings.TrimSpace(step.Resource.Creates),
+					"only_if":         strings.TrimSpace(step.Resource.OnlyIf),
+					"unless":          strings.TrimSpace(step.Resource.Unless),
+				},
+			})
+		default:
+			ops = append(ops, planDiffPatchOp{
+				Op:         "execute",
+				ResourceID: step.Resource.ID,
+				Type:       step.Resource.Type,
+			})
+		}
+	}
+	return ops
 }
 
 func renderInlineDiff(current, desired string, maxLines int) string {

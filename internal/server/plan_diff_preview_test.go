@@ -73,4 +73,18 @@ resources:
 	if !strings.Contains(rr.Body.String(), `refresh_only: true`) || !strings.Contains(rr.Body.String(), `only_if guard`) {
 		t.Fatalf("expected command refresh/guard markers in preview: %s", rr.Body.String())
 	}
+
+	patchBody := []byte(`{"config_path":"diff.yaml","format":"patch"}`)
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/plans/diff-preview", bytes.NewReader(patchBody))
+	s.httpServer.Handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("plan diff patch format failed: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"format":"patch"`) {
+		t.Fatalf("expected patch format in response: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"op":"replace"`) || !strings.Contains(rr.Body.String(), `"op":"execute"`) {
+		t.Fatalf("expected machine-readable patch ops in response: %s", rr.Body.String())
+	}
 }
