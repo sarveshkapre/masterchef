@@ -66,6 +66,7 @@ func normalizePersona(raw string) string {
 
 func (s *Server) personaCards(persona, owner string, hours int, baseDir string) ([]homeCard, []string) {
 	queue := s.queue.ControlStatus()
+	backlogPolicy := s.queueBacklogSLO.Policy()
 	alerts := s.alerts.Summary()
 	workloads := s.computeWorkloadViews(5, time.Now().UTC().Add(-24*time.Hour))
 	changeRecords := s.changeRecords.List()
@@ -89,7 +90,7 @@ func (s *Server) personaCards(persona, owner string, hours int, baseDir string) 
 					ID:       "queue-pressure",
 					Title:    "Queue Pressure",
 					Summary:  "Dispatch backlog and run concurrency status.",
-					Severity: ternarySeverity(queue.Pending > s.backlogThreshold || queue.Paused, "warning", "info"),
+					Severity: ternarySeverity(queue.Pending > backlogPolicy.Threshold || queue.Paused, "warning", "info"),
 					Fields: map[string]any{
 						"pending": queue.Pending,
 						"running": queue.Running,

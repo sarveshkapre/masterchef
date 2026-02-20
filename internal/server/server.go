@@ -26,6 +26,7 @@ type Server struct {
 	baseDir                string
 	queue                  *control.Queue
 	queueBackends          *control.QueueBackendStore
+	queueBacklogSLO        *control.QueueBacklogSLOStore
 	runLeases              *control.RunLeaseStore
 	stepSnapshots          *control.StepSnapshotStore
 	executionLocks         *control.ExecutionLockStore
@@ -175,7 +176,6 @@ type Server struct {
 	metricsMu              sync.Mutex
 	metrics                map[string]int64
 
-	backlogThreshold  int
 	backlogSamples    []backlogSample
 	backlogWarnActive bool
 	backlogSatActive  bool
@@ -190,6 +190,8 @@ func New(addr, baseDir string) *Server {
 	runner := control.NewRunner(baseDir)
 	queue := control.NewQueue(512)
 	queueBackends := control.NewQueueBackendStore()
+	backlogThreshold := readIntEnv("MC_QUEUE_BACKLOG_SLO_THRESHOLD", 100)
+	queueBacklogSLO := control.NewQueueBacklogSLOStore(backlogThreshold, 5000)
 	runLeases := control.NewRunLeaseStore()
 	stepSnapshots := control.NewStepSnapshotStore(20_000)
 	executionLocks := control.NewExecutionLockStore()
@@ -350,6 +352,7 @@ func New(addr, baseDir string) *Server {
 		baseDir:                baseDir,
 		queue:                  queue,
 		queueBackends:          queueBackends,
+		queueBacklogSLO:        queueBacklogSLO,
 		runLeases:              runLeases,
 		stepSnapshots:          stepSnapshots,
 		executionLocks:         executionLocks,
@@ -497,10 +500,6 @@ func New(addr, baseDir string) *Server {
 		events:                 events,
 		metrics:                map[string]int64{},
 		runCancel:              runCancel,
-		backlogThreshold: readIntEnv(
-			"MC_QUEUE_BACKLOG_SLO_THRESHOLD",
-			100,
-		),
 	}
 	s.httpServer = &http.Server{
 		Addr:              addr,
@@ -1010,6 +1009,8 @@ func New(addr, baseDir string) *Server {
 	mux.HandleFunc("/v1/control/queue/backends/", s.handleQueueBackendAction)
 	mux.HandleFunc("/v1/control/queue/backends/policy", s.handleQueueBackendPolicy)
 	mux.HandleFunc("/v1/control/queue/backends/admit", s.handleQueueBackendAdmit)
+	mux.HandleFunc("/v1/control/queue/backlog-slo/policy", s.handleQueueBacklogSLOPolicy)
+	mux.HandleFunc("/v1/control/queue/backlog-slo/status", s.handleQueueBacklogSLOStatus)
 	mux.HandleFunc("/v1/control/workers/lifecycle", s.handleWorkerLifecycle)
 	mux.HandleFunc("/v1/control/execution-locks", s.handleExecutionLocks)
 	mux.HandleFunc("/v1/control/execution-locks/release", s.handleExecutionLockRelease)
@@ -2032,11 +2033,12 @@ func (s *Server) handleRunDigest(baseDir string) http.HandlerFunc {
 		queueStatus := s.queue.ControlStatus()
 		emergency := s.queue.EmergencyStatus()
 		canary := s.canaries.HealthSummary()
+		backlogPolicy := s.queueBacklogSLO.Policy()
 		riskScore := int(failRate * 70.0)
 		if queueStatus.Pending > 0 {
 			riskScore += 10
 		}
-		if queueStatus.Pending >= s.backlogThreshold {
+		if queueStatus.Pending >= backlogPolicy.Threshold {
 			riskScore += 10
 		}
 		if emergency.Active {
@@ -3197,6 +3199,9 @@ func currentAPISpec() control.APISpec {
 			"GET /v1/control/queue/backends/policy",
 			"POST /v1/control/queue/backends/policy",
 			"POST /v1/control/queue/backends/admit",
+			"GET /v1/control/queue/backlog-slo/policy",
+			"POST /v1/control/queue/backlog-slo/policy",
+			"GET /v1/control/queue/backlog-slo/status",
 			"POST /v1/control/workers/lifecycle",
 			"GET /v1/control/workers/lifecycle",
 			"GET /v1/control/execution-locks",
@@ -4959,13 +4964,20 @@ func (s *Server) observeQueueBacklog() {
 		s.backlogSamples = append([]backlogSample{}, s.backlogSamples[first:]...)
 	}
 
-	threshold := s.backlogThreshold
-	if threshold <= 0 {
-		threshold = 100
+	policy := s.queueBacklogSLO.Policy()
+	threshold := policy.Threshold
+	warnThreshold := (threshold * policy.WarningPercent) / 100
+	if warnThreshold <= 0 {
+		warnThreshold = 1
+	}
+	recoveryThreshold := (threshold * policy.RecoveryPercent) / 100
+	if recoveryThreshold < 0 {
+		recoveryThreshold = 0
 	}
 
 	growthMilli := int64(0)
 	predictive := false
+	predictedPending := st.Pending
 	if len(s.backlogSamples) >= 2 {
 		oldest := s.backlogSamples[0]
 		latest := s.backlogSamples[len(s.backlogSamples)-1]
@@ -4973,8 +4985,13 @@ func (s *Server) observeQueueBacklog() {
 		if dt > 0 && latest.pending > oldest.pending {
 			growth := float64(latest.pending-oldest.pending) / dt
 			growthMilli = int64(growth * 1000.0)
-			projectedFiveMinutes := float64(latest.pending) + (growth * 300.0)
-			predictive = projectedFiveMinutes >= float64(threshold)
+			projectionSeconds := policy.ProjectionSeconds
+			if projectionSeconds <= 0 {
+				projectionSeconds = 300
+			}
+			projected := float64(latest.pending) + (growth * float64(projectionSeconds))
+			predictedPending = int(projected)
+			predictive = projected >= float64(threshold)
 		}
 	}
 	s.metrics["queue.backlog_growth_per_sec_milli"] = growthMilli
@@ -4982,8 +4999,8 @@ func (s *Server) observeQueueBacklog() {
 	prevSat := s.backlogSatActive
 	prevWarn := s.backlogWarnActive
 	s.backlogSatActive = st.Pending >= threshold
-	s.backlogWarnActive = !s.backlogSatActive && predictive && st.Pending >= int(float64(threshold)*0.70)
-	recovered := st.Pending <= threshold/2 && (prevSat || prevWarn) && !s.backlogSatActive && !s.backlogWarnActive
+	s.backlogWarnActive = !s.backlogSatActive && predictive && st.Pending >= warnThreshold
+	recovered := st.Pending <= recoveryThreshold && (prevSat || prevWarn) && !s.backlogSatActive && !s.backlogWarnActive
 
 	if s.backlogSatActive && !prevSat {
 		emit = &control.Event{
@@ -5004,7 +5021,9 @@ func (s *Server) observeQueueBacklog() {
 			Fields: map[string]any{
 				"pending":                      st.Pending,
 				"threshold":                    threshold,
+				"warning_threshold":            warnThreshold,
 				"backlog_growth_per_sec_milli": growthMilli,
+				"predicted_pending":            predictedPending,
 			},
 		}
 	} else if recovered {
@@ -5013,10 +5032,32 @@ func (s *Server) observeQueueBacklog() {
 			Message: "queue backlog recovered below recovery threshold",
 			Fields: map[string]any{
 				"pending":         st.Pending,
-				"recovery_target": threshold / 2,
+				"recovery_target": recoveryThreshold,
 			},
 		}
 	}
+
+	state := "normal"
+	if s.backlogSatActive {
+		state = "saturated"
+	} else if s.backlogWarnActive {
+		state = "warning"
+	}
+	s.queueBacklogSLO.Record(control.QueueBacklogSLOStatus{
+		At:                  now,
+		Pending:             st.Pending,
+		Running:             st.Running,
+		PendingHigh:         st.PendingHigh,
+		PendingNormal:       st.PendingNormal,
+		PendingLow:          st.PendingLow,
+		Threshold:           threshold,
+		WarningThreshold:    warnThreshold,
+		RecoveryThreshold:   recoveryThreshold,
+		GrowthPerSecMilli:   growthMilli,
+		PredictedPending:    predictedPending,
+		PredictiveSaturated: predictive,
+		State:               state,
+	})
 
 	s.metrics["queue.saturation.active"] = boolToInt64(s.backlogSatActive)
 	s.metrics["queue.saturation.warning"] = boolToInt64(s.backlogWarnActive)
