@@ -14,6 +14,17 @@ This document specifies the Masterchef agent architecture and operating model.
 - Failures in verification block merge-quality completion until fixed.
 - Changes are committed directly to `main` after verification unless explicitly instructed otherwise.
 
+## UI/UX Engineering Standard
+
+- Masterchef UI implementations must use the shadcn/ui Tailwind v4 approach and Radix primitives as the baseline system.
+- Use shadcn `new-york` style conventions, CSS variable theming, and Tailwind v4 token mapping (`@theme inline`) as the default foundation.
+- Prefer existing component patterns from local references first: `/Users/sarvesh/code/ui/apps/v4/registry/new-york-v4/ui` and `/Users/sarvesh/code/ui/apps/v4/styles/globals.css`.
+- New shared UI components must be modular and composable: `asChild` support where applicable, `Slot` composition, variant-driven styling (`cva`), and deterministic `data-slot` hooks.
+- Stateful UI must expose reliable styling and test hooks using `data-*` state attributes; avoid ad-hoc selectors tied to DOM position.
+- Accessibility is mandatory: keyboard navigation, focus-visible treatment, semantic structure, and ARIA-safe primitive usage.
+- Do not introduce one-off design systems or mixed component paradigms when a shadcn/Radix equivalent exists.
+- Before implementing a new UI surface, consult `uiux.md` for required references, patterns, and acceptance criteria.
+
 ## Goals
 
 - Support both agentless and agent-based workflows in one platform
